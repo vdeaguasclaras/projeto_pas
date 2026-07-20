@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protótipo — Sistema PAS Marista</title>
+</head>
+<body>
+<style>
+  :root{
+    --azul:#1d5cff; --azul-esc:#0d2f8a; --azul-claro:#e8efff;
+    --rosa:#e5007e; --rosa-claro:#ffe3f1; --rosa-fundo:#fff4fa;
+    --amarelo:#ffc224; --verde:#12b76a; --coral:#ff6b4a; --roxo:#8b5cf6; --ciano:#06b6d4;
+    --papel:#ffffff; --fundo:#f6f8ff; --ink:#1b2340; --ink-2:#5d6685;
+    --borda:#e3e7f4; --ok:#12b76a; --alerta:#e88b00; --erro:#e5484d;
+    --sombra:0 2px 4px rgba(29,60,140,.06),0 12px 32px rgba(29,60,140,.10);
+    --ui:"Segoe UI","Aptos",system-ui,-apple-system,Arial,sans-serif;
+    --mono:"Consolas","SF Mono",ui-monospace,monospace;
+    --r:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --fundo:#101425; --papel:#1a2036; --ink:#eceffb; --ink-2:#9aa4c7;
+      --borda:#2c3452; --azul-claro:#1e2b52; --rosa-claro:#481732; --rosa-fundo:#2a1524;
+      --sombra:0 2px 4px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35); }
+  }
+  :root[data-theme="light"]{ --fundo:#f6f8ff; --papel:#ffffff; --ink:#1b2340; --ink-2:#5d6685;
+    --borda:#e3e7f4; --azul-claro:#e8efff; --rosa-claro:#ffe3f1; --rosa-fundo:#fff4fa;
+    --sombra:0 2px 4px rgba(29,60,140,.06),0 12px 32px rgba(29,60,140,.10); }
+  :root[data-theme="dark"]{ --fundo:#101425; --papel:#1a2036; --ink:#eceffb; --ink-2:#9aa4c7;
+    --borda:#2c3452; --azul-claro:#1e2b52; --rosa-claro:#481732; --rosa-fundo:#2a1524;
+    --sombra:0 2px 4px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.35); }
+
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--ui);background:var(--fundo);color:var(--ink);font-size:15px;line-height:1.5}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  button{font:inherit;cursor:pointer}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+
+  /* ---------- casca ---------- */
+  .topo{background:linear-gradient(120deg,var(--azul-esc),var(--azul) 55%,var(--rosa));color:#fff;padding:30px 20px 74px}
+  .topo-in{max-width:1200px;margin:0 auto;display:flex;gap:16px;align-items:center}
+  .logo{width:52px;height:52px;border-radius:14px;background:#fff;color:var(--azul-esc);display:grid;place-items:center;font-weight:800;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+  .logo span{border-bottom:3px solid var(--rosa);padding-bottom:1px}
+  .topo h1{font-size:24px;font-weight:800}
+  .topo p{margin:4px 0 0;opacity:.92;max-width:70ch;font-size:14px}
+  .abas{max-width:1200px;margin:-46px auto 0;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap}
+  .abas button{border:none;background:rgba(255,255,255,.18);color:#fff;backdrop-filter:blur(4px);
+    padding:10px 16px;border-radius:12px;font-weight:700;font-size:13.5px;transition:transform .15s,background .15s}
+  .abas button:hover{transform:translateY(-2px)}
+  .abas button[aria-selected="true"]{background:#fff;color:var(--azul-esc);box-shadow:0 6px 18px rgba(0,0,0,.18)}
+  .abas button:focus-visible{outline:3px solid var(--amarelo);outline-offset:2px}
+  .tela{display:none;max-width:1200px;margin:22px auto 48px;padding:0 20px}
+  .tela.ativa{display:block;animation:surge .25s ease}
+  @keyframes surge{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .quadro{background:var(--papel);border:1px solid var(--borda);border-radius:var(--r);box-shadow:var(--sombra);overflow:hidden}
+  .nota-tela{margin:14px 2px 0;color:var(--ink-2);font-size:13.5px;max-width:85ch}
+  .nota-tela strong{color:var(--ink)}
+
+  /* ---------- appbar simulada ---------- */
+  .appbar{background:var(--papel);border-bottom:1px solid var(--borda);display:flex;align-items:center;gap:14px;padding:12px 20px}
+  .appbar .m{font-weight:800;font-size:15px;color:var(--azul-esc)}
+  :root[data-theme="dark"] .appbar .m{color:#9db8ff}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .appbar .m{color:#9db8ff} }
+  .appbar .m b{color:var(--rosa)}
+  .appbar nav{display:flex;gap:4px;margin-left:8px;flex-wrap:wrap}
+  .appbar nav span{padding:7px 13px;border-radius:99px;font-size:13px;color:var(--ink-2);transition:background .15s}
+  .appbar nav span:hover{background:var(--azul-claro)}
+  .appbar nav .on{background:var(--azul);color:#fff;font-weight:700}
+  .appbar .quem{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-2)}
+  .avatar{width:30px;height:30px;border-radius:50%;color:#fff;display:grid;place-items:center;font-size:11.5px;font-weight:800}
+  .miolo{padding:22px}
+
+  /* ---------- componentes ---------- */
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 11px;border-radius:99px}
+  .chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+  .chip.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+  .chip.pend{color:var(--alerta);background:color-mix(in srgb,var(--alerta) 14%,transparent)}
+  .chip.falta{color:var(--erro);background:color-mix(in srgb,var(--erro) 12%,transparent)}
+  .chip.info{color:var(--azul);background:var(--azul-claro)}
+  .grade{display:grid;gap:16px}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .g2{grid-template-columns:1.35fr 1fr}
+  @media(max-width:880px){.g2{grid-template-columns:1fr}}
+  .cartao{border:1px solid var(--borda);border-radius:14px;padding:16px;background:var(--papel);transition:transform .15s,box-shadow .15s}
+  .cartao.vivo:hover{transform:translateY(-3px);box-shadow:var(--sombra)}
+  .cartao h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .pingo{width:10px;height:10px;border-radius:4px}
+  .num{font-size:31px;font-weight:800;font-variant-numeric:tabular-nums}
+  .num small{font-size:13px;font-weight:600;color:var(--ink-2)}
+  .barra{height:9px;border-radius:99px;background:var(--azul-claro);overflow:hidden;margin-top:10px}
+  .barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--azul),var(--ciano))}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);padding:8px 10px;border-bottom:2px solid var(--borda)}
+  td{padding:10px;border-bottom:1px solid var(--borda);font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:var(--azul-claro)}
+  .btn{background:var(--azul);color:#fff;border:none;border-radius:11px;padding:9px 18px;font-weight:700;font-size:13.5px;transition:transform .12s,filter .12s}
+  .btn:hover{transform:translateY(-1px);filter:brightness(1.08)}
+  .btn.fantasma{background:transparent;color:var(--azul);border:2px solid var(--azul)}
+  .btn.rosa{background:var(--rosa)}
+  .btn.verde{background:var(--verde)}
+  .disc{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:8px;color:#fff}
+  .d-lp{background:var(--rosa)}.d-mat{background:var(--azul)}.d-bio{background:var(--verde)}
+  .d-his{background:var(--coral)}.d-fis{background:var(--roxo)}.d-geo{background:var(--ciano)}
+  .d-ing{background:var(--amarelo);color:#5c4300}.d-lit{background:#d6499b}
+
+  /* versões da prova */
+  .versoes{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .versao{flex:1;min-width:250px;border:2px solid var(--borda);border-radius:14px;padding:13px 16px;display:flex;gap:12px;align-items:center;transition:border-color .15s}
+  .versao.sel{border-color:var(--azul);background:var(--azul-claro)}
+  .versao .ic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-size:19px;color:#fff}
+  .versao b{display:block;font-size:14px}
+  .versao span{font-size:12.5px;color:var(--ink-2)}
+
+  /* ---------- alocação por slots ---------- */
+  .texto-bloco{border:1px solid var(--borda);border-radius:14px;margin-bottom:14px;overflow:hidden;background:var(--papel)}
+  .texto-cab{display:flex;gap:12px;align-items:center;padding:13px 16px;background:var(--azul-claro)}
+  .texto-cab .tnum{width:38px;height:38px;border-radius:11px;background:var(--azul);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px}
+  .texto-cab h4{margin:0;font-size:14.5px}
+  .texto-cab p{margin:1px 0 0;font-size:12px;color:var(--ink-2)}
+  .texto-corpo{padding:13px 16px}
+  .slots{display:flex;gap:8px;flex-wrap:wrap}
+  .slot{border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:700;display:inline-flex;gap:7px;align-items:center;border:2px solid transparent}
+  .slot.livre{border:2px dashed var(--borda);color:var(--ink-2);background:transparent;cursor:pointer;transition:all .15s}
+  .slot.livre:hover{border-color:var(--verde);color:var(--verde);background:color-mix(in srgb,var(--verde) 8%,transparent)}
+  .slot.travado{border:2px dashed var(--borda);color:var(--ink-2);opacity:.55}
+  .slot .t{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff}
+  .tA{background:var(--azul)}.tB{background:var(--roxo)}.tC{background:var(--rosa)}.tD{background:var(--coral)}
+  .regra{font-size:11.5px;color:var(--ink-2);display:inline-flex;align-items:center;gap:5px;background:var(--fundo);border-radius:8px;padding:3px 9px}
+
+  /* ---------- editor com texto ---------- */
+  .painel-texto{border:1px solid var(--borda);border-radius:14px;background:var(--rosa-fundo);padding:16px;max-height:520px;overflow:auto}
+  .painel-texto h4{margin:0 0 4px;font-size:14px;color:var(--rosa)}
+  .painel-texto .fonte{font-size:11.5px;color:var(--ink-2);margin-bottom:12px}
+  .linha-tx{display:flex;gap:10px;font-size:13.5px;line-height:1.7}
+  .linha-tx .n{font-family:var(--mono);font-size:11px;color:var(--rosa);min-width:18px;text-align:right;padding-top:3px;user-select:none}
+  .linha-tx.mark{background:color-mix(in srgb,var(--amarelo) 25%,transparent);border-radius:6px}
+  .form-linha{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .campo{flex:1;min-width:170px}
+  .campo label{display:block;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2);margin-bottom:5px}
+  .campo .caixa{border:1.5px solid var(--borda);border-radius:10px;padding:9px 12px;background:var(--fundo);font-size:14px}
+  .campo .caixa.multi{min-height:80px}
+  .seg{display:inline-flex;border:1.5px solid var(--borda);border-radius:10px;overflow:hidden}
+  .seg span{padding:8px 13px;font-size:12.5px;font-weight:700;color:var(--ink-2);border-right:1.5px solid var(--borda);cursor:pointer;transition:background .12s}
+  .seg span:hover{background:var(--azul-claro)}
+  .seg span:last-child{border-right:none}
+  .seg .sel{background:var(--azul);color:#fff}
+  .gab-op{width:36px;height:36px;border:2.5px solid var(--borda);border-radius:50%;display:inline-grid;place-items:center;font-weight:800;color:var(--ink-2);margin-right:8px;cursor:pointer;transition:all .12s}
+  .gab-op:hover{border-color:var(--rosa)}
+  .gab-op.certo{border-color:var(--rosa);background:var(--rosa);color:#fff}
+
+  /* revisão / comentários */
+  .fio{display:flex;flex-direction:column;gap:10px}
+  .coment{display:flex;gap:10px}
+  .coment .balao{background:var(--fundo);border:1px solid var(--borda);border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:13px;flex:1}
+  .coment.resp .balao{background:var(--azul-claro);border-radius:14px 4px 14px 14px}
+  .coment .balao b{font-size:12.5px}
+  .coment .balao .quando{font-size:11px;color:var(--ink-2);margin-left:6px;font-weight:400}
+  .coment .balao p{margin:4px 0 0}
+
+  /* ---------- documentos (sempre papel) ---------- */
+  .papelaria{background:#e9e4de;padding:26px;display:flex;justify-content:center;gap:26px;flex-wrap:wrap}
+  .folha{background:#fff;color:#111;width:430px;max-width:100%;box-shadow:0 3px 10px rgba(0,0,0,.28);font-family:Arial,Helvetica,sans-serif}
+  .folha .cab{border-bottom:3px solid #e5007e;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .folha .cab .inst{font-size:10px;font-weight:800;letter-spacing:.4px;color:#0d2f8a;line-height:1.35}
+  .folha .cab .sala{border:2px solid #e5007e;color:#e5007e;font-weight:800;font-size:15px;padding:4px 10px;text-align:center;line-height:1.1}
+  .folha .cab .sala small{display:block;font-size:8px;letter-spacing:.6px}
+  .faixa{background:#e5007e;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:5px 16px;text-transform:uppercase}
+  .folha .corpo{padding:14px 16px 18px}
+  .colunas{column-count:2;column-gap:18px;column-rule:1px solid #efc3da;font-size:9px;line-height:1.55;text-align:justify}
+  .tx-num{display:flex;gap:7px;margin-bottom:8px;break-inside:avoid}
+  .tx-num .n{color:#e5007e;font-weight:700;font-size:8px;min-width:12px;text-align:right;font-family:var(--mono)}
+  .item-prova{margin:10px 0;break-inside:avoid}
+  .item-prova .rot{color:#e5007e;font-weight:800;font-size:9px}
+  .opcoes{margin:4px 0 0 2px;padding:0;list-style:none}
+  .opcoes li{margin:2px 0}
+  .opcoes b{color:#0d2f8a}
+  /* cartão-resposta */
+  .cr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+  .cr-col{border:1px solid #efc3da;border-radius:4px;padding:6px;background:#fff8fb}
+  .cr-col h5{margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px}
+  .cr-linha{display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333}
+  .cr-linha .no{font-family:var(--mono);font-weight:700;min-width:14px;color:#0d2f8a}
+  .bolha{width:9px;height:9px;border:1.2px solid #e5007e;border-radius:50%;display:inline-block}
+  .bolha.m{background:#111;border-color:#111}
+  .cr-b{border:1px solid #efc3da;border-radius:4px;padding:8px;margin-top:10px;background:#fff8fb}
+  .cr-b h5{margin:0 0 6px;font-size:8px;color:#e5007e;letter-spacing:.4px}
+  .cr-b .dig{display:flex;gap:3px;align-items:center;font-size:6.5px;margin:2px 0}
+  .cr-b .dig span{color:#666;min-width:34px}
+  /* boletim */
+  .bol-cab{background:linear-gradient(115deg,#0d2f8a,#1d5cff);color:#fff;padding:12px 16px}
+  .bol-cab h4{margin:0;font-size:13px}
+  .bol-cab p{margin:2px 0 0;font-size:10px;opacity:.88}
+  .bol-sec{padding:12px 16px;border-bottom:1px solid #eee}
+  .bol-sec h5{margin:0 0 8px;font-size:10px;color:#e5007e;text-transform:uppercase;letter-spacing:.5px}
+  .hbar{display:flex;align-items:center;gap:8px;font-size:9.5px;margin:5px 0;color:#333}
+  .hbar span{min-width:64px}
+  .hbar .trilho{flex:1;height:9px;background:#eef1fb;border-radius:99px;overflow:hidden}
+  .hbar .trilho i{display:block;height:100%;background:linear-gradient(90deg,#1d5cff,#06b6d4);border-radius:99px}
+  .hbar .trilho i.media{background:#e5007e;height:4px;margin-top:-6.5px;opacity:.8}
+  .bol-notas{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 16px}
+  .bol-nota{border:1px solid #eee;border-radius:8px;padding:8px;text-align:center}
+  .bol-nota b{display:block;font-size:16px;color:#0d2f8a;font-variant-numeric:tabular-nums}
+  .bol-nota span{font-size:8px;color:#777;text-transform:uppercase;letter-spacing:.4px}
+</style>
+
+<header class="topo">
+  <div class="topo-in">
+    <div class="logo"><span>PAS</span></div>
+    <div>
+      <h1>Sistema PAS Marista — protótipo v2</h1>
+      <p>Paleta viva, alocação livre por texto, editor com texto aparente, fluxo de revisão com comentários, duas versões de prova (regular e adaptada) e relatórios por turma. Documentos gerados seguem fielmente o padrão dos PDFs do PAS.</p>
+    </div>
+  </div>
+</header>
+
+<div class="abas" role="tablist">
+  <button role="tab" aria-selected="true" data-tela="t1">1 · Painel</button>
+  <button role="tab" aria-selected="false" data-tela="t2">2 · Textos e alocação</button>
+  <button role="tab" aria-selected="false" data-tela="t3">3 · Editor + revisão</button>
+  <button role="tab" aria-selected="false" data-tela="t4">4 · Caderno</button>
+  <button role="tab" aria-selected="false" data-tela="t5">5 · Cartão-resposta</button>
+  <button role="tab" aria-selected="false" data-tela="t6">6 · Correção e boletins</button>
+</div>
+
+<!-- ============ TELA 1 : PAINEL ============ -->
+<section class="tela ativa" id="t1">
+  <div class="quadro">
+    <div class="appbar">
+      <span class="m">PAS <b>Marista</b></span>
+      <nav><span class="on">Painel</span><span>Textos</span><span>Itens</span><span>Provas</span><span>Correção</span></nav>
+      <div class="quem"><span>Coordenação · Raul</span><div class="avatar" style="background:var(--rosa)">RC</div></div>
+    </div>
+    <div class="miolo">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:20px">Simulado PAS 2026 — 1ª Etapa</h2>
+          <span style="color:var(--ink-2);font-size:13px">Aplicação: 12/09/2026 · 2ª série EM · 398 estudantes</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn fantasma">Revisar itens</button>
+          <button class="btn rosa">Gerar cadernos</button>
+        </div>
+      </div>
+
+      <div class="versoes">
+        <div class="versao sel">
+          <div class="ic" style="background:var(--azul)">📘</div>
+          <div><b>Prova Regular</b><span>120 itens + redação · 371 estudantes · x = 0,433</span></div>
+        </div>
+        <div class="versao">
+          <div class="ic" style="background:var(--verde)">📗</div>
+          <div><b>Prova Adaptada (inclusão)</b><span>72 itens + redação · 27 estudantes · x = 0,731</span></div>
+        </div>
+      </div>
+
+      <div class="grade g3" style="margin-bottom:16px">
+        <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Itens aprovados</h3><div class="num">96<small> / 120</small></div><div class="barra"><i style="width:80%"></i></div></div>
+        <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Em revisão</h3><div class="num">14</div><span style="font-size:12px;color:var(--ink-2)">8 na coord. de área · 6 na coordenação</span></div>
+        <div class="cartao vivo"><h3><span class="pingo" style="background:var(--amarelo)"></span>Textos-base</h3><div class="num">9<small> ativos</small></div><span style="font-size:12px;color:var(--ink-2)">+2 sugestões aguardando aprovação</span></div>
+      </div>
+
+      <div class="cartao">
+        <h3>Entregas por componente curricular</h3>
+        <table>
+          <thead><tr><th>Componente</th><th>Docente</th><th>Itens criados</th><th>Aprovados</th><th>Situação</th></tr></thead>
+          <tbody>
+            <tr><td><span class="disc d-lp">Português</span></td><td>Ana Beatriz</td><td>16</td><td>16</td><td><span class="chip ok">Completo</span></td></tr>
+            <tr><td><span class="disc d-mat">Matemática</span></td><td>Carlos Eduardo</td><td>14</td><td>11</td><td><span class="chip pend">Em revisão</span></td></tr>
+            <tr><td><span class="disc d-bio">Biologia</span></td><td>Fernanda</td><td>10</td><td>10</td><td><span class="chip ok">Completo</span></td></tr>
+            <tr><td><span class="disc d-his">História</span></td><td>João Pedro</td><td>9</td><td>4</td><td><span class="chip pend">Em revisão</span></td></tr>
+            <tr><td><span class="disc d-fis">Física</span></td><td>Marina</td><td>2</td><td>0</td><td><span class="chip falta">Atrasado</span></td></tr>
+            <tr><td><span class="disc d-ing">Inglês</span></td><td>Paulo</td><td>12</td><td>12</td><td><span class="chip ok">Completo</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <p class="nota-tela"><strong>Novidades:</strong> a prova agora existe em duas versões — <strong>Regular</strong> (estrutura completa do PAS: Parte 1 de Inglês, Parte 2 e redação) e <strong>Adaptada</strong> (redução de itens para estudantes de inclusão), cada uma com seu parâmetro <em>x</em> calculado automaticamente. O painel também acompanha o funil de revisão (docente → coordenação de área → coordenação geral).</p>
+</section>
+
+<!-- ============ TELA 2 : TEXTOS E ALOCAÇÃO ============ -->
+<section class="tela" id="t2">
+  <div class="quadro">
+    <div class="appbar">
+      <span class="m">PAS <b>Marista</b></span>
+      <nav><span>Painel</span><span class="on">Textos</span><span>Meus itens</span></nav>
+      <div class="quem"><span>Docente · Fernanda (Biologia)</span><div class="avatar" style="background:var(--verde)">FE</div></div>
+    </div>
+    <div class="miolo">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+        <div>
+          <h2 style="font-size:18px">Textos-base</h2>
+          <span style="font-size:13px;color:var(--ink-2)">Clique em um espaço livre para alocar um item seu</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="chip info">Sua produção: 3 itens criados</span>
+          <button class="btn verde">+ Sugerir novo texto</button>
+        </div>
+      </div>
+
+      <div class="texto-bloco">
+        <div class="texto-cab">
+          <div class="tnum">3</div>
+          <div style="flex:1">
+            <h4>“O Cerrado e as veredas” — Guimarães Rosa (adapt.)</h4>
+            <p>8 itens no total · 6 alocados · 2 livres</p>
+          </div>
+          <span class="regra">🔒 regra do coordenador: sem itens tipo D neste texto</span>
+        </div>
+        <div class="texto-corpo">
+          <div class="slots">
+            <span class="slot" style="background:var(--rosa-claro)"><span class="t tA">A</span><span class="disc d-lit" style="padding:2px 8px">Literatura</span> Ana</span>
+            <span class="slot" style="background:var(--rosa-claro)"><span class="t tA">A</span><span class="disc d-lit" style="padding:2px 8px">Literatura</span> Ana</span>
+            <span class="slot" style="background:var(--azul-claro)"><span class="t tA">A</span><span class="disc d-geo" style="padding:2px 8px">Geografia</span> Túlio</span>
+            <span class="slot" style="background:var(--azul-claro)"><span class="t tC">C</span><span class="disc d-geo" style="padding:2px 8px">Geografia</span> Túlio</span>
+            <span class="slot" style="background:color-mix(in srgb,var(--verde) 12%,transparent)"><span class="t tC">C</span><span class="disc d-bio" style="padding:2px 8px">Biologia</span> você</span>
+            <span class="slot" style="background:var(--azul-claro)"><span class="t tB">B</span><span class="disc d-mat" style="padding:2px 8px">Matemática</span> Carlos</span>
+            <button class="slot livre">＋ espaço livre — alocar item</button>
+            <button class="slot livre">＋ espaço livre — alocar item</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="texto-bloco">
+        <div class="texto-cab" style="background:var(--rosa-claro)">
+          <div class="tnum" style="background:var(--rosa)">5</div>
+          <div style="flex:1">
+            <h4>Infográfico — matriz energética brasileira 2025</h4>
+            <p>6 itens no total · 2 alocados · 4 livres</p>
+          </div>
+          <span class="regra">sem restrições</span>
+        </div>
+        <div class="texto-corpo">
+          <div class="slots">
+            <span class="slot" style="background:var(--azul-claro)"><span class="t tB">B</span><span class="disc d-mat" style="padding:2px 8px">Matemática</span> Carlos</span>
+            <span class="slot" style="background:color-mix(in srgb,var(--roxo) 12%,transparent)"><span class="t tA">A</span><span class="disc d-fis" style="padding:2px 8px">Física</span> Marina</span>
+            <button class="slot livre">＋ espaço livre — alocar item</button>
+            <button class="slot livre">＋ espaço livre — alocar item</button>
+            <button class="slot livre">＋ espaço livre — alocar item</button>
+            <button class="slot livre">＋ espaço livre — alocar item</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="texto-bloco" style="border-style:dashed;opacity:.85">
+        <div class="texto-cab" style="background:color-mix(in srgb,var(--amarelo) 20%,transparent)">
+          <div class="tnum" style="background:var(--amarelo);color:#5c4300">S</div>
+          <div style="flex:1">
+            <h4>Sugestão de texto — “Carta da Terra” (trecho)</h4>
+            <p>enviada por João Pedro (História) · fonte: ONU, 2000</p>
+          </div>
+          <span class="chip pend">Aguardando aprovação da coordenação</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="nota-tela"><strong>Modelo novo de alocação:</strong> cada texto tem uma <strong>quantidade de itens</strong>, sem amarração prévia a disciplinas — qualquer docente ocupa um espaço livre com item do tipo que escolher. O coordenador <em>pode</em> (mas não precisa) travar regras por texto, como bloquear tipos de item ou reservar para uma área. Docentes também <strong>sugerem textos</strong> com fonte, que só ficam visíveis a todos após aprovação da coordenação.</p>
+</section>
+
+<!-- ============ TELA 3 : EDITOR + REVISÃO ============ -->
+<section class="tela" id="t3">
+  <div class="quadro">
+    <div class="appbar">
+      <span class="m">PAS <b>Marista</b></span>
+      <nav><span>Painel</span><span>Textos</span><span class="on">Meus itens</span></nav>
+      <div class="quem"><span>Docente · Fernanda (Biologia)</span><div class="avatar" style="background:var(--verde)">FE</div></div>
+    </div>
+    <div class="miolo grade g2">
+      <div>
+        <div class="painel-texto">
+          <h4>Texto 3 — “O Cerrado e as veredas”</h4>
+          <div class="fonte">Guimarães Rosa (adaptado) · aprovado em 03/08 · linhas 1–12</div>
+          <div class="linha-tx"><span class="n">1</span><span>O buriti é a palmeira dos brejos, das veredas, onde a água</span></div>
+          <div class="linha-tx"><span class="n">2</span><span>aflora e o chão se faz úmido o ano inteiro. Ali, entre capões</span></div>
+          <div class="linha-tx"><span class="n">3</span><span>e chapadões, o sertão guarda suas nascentes como quem</span></div>
+          <div class="linha-tx"><span class="n">4</span><span>guarda segredo antigo.</span></div>
+          <div class="linha-tx mark"><span class="n">5</span><span>As veredas alimentam os rios que descem para todas as</span></div>
+          <div class="linha-tx mark"><span class="n">6</span><span>bacias do país, e por isso o Cerrado é chamado de</span></div>
+          <div class="linha-tx mark"><span class="n">7</span><span>caixa-d’água do Brasil.</span></div>
+          <div class="linha-tx"><span class="n">8</span><span>Mas a caixa-d’água racha: onde a vereda seca, o buriti</span></div>
+          <div class="linha-tx"><span class="n">9</span><span>tomba, e com ele vai-se a memória da água.</span></div>
+          <div style="margin-top:10px;font-size:11.5px;color:var(--ink-2)">💡 As linhas destacadas em amarelo são a referência selecionada para este item (5–7).</div>
+        </div>
+      </div>
+      <div>
+        <h2 style="font-size:16px;margin-bottom:14px">Item · Texto 3 · <span class="chip pend">Em revisão — coord. de área</span></h2>
+        <div class="form-linha">
+          <div class="campo">
+            <label>Tipo</label>
+            <div class="seg"><span class="sel">A</span><span>B</span><span>C</span><span>D</span></div>
+          </div>
+          <div class="campo"><label>Habilidade</label><div class="caixa">H6 — Inferências · grupo Executar</div></div>
+          <div class="campo"><label>Versão</label><div class="seg"><span class="sel">Regular</span><span>Adaptada</span><span>Ambas</span></div></div>
+        </div>
+        <div class="campo" style="margin-bottom:12px">
+          <label>Enunciado</label>
+          <div class="caixa multi">Com base nas linhas 5 a 7, julgue o item: as veredas funcionam como zonas de recarga hídrica, e sua supressão compromete a vazão das bacias que nascem no Cerrado.</div>
+        </div>
+        <div class="form-linha">
+          <div class="campo"><label>Gabarito</label><div><span class="gab-op certo">C</span><span class="gab-op">E</span></div></div>
+        </div>
+        <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
+        <div class="fio">
+          <div class="coment">
+            <div class="avatar" style="background:var(--coral)">TU</div>
+            <div class="balao"><b>Túlio · coord. de área (Ciências da Natureza)</b><span class="quando">ontem, 14h32</span>
+              <p>Fernanda, o termo “compromete a vazão” pode gerar dupla interpretação com chuva regional. Sugiro fechar em “reduz a vazão de base dos rios”.</p></div>
+          </div>
+          <div class="coment resp">
+            <div class="avatar" style="background:var(--verde)">FE</div>
+            <div class="balao"><b>Fernanda · docente</b><span class="quando">hoje, 8h15</span>
+              <p>Boa! Ajustei o enunciado conforme sugerido. Pode reavaliar?</p></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn fantasma">Responder</button>
+          <button class="btn verde">Aprovar item</button>
+          <button class="btn rosa">Devolver com ajustes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="nota-tela"><strong>Novidades:</strong> o texto-base fica <strong>sempre visível ao lado do item</strong>, com as linhas de referência destacadas. O fluxo de revisão tem dois níveis — <strong>coordenação de área</strong> e depois <strong>coordenação geral</strong> — com conversa registrada: o revisor comenta, o docente responde, e só itens aprovados entram na diagramação. O campo “Versão” define se o item entra na prova regular, na adaptada ou em ambas.</p>
+</section>
+
+<!-- ============ TELA 4 : CADERNO ============ -->
+<section class="tela" id="t4">
+  <div class="quadro">
+    <div class="papelaria">
+      <!-- capa -->
+      <div class="folha">
+        <div class="cab">
+          <div class="inst">COLÉGIO MARISTA<br>ÁGUAS CLARAS</div>
+          <div style="font-size:9px;color:#666;text-align:center">Aplicação: 12/9/2026<br>Duração: 4h30</div>
+          <div class="sala"><small>SALA</small>2101</div>
+        </div>
+        <div class="faixa">Simulado PAS · Subprograma 2026 · 1ª Etapa · Caderno de Provas</div>
+        <div class="corpo" style="text-align:center;padding:28px 24px">
+          <div style="font-size:22px;font-weight:800;color:#0d2f8a;letter-spacing:.5px">PROVA DE<br>CONHECIMENTOS</div>
+          <div style="width:56px;height:3px;background:#e5007e;margin:12px auto"></div>
+          <div style="font-size:10px;color:#333;line-height:1.6">Parte 1 — Língua Estrangeira (Inglês)<br>Parte 2 — Conhecimentos + Redação em Língua Portuguesa</div>
+          <div style="border:1.5px solid #0d2f8a;margin:18px 8px 0;padding:10px;text-align:left;font-size:8.5px;line-height:1.6;color:#222">
+            <b style="color:#e5007e">LEIA COM ATENÇÃO AS INSTRUÇÕES</b><br>
+            1&nbsp; Confira se este caderno contém 120 itens e uma prova de redação.<br>
+            2&nbsp; Não folheie antes de autorizado pelo chefe de sala.<br>
+            3&nbsp; A marcação do caderno de respostas é de sua responsabilidade.<br>
+            4&nbsp; Ao terminar, entregue o caderno de respostas ao aplicador.
+          </div>
+          <div style="margin-top:16px;font-size:8px;color:#999;font-family:var(--mono)">0518 9073 8 · MODELO</div>
+        </div>
+      </div>
+      <!-- página interna -->
+      <div class="folha">
+        <div class="faixa">Texto 3 · itens de 24 a 31</div>
+        <div class="corpo">
+          <div class="colunas">
+            <div style="break-inside:avoid;margin-bottom:8px">
+              <b style="font-size:9.5px;color:#0d2f8a">Texto 3 — O Cerrado e as veredas</b>
+              <div class="tx-num" style="margin-top:6px"><span class="n">1</span><span>O buriti é a palmeira dos brejos, das veredas, onde a água aflora e o chão se faz úmido o ano inteiro.</span></div>
+              <div class="tx-num"><span class="n">4</span><span>Ali, entre capões e chapadões, o sertão guarda suas nascentes como quem guarda segredo antigo.</span></div>
+              <div class="tx-num"><span class="n">7</span><span>As veredas alimentam os rios que descem para todas as bacias do país, e por isso o Cerrado é chamado de caixa-d’água do Brasil.</span></div>
+              <div style="font-size:7px;color:#777;margin-top:4px">Guimarães Rosa (adaptado).</div>
+            </div>
+            <div style="break-inside:avoid;font-size:8.5px;margin:6px 0 4px"><b>Com base no texto 3, julgue os itens de 24 a 26.</b></div>
+            <div class="item-prova">
+              <span class="rot">24</span> &nbsp;No fragmento, a personificação do sertão (linhas 4–6) reforça o tom lírico característico da prosa de Guimarães Rosa.
+            </div>
+            <div class="item-prova">
+              <span class="rot">25</span> &nbsp;A expressão “caixa-d’água do Brasil” refere-se ao papel do Cerrado na recarga dos aquíferos e das bacias hidrográficas do país.
+            </div>
+            <div class="item-prova">
+              <span class="rot">26</span> &nbsp;As veredas descritas funcionam como zonas de recarga hídrica, e sua supressão compromete a vazão de base dos rios.
+            </div>
+            <div class="item-prova">
+              <span class="rot">27</span> &nbsp;Considerando a fitofisionomia descrita no texto, assinale a opção correta acerca das adaptações do buriti.
+              <ul class="opcoes">
+                <li><b>A</b> raízes pneumatóforas ausentes em solos alagados</li>
+                <li><b>B</b> tolerância ao encharcamento permanente do solo</li>
+                <li><b>C</b> caducifolia acentuada na estação chuvosa</li>
+                <li><b>D</b> súber espesso como adaptação exclusiva ao fogo</li>
+              </ul>
+            </div>
+            <div class="item-prova">
+              <span class="rot">28</span> &nbsp;Se a vazão média de uma nascente é de 12 L/min, calcule, em litros, o volume acumulado em 1h20min. <span style="color:#555">Marque o resultado no caderno de respostas (000 a 999).</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="nota-tela"><strong>Compromisso de fidelidade:</strong> esta é uma miniatura ilustrativa — na implementação, a diagramação será calibrada <strong>página a página contra os PDFs reais da prova do PAS</strong> que você enviou (tipografia, comandos “julgue os itens”, numeração contínua sem etiqueta de disciplina, duas colunas, faixas de seção e capa). A versão adaptada gera um caderno próprio, com menos itens e a mesma identidade.</p>
+</section>
+
+<!-- ============ TELA 5 : CARTÃO ============ -->
+<section class="tela" id="t5">
+  <div class="quadro">
+    <div class="papelaria">
+      <div class="folha" style="width:520px">
+        <div class="cab">
+          <div class="inst">COLÉGIO MARISTA ÁGUAS CLARAS<br><span style="color:#e5007e">SIMULADO PAS 2026 · 1ª ETAPA</span></div>
+          <div style="font-size:8px;color:#333;line-height:1.5">Estudante: <b>ANTONIA SILVA</b><br>Matrícula: <b style="font-family:var(--mono)">2026-0142</b> · 2ª série B · Regular</div>
+          <div class="sala"><small>SALA</small>2101</div>
+        </div>
+        <div class="faixa">Caderno de Respostas — uso exclusivo do estudante</div>
+        <div class="corpo">
+          <div style="font-size:7.5px;color:#555;border:1px solid #efc3da;border-radius:4px;padding:6px;margin-bottom:8px">
+            As marcações devem ser feitas com caneta esferográfica de tinta <b>preta</b>, preenchendo totalmente o círculo. Itens tipo A: marque C ou E. Tipo C: apenas uma opção. Tipo B: marque os três algarismos.
+          </div>
+          <b style="font-size:8.5px;color:#e5007e">RESPOSTAS AOS ITENS DOS TIPOS A e C</b>
+          <div class="cr-grid">
+            <div class="cr-col">
+              <h5>ITENS 1–5</h5>
+              <div class="cr-linha"><span class="no">1</span><span class="bolha m"></span>C <span class="bolha"></span>E</div>
+              <div class="cr-linha"><span class="no">2</span><span class="bolha"></span>C <span class="bolha m"></span>E</div>
+              <div class="cr-linha"><span class="no">3</span><span class="bolha m"></span>C <span class="bolha"></span>E</div>
+              <div class="cr-linha"><span class="no">4</span><span class="bolha"></span>C <span class="bolha"></span>E</div>
+              <div class="cr-linha"><span class="no">5</span><span class="bolha m"></span>C <span class="bolha"></span>E</div>
+            </div>
+            <div class="cr-col">
+              <h5>ITENS 6–10</h5>
+              <div class="cr-linha"><span class="no">6</span><span class="bolha m"></span>C <span class="bolha"></span>E</div>
+              <div class="cr-linha"><span class="no">7</span><span class="bolha"></span>C <span class="bolha m"></span>E</div>
+              <div class="cr-linha"><span class="no">8</span><span class="bolha m"></span>C <span class="bolha"></span>E</div>
+              <div class="cr-linha"><span class="no">9</span><span class="bolha"></span>C <span class="bolha m"></span>E</div>
+              <div class="cr-linha"><span class="no">10</span><span class="bolha"></span>C <span class="bolha"></span>E</div>
+            </div>
+            <div class="cr-col">
+              <h5>ITEM 27 (TIPO C)</h5>
+              <div class="cr-linha"><span class="no">A</span><span class="bolha"></span></div>
+              <div class="cr-linha"><span class="no">B</span><span class="bolha m"></span></div>
+              <div class="cr-linha"><span class="no">C</span><span class="bolha"></span></div>
+              <div class="cr-linha"><span class="no">D</span><span class="bolha"></span></div>
+            </div>
+            <div class="cr-col" style="border-style:dashed">
+              <h5>MARCADORES ÓPTICOS</h5>
+              <div style="display:flex;justify-content:space-between;padding:2px 2px 0">
+                <span style="width:8px;height:8px;background:#111"></span>
+                <span style="width:8px;height:8px;background:#111"></span>
+              </div>
+              <div style="font-size:6.5px;color:#777;margin-top:6px;text-align:center">âncoras de alinhamento<br>para leitura no scanner</div>
+              <div style="display:flex;justify-content:space-between;padding:6px 2px 0">
+                <span style="width:8px;height:8px;background:#111"></span>
+                <span style="width:8px;height:8px;background:#111"></span>
+              </div>
+            </div>
+          </div>
+          <div class="cr-b">
+            <h5>ITEM 28 — TIPO B (resposta de 000 a 999)</h5>
+            <div class="dig"><span>Centena</span> <span class="bolha"></span>0 <span class="bolha"></span>1 <span class="bolha"></span>2 <span class="bolha"></span>3 <span class="bolha"></span>4 <span class="bolha"></span>5 <span class="bolha"></span>6 <span class="bolha m"></span>7 <span class="bolha"></span>8 <span class="bolha"></span>9</div>
+            <div class="dig"><span>Dezena</span> <span class="bolha"></span>0 <span class="bolha"></span>1 <span class="bolha m"></span>2 <span class="bolha"></span>3 <span class="bolha"></span>4 <span class="bolha"></span>5 <span class="bolha"></span>6 <span class="bolha"></span>7 <span class="bolha"></span>8 <span class="bolha"></span>9</div>
+            <div class="dig"><span>Unidade</span> <span class="bolha m"></span>0 <span class="bolha"></span>1 <span class="bolha"></span>2 <span class="bolha"></span>3 <span class="bolha"></span>4 <span class="bolha"></span>5 <span class="bolha"></span>6 <span class="bolha"></span>7 <span class="bolha"></span>8 <span class="bolha"></span>9</div>
+          </div>
+          <div style="margin-top:10px;font-size:7.5px;color:#999;display:flex;justify-content:space-between;font-family:var(--mono)">
+            <span>▮▯▮▮▯▮▮▯ 2026-0142</span><span>página 1/2</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="nota-tela"><strong>Cartão nominal por estudante</strong> (nome, matrícula, série/turma e tipo de prova impressos), gerado a partir da lista que você enviar. Impressão colorida e leitura no scanner de mesa: as âncoras pretas nos cantos e o código de matrícula permitem identificar e corrigir cada folha automaticamente, mesmo digitalizada em lote. Também aqui o layout final será espelhado no modelo Cebraspe real que você anexou.</p>
+</section>
+
+<!-- ============ TELA 6 : CORREÇÃO ============ -->
+<section class="tela" id="t6">
+  <div class="quadro">
+    <div class="appbar">
+      <span class="m">PAS <b>Marista</b></span>
+      <nav><span>Painel</span><span>Provas</span><span class="on">Correção</span></nav>
+      <div class="quem"><span>Coordenação · Raul</span><div class="avatar" style="background:var(--rosa)">RC</div></div>
+    </div>
+    <div class="miolo grade g2">
+      <div>
+        <div class="grade g3" style="margin-bottom:16px">
+          <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Cartões lidos</h3><div class="num">392<small> / 398</small></div><div class="barra"><i style="width:98%"></i></div></div>
+          <div class="cartao vivo"><h3><span class="pingo" style="background:var(--coral)"></span>Conferência manual</h3><div class="num">6</div><span style="font-size:12px;color:var(--ink-2)">dupla marcação ou leitura duvidosa</span></div>
+        </div>
+        <div class="cartao" style="margin-bottom:16px">
+          <h3>Exportações</h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn rosa">📄 Boletins em PDF (lote por turma)</button>
+            <button class="btn">Relatório por turma</button>
+            <button class="btn">Relatório por série</button>
+            <button class="btn fantasma">Planilha de notas</button>
+          </div>
+        </div>
+        <div class="cartao">
+          <h3>Desempenho por turma — 2ª série</h3>
+          <table>
+            <thead><tr><th>Turma</th><th>Média EB</th><th>Redação</th><th>Interpretar</th><th>Executar</th></tr></thead>
+            <tbody>
+              <tr><td>2ª A</td><td>54,10</td><td>7,8</td><td>0,66</td><td>0,58</td></tr>
+              <tr><td>2ª B</td><td>57,92</td><td>8,1</td><td>0,71</td><td>0,62</td></tr>
+              <tr><td>2ª C</td><td>51,37</td><td>7,2</td><td>0,60</td><td>0,55</td></tr>
+              <tr><td>2ª D (adaptada)</td><td>49,80</td><td>7,5</td><td>0,63</td><td>0,57</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="papelaria" style="border-radius:14px;padding:16px">
+        <div class="folha" style="width:100%">
+          <div class="bol-cab">
+            <h4>Boletim de Desempenho Individual</h4>
+            <p>Simulado PAS 2026 · 1ª Etapa · ANTONIA SILVA · Matrícula 2026-0142 · 2ª B</p>
+          </div>
+          <div class="bol-sec">
+            <h5>Proporção de acertos por grupo de habilidades</h5>
+            <div class="hbar"><span>Interpretar</span><div class="trilho"><i style="width:72%"></i><i class="media" style="width:58%"></i></div><b style="font-size:9px">0,72</b></div>
+            <div class="hbar"><span>Planejar</span><div class="trilho"><i style="width:55%"></i><i class="media" style="width:49%"></i></div><b style="font-size:9px">0,55</b></div>
+            <div class="hbar"><span>Executar</span><div class="trilho"><i style="width:64%"></i><i class="media" style="width:61%"></i></div><b style="font-size:9px">0,64</b></div>
+            <div class="hbar"><span>Criticar</span><div class="trilho"><i style="width:47%"></i><i class="media" style="width:52%"></i></div><b style="font-size:9px">0,47</b></div>
+            <div style="font-size:7px;color:#777;margin-top:5px">Barra azul: estudante · traço rosa: média da turma</div>
+          </div>
+          <div class="bol-notas">
+            <div class="bol-nota"><b>59,83</b><span>Escore bruto</span></div>
+            <div class="bol-nota"><b>8,40</b><span>Redação</span></div>
+            <div class="bol-nota"><b>42º</b><span>de 398</span></div>
+          </div>
+          <div class="bol-sec" style="border-top:1px solid #eee;border-bottom:none">
+            <h5>Gabarito × suas marcações (trecho)</h5>
+            <div style="font-family:var(--mono);font-size:8.5px;line-height:2;color:#333">
+              Item&nbsp;&nbsp; 1&nbsp; 2&nbsp; 3&nbsp; 4&nbsp; 5&nbsp; 6&nbsp; 7&nbsp; 8<br>
+              Gab.&nbsp;&nbsp; C&nbsp; E&nbsp; C&nbsp; E&nbsp; C&nbsp; C&nbsp; E&nbsp; C<br>
+              Você&nbsp;&nbsp;<b style="color:#12b76a">C</b>&nbsp; <b style="color:#12b76a">E</b>&nbsp; <b style="color:#12b76a">C</b>&nbsp; <span style="color:#999">—</span>&nbsp; <b style="color:#12b76a">C</b>&nbsp; <b style="color:#e5484d">E</b>&nbsp; <b style="color:#12b76a">E</b>&nbsp; <b style="color:#12b76a">C</b>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="nota-tela"><strong>Novidades:</strong> exportação de <strong>boletins em PDF em lote</strong> (prontos para impressão, agrupados por turma), <strong>relatórios por turma e por série</strong> com médias de escore, redação e grupos de habilidades para análise docente, e planilha de notas. A correção da redação entra pela planilha oficial (nota de conteúdo, número de erros e total de linhas → NR = NC − 2·NE/TL).</p>
+</section>
+
+<script>
+  const abas = document.querySelectorAll('.abas button');
+  abas.forEach(b => b.addEventListener('click', () => {
+    abas.forEach(x => x.setAttribute('aria-selected', x === b ? 'true' : 'false'));
+    document.querySelectorAll('.tela').forEach(t => t.classList.toggle('ativa', t.id === b.dataset.tela));
+  }));
+</script>
+</body>
+</html>
