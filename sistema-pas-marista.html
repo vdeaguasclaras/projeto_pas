@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAS Marista</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#f7f9fd;color:#1b2340;font-family:Sora,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:#1d5cff;text-decoration:none}
+  a:hover{color:#e5007e}
+
+  /* ── keyframes ── */
+  @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  @keyframes barGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes floatA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-24px) scale(1.08)}}
+  @keyframes floatB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-26px,20px) scale(1.12)}}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(229,0,126,.45)}70%{box-shadow:0 0 0 9px rgba(229,0,126,0)}}
+  @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+
+  /* ── navegação ── */
+  .nav-item{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:12px;font-size:13.5px;cursor:pointer;transition:all .15s;color:#5d6685}
+  .nav-item .ico{width:20px;text-align:center}
+  .nav-item:hover{background:#f0f4ff;color:#1d5cff}
+  .nav-item.active{background:linear-gradient(120deg,#1d5cff,#3d7bff);color:#fff;font-weight:700;box-shadow:0 8px 20px rgba(29,92,255,.30)}
+  .nav-item.active:hover{background:linear-gradient(120deg,#1d5cff,#3d7bff);color:#fff}
+
+  /* ── cards / hovers ── */
+  .lift{transition:transform .2s,box-shadow .2s}
+  .lift:hover{transform:translateY(-4px)!important;box-shadow:0 16px 36px rgba(18,42,74,.12)!important}
+  .ver-regular{transition:transform .2s}
+  .ver-regular:hover{transform:translateY(-4px)!important}
+  .ver-adaptada{transition:transform .2s,border-color .2s}
+  .ver-adaptada:hover{border-color:#12b76a!important;transform:translateY(-4px)!important}
+
+  /* ── botões ── */
+  .btn{font-family:inherit;cursor:pointer;font-weight:700}
+  .btn-ghost{background:transparent;border:1.5px solid #d7deee;color:#122a4a;border-radius:12px;padding:10px 18px;font-size:13px}
+  .btn-ghost:hover{border-color:#1d5cff!important;color:#1d5cff!important}
+  .btn-cta{background:linear-gradient(120deg,#e5007e,#ff3d9a);border:none;color:#fff;border-radius:12px;padding:10px 20px;font-size:13px;box-shadow:0 10px 24px rgba(229,0,126,.32);transition:transform .15s}
+  .btn-cta:hover{transform:translateY(-2px)}
+  .btn-green{background:#12b76a;border:none;color:#fff;border-radius:12px;padding:10px 20px;font-size:13px;box-shadow:0 10px 24px rgba(18,183,106,.28);transition:transform .15s}
+  .btn-green:hover{transform:translateY(-2px)}
+  .btn-blue{background:#1d5cff;border:none;color:#fff;border-radius:12px;padding:10px 20px;font-size:13px;box-shadow:0 10px 24px rgba(29,92,255,.3);transition:transform .15s}
+  .btn-blue:hover{transform:translateY(-2px)}
+
+  /* ── slots ── */
+  .slot-add{border:2px dashed #d7deee;background:transparent;color:#8a93ad;border-radius:12px;padding:8px 16px;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .15s}
+  .slot-add:hover{border-color:#12b76a;color:#12b76a;background:rgba(18,183,106,.06)}
+
+  /* ── cabeçalhos de texto (expansão) ── */
+  .txt3-head{cursor:pointer;transition:background .15s}
+  .txt3-head:hover{background:linear-gradient(120deg,#e4ecff,#f0f4fc)!important}
+  .txt5-head{cursor:pointer;transition:background .15s}
+  .txt5-head:hover{background:linear-gradient(120deg,#ffe4f2,#f0f4fc)!important}
+
+  /* ── tabelas ── */
+  .row-hover:hover{background:#f7f9fd!important}
+
+  /* ── segmentos ── */
+  .seg{padding:8px 14px;font-size:12.5px;font-weight:700;color:#5d6685;border-left:1.5px solid #e3e7f4;cursor:pointer}
+  .seg:hover{background:#eef3ff}
+  .seg.on{background:#1d5cff;color:#fff}
+  .seg.first{border-left:none}
+
+  /* ── gabarito ── */
+  .gab-empty{width:38px;height:38px;border:2.5px solid #e3e7f4;color:#8a93ad;border-radius:50%;display:grid;place-items:center;font-weight:800;cursor:pointer;transition:border-color .12s}
+  .gab-empty:hover{border-color:#e5007e}
+
+  /* ── folhas de papel (documentos PAS) ── */
+  .paper{transition:transform .25s}
+  .paper:hover{transform:translateY(-6px)}
+  .paper-l:hover{transform:translateY(-6px) rotate(-.4deg)}
+  .paper-r:hover{transform:translateY(-6px) rotate(.4deg)}
+
+  /* ── acessibilidade ── */
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none!important;transition:none!important}
+  }
+  body[data-anim="false"] *{animation:none!important}
+</style>
+</head>
+<body data-anim="true">
+
+  <!-- blobs decorativos -->
+  <div style="position:fixed;top:-140px;right:-120px;width:480px;height:480px;border-radius:50%;background:radial-gradient(circle,rgba(229,0,126,.09),transparent 65%);animation:floatA 9s ease-in-out infinite;pointer-events:none;z-index:0"></div>
+  <div style="position:fixed;bottom:-160px;left:340px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(29,92,255,.09),transparent 65%);animation:floatB 11s ease-in-out infinite;pointer-events:none;z-index:0"></div>
+
+  <div style="min-height:100vh;display:flex;position:relative;overflow:hidden">
+
+    <!-- ═══ SIDEBAR ═══ -->
+    <aside style="width:232px;min-width:232px;background:#fff;border-right:1px solid #eaeef7;display:flex;flex-direction:column;padding:26px 18px;gap:26px;position:relative;z-index:3;min-height:100vh">
+      <div style="display:flex;align-items:center;gap:12px;padding:0 6px">
+        <img src="assets/logo-marista.png" alt="Colégio Marista Águas Claras" style="width:44px;height:33px;object-fit:contain">
+        <div style="line-height:1.15">
+          <div style="font-weight:800;font-size:14px;color:#122a4a">PAS <span style="color:#e5007e">Marista</span></div>
+          <div style="font-size:10.5px;color:#8a93ad">Águas Claras</div>
+        </div>
+      </div>
+      <nav id="nav" style="display:flex;flex-direction:column;gap:4px"></nav>
+      <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;background:#f7f9fd">
+        <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#e5007e,#ff6b4a);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;animation:pulse 3s infinite">RC</div>
+        <div style="line-height:1.2">
+          <div style="font-size:12.5px;font-weight:700">Raul</div>
+          <div style="font-size:11px;color:#8a93ad">Coordenação</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══ MAIN ═══ -->
+    <main id="main" style="flex:1;padding:34px 42px 48px;position:relative;z-index:1;min-width:0"></main>
+  </div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────────
+   Sistema PAS Marista — implementação do redesign "Ar & Luz" (v1a).
+   Estado, dados e navegação portados fielmente do design de referência.
+   ──────────────────────────────────────────────────────────────────── */
+
+const state = { tela: 'painel', exp3: false, exp5: false };
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const animar = () => document.body.dataset.anim === 'true' && !prefersReduced;
+
+/* ── dados ── */
+const NAV = [
+  { id:'painel',   ico:'◈', label:'Painel' },
+  { id:'textos',   ico:'▤', label:'Textos' },
+  { id:'itens',    ico:'✎', label:'Itens' },
+  { id:'provas',   ico:'▦', label:'Provas' },
+  { id:'cartao',   ico:'▣', label:'Cartão-resposta' },
+  { id:'correcao', ico:'✓', label:'Correção' },
+];
+
+const chip = c => `background:${c};color:#fff;font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:99px`;
+const stColor = c => `color:${c};font-weight:700;font-size:12px`;
+const ENTREGAS = [
+  { comp:'Português',  docente:'Ana Beatriz',    frac:'16/16', chipStyle:chip('#e5007e'), status:'Completo',   statusStyle:stColor('#12b76a') },
+  { comp:'Matemática', docente:'Carlos Eduardo',  frac:'11/14', chipStyle:chip('#1d5cff'), status:'Em revisão', statusStyle:stColor('#e88b00') },
+  { comp:'Biologia',   docente:'Fernanda',        frac:'10/10', chipStyle:chip('#12b76a'), status:'Completo',   statusStyle:stColor('#12b76a') },
+  { comp:'História',   docente:'João Pedro',      frac:'4/9',   chipStyle:chip('#ff6b4a'), status:'Em revisão', statusStyle:stColor('#e88b00') },
+  { comp:'Física',     docente:'Marina',          frac:'0/2',   chipStyle:chip('#8b5cf6'), status:'Atrasado',   statusStyle:stColor('#e5484d') },
+  { comp:'Inglês',     docente:'Paulo',           frac:'12/12', chipStyle:chip('#ffc224')+';color:#5c4300', status:'Completo', statusStyle:stColor('#12b76a') },
+];
+
+const slotStyle = bg => `border-radius:12px;padding:8px 14px;font-size:12.5px;font-weight:700;display:inline-flex;gap:8px;align-items:center;background:${bg}`;
+const tS = c => `width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff;background:${c}`;
+const SLOTS3 = [
+  { tipo:'A', tStyle:tS('#1d5cff'), disc:'Literatura', autor:'Ana',    style:slotStyle('#ffe3f1') },
+  { tipo:'A', tStyle:tS('#1d5cff'), disc:'Literatura', autor:'Ana',    style:slotStyle('#ffe3f1') },
+  { tipo:'A', tStyle:tS('#1d5cff'), disc:'Geografia',  autor:'Túlio',  style:slotStyle('#e8efff') },
+  { tipo:'C', tStyle:tS('#e5007e'), disc:'Geografia',  autor:'Túlio',  style:slotStyle('#e8efff') },
+  { tipo:'C', tStyle:tS('#e5007e'), disc:'Biologia',   autor:'você',   style:slotStyle('rgba(18,183,106,.12)') },
+  { tipo:'B', tStyle:tS('#8b5cf6'), disc:'Matemática', autor:'Carlos', style:slotStyle('#e8efff') },
+];
+const SLOTS5 = [
+  { tipo:'B', tStyle:tS('#8b5cf6'), disc:'Matemática', autor:'Carlos', style:slotStyle('#e8efff') },
+  { tipo:'A', tStyle:tS('#1d5cff'), disc:'Física',     autor:'Marina', style:slotStyle('rgba(139,92,246,.12)') },
+];
+
+const lin = (n, txt, mark) => ({ n, txt, mark:!!mark });
+const LINHAS = [
+  lin(1,'O buriti é a palmeira dos brejos, das veredas, onde a água'),
+  lin(2,'aflora e o chão se faz úmido o ano inteiro. Ali, entre capões'),
+  lin(3,'e chapadões, o sertão guarda suas nascentes como quem'),
+  lin(4,'guarda segredo antigo.'),
+  lin(5,'As veredas alimentam os rios que descem para todas as', true),
+  lin(6,'bacias do país, e por isso o Cerrado é chamado de', true),
+  lin(7,'caixa-d’água do Brasil.', true),
+  lin(8,'Mas a caixa-d’água racha: onde a vereda seca, o buriti'),
+  lin(9,'tomba, e com ele vai-se a memória da água.'),
+];
+
+const TURMAS = [
+  { nome:'2ª A',            eb:'54,10', red:'7,8', interp:'0,66', exec:'0,58' },
+  { nome:'2ª B',            eb:'57,92', red:'8,1', interp:'0,71', exec:'0,62' },
+  { nome:'2ª C',            eb:'51,37', red:'7,2', interp:'0,60', exec:'0,55' },
+  { nome:'2ª D (adaptada)', eb:'49,80', red:'7,5', interp:'0,63', exec:'0,57' },
+];
+
+/* ── helpers ── */
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const eyebrow = t => `<div style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#e5007e;margin-bottom:6px">${t}</div>`;
+
+/* ── barras de progresso (respeitam animar) ── */
+function bar(pct, delay){
+  const anim = animar() ? `transform-origin:left;animation:barGrow 1.2s cubic-bezier(.2,.8,.2,1) ${delay}s both` : '';
+  return `<div style="height:8px;border-radius:99px;background:#eef2fb;overflow:hidden;margin-top:12px"><div style="height:100%;width:${pct}%;border-radius:99px;background:linear-gradient(90deg,#1d5cff,#06b6d4);${anim}"></div></div>`;
+}
+function hbar(label, pct, val, delay){
+  const anim = animar() ? `transform-origin:left;animation:barGrow 1s ease ${delay}s both` : '';
+  return `<div style="display:flex;align-items:center;gap:8px;font-size:9.5px;margin:5px 0;color:#333"><span style="min-width:64px">${label}</span><div style="flex:1;height:9px;background:#eef1fb;border-radius:99px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#1d5cff,#06b6d4);border-radius:99px;${anim}"></div></div><b style="font-size:9px">${val}</b></div>`;
+}
+/* entrada em cascata: só aplica animação quando ligada */
+const fu = (dur, delay) => animar() ? `animation:fadeUp ${dur}s ease ${delay?delay+'s ':''}both` : '';
+
+/* ════════════════════════════ TELAS ════════════════════════════ */
+
+function screenPainel(){
+  return `<div style="display:flex;flex-direction:column;gap:24px;max-width:1080px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${fu(.6)}">
+      <div>
+        ${eyebrow('Simulado PAS 2026 · 1ª etapa')}
+        <div style="font-size:28px;font-weight:800;letter-spacing:-.01em">Bom dia, Raul 👋</div>
+        <div style="font-size:13.5px;color:#5d6685;margin-top:4px">Aplicação em 12/09 · 2ª série EM · 398 estudantes · faltam 54 dias</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" data-go="itens">Revisar itens</button>
+        <button class="btn btn-cta" data-go="provas">Gerar cadernos</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+      <div class="lift" style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.1)}">
+        <div style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a93ad">Itens aprovados</div>
+        <div style="font-size:38px;font-weight:800;margin:8px 0 2px;font-variant-numeric:tabular-nums"><span data-count="96">0</span><span style="font-size:15px;color:#8a93ad;font-weight:600"> / 120</span></div>
+        ${bar(80,.5)}
+      </div>
+      <div class="lift" style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.2)}">
+        <div style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a93ad">Em revisão</div>
+        <div style="font-size:38px;font-weight:800;margin:8px 0 2px;color:#e5007e;font-variant-numeric:tabular-nums" data-count="14">0</div>
+        <div style="font-size:12.5px;color:#5d6685">8 na coord. de área · 6 na geral</div>
+      </div>
+      <div class="lift" style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.3)}">
+        <div style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a93ad">Textos-base ativos</div>
+        <div style="font-size:38px;font-weight:800;margin:8px 0 2px;font-variant-numeric:tabular-nums" data-count="9">0</div>
+        <div style="font-size:12.5px;color:#5d6685">+2 sugestões aguardando</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;${fu(.6,.4)}">
+      <div class="ver-regular" style="background:linear-gradient(130deg,#1d5cff,#0d2f8a);border-radius:20px;padding:22px;color:#fff;position:relative;overflow:hidden">
+        <div style="position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.14) 50%,transparent 70%);background-size:200% 100%;${animar()?'animation:shimmer 4s linear infinite':''}"></div>
+        <div style="font-size:12px;font-weight:700;opacity:.8;letter-spacing:.08em;text-transform:uppercase">📘 Prova regular</div>
+        <div style="font-size:22px;font-weight:800;margin-top:6px">120 itens + redação</div>
+        <div style="font-size:13px;opacity:.85;margin-top:4px">371 estudantes · x = 0,433</div>
+      </div>
+      <div class="ver-adaptada" style="background:#fff;border:1.5px dashed #d7deee;border-radius:20px;padding:22px">
+        <div style="font-size:12px;font-weight:700;color:#12b76a;letter-spacing:.08em;text-transform:uppercase">📗 Prova adaptada · inclusão</div>
+        <div style="font-size:22px;font-weight:800;margin-top:6px;color:#122a4a">72 itens + redação</div>
+        <div style="font-size:13px;color:#5d6685;margin-top:4px">27 estudantes · x = 0,731</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;border-radius:20px;padding:6px 22px 14px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.5)}">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 0 6px">
+        <div style="font-size:13px;font-weight:800">Entregas por componente curricular</div>
+        <a href="#" style="font-size:12.5px;font-weight:700">ver todos →</a>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>
+        ${ENTREGAS.map(e=>`<tr class="row-hover" style="border-top:1px solid #f0f3fa">
+          <td style="padding:11px 0;width:150px"><span style="${e.chipStyle}">${e.comp}</span></td>
+          <td style="color:#5d6685">${e.docente}</td>
+          <td style="font-weight:700;text-align:right;font-variant-numeric:tabular-nums">${e.frac}</td>
+          <td style="text-align:right;width:130px"><span style="${e.statusStyle}">● ${e.status}</span></td>
+        </tr>`).join('')}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
+function textoLinhas(withHighlight){
+  return LINHAS.map(l=>{
+    const mark = withHighlight && l.mark ? ';background:rgba(255,194,36,.28);border-radius:6px' : '';
+    return `<div style="display:flex;gap:10px${mark}"><span style="font-family:ui-monospace,monospace;font-size:11px;color:#e5007e;min-width:18px;text-align:right;padding-top:4px;user-select:none">${l.n}</span><span>${esc(l.txt)}</span></div>`;
+  }).join('');
+}
+
+function screenTextos(){
+  const slotPill = s => `<span style="${s.style}"><span style="${s.tStyle}">${s.tipo}</span>${s.disc} · ${s.autor}</span>`;
+  const addBtn = '<button class="slot-add">＋ alocar item</button>';
+  return `<div style="display:flex;flex-direction:column;gap:20px;max-width:1080px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${fu(.6)}">
+      <div>
+        ${eyebrow('Alocação livre por texto')}
+        <div style="font-size:26px;font-weight:800">Textos-base</div>
+        <div style="font-size:13.5px;color:#5d6685;margin-top:4px">Clique num espaço livre para alocar um item seu · Sua produção: 3 itens</div>
+      </div>
+      <button class="btn btn-green">+ Sugerir novo texto</button>
+    </div>
+
+    <!-- Texto 3 -->
+    <div style="background:#fff;border-radius:20px;box-shadow:0 6px 24px rgba(18,42,74,.06);overflow:hidden;${fu(.6,.15)}">
+      <div class="txt3-head" data-toggle="3" style="display:flex;gap:14px;align-items:center;padding:18px 22px;background:linear-gradient(120deg,#eef3ff,#f7f9fd)">
+        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#1d5cff,#3d7bff);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px;box-shadow:0 8px 18px rgba(29,92,255,.3)">3</div>
+        <div style="flex:1"><div style="font-weight:800;font-size:14.5px">“O Cerrado e as veredas” — Guimarães Rosa (adapt.)</div><div style="font-size:12px;color:#5d6685;margin-top:2px">8 itens · 6 alocados · 2 livres</div></div>
+        <span style="font-size:11.5px;color:#5d6685;background:#fff;border-radius:99px;padding:5px 13px;box-shadow:0 2px 8px rgba(18,42,74,.08)">🔒 regra: sem itens tipo D neste texto</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#1d5cff">${state.exp3?'ocultar texto':'ver texto'} <span style="${state.exp3?'transform:rotate(180deg)':''};transition:transform .2s;display:inline-block">▾</span></span>
+      </div>
+      ${state.exp3 ? `<div style="padding:20px 22px;background:linear-gradient(160deg,#fff4fa,#fff);border-top:1px solid #f0f3fa;${animar()?'animation:fadeUp .35s ease both':''}">
+        <div style="font-size:11.5px;color:#8a93ad;margin-bottom:12px">Guimarães Rosa (adaptado) · aprovado em 03/08 · linhas 1–12</div>
+        <div style="display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.75;max-width:70ch">${textoLinhas(false)}</div>
+      </div>` : ''}
+      <div style="padding:18px 22px;display:flex;gap:9px;flex-wrap:wrap">
+        ${SLOTS3.map(slotPill).join('')}
+        ${addBtn}${addBtn}
+      </div>
+    </div>
+
+    <!-- Texto 5 -->
+    <div style="background:#fff;border-radius:20px;box-shadow:0 6px 24px rgba(18,42,74,.06);overflow:hidden;${fu(.6,.25)}">
+      <div class="txt5-head" data-toggle="5" style="display:flex;gap:14px;align-items:center;padding:18px 22px;background:linear-gradient(120deg,#fff0f8,#f7f9fd)">
+        <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#e5007e,#ff3d9a);color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px;box-shadow:0 8px 18px rgba(229,0,126,.3)">5</div>
+        <div style="flex:1"><div style="font-weight:800;font-size:14.5px">Infográfico — matriz energética brasileira 2025</div><div style="font-size:12px;color:#5d6685;margin-top:2px">6 itens · 2 alocados · 4 livres</div></div>
+        <span style="font-size:11.5px;color:#5d6685;background:#fff;border-radius:99px;padding:5px 13px;box-shadow:0 2px 8px rgba(18,42,74,.08)">sem restrições</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#e5007e">${state.exp5?'ocultar texto':'ver texto'} <span style="${state.exp5?'transform:rotate(180deg)':''};transition:transform .2s;display:inline-block">▾</span></span>
+      </div>
+      ${state.exp5 ? `<div style="padding:20px 22px;background:linear-gradient(160deg,#fff4fa,#fff);border-top:1px solid #f0f3fa;${animar()?'animation:fadeUp .35s ease both':''}">
+        <div style="font-size:11.5px;color:#8a93ad;margin-bottom:12px">Fonte: EPE — Balanço Energético Nacional (adaptado), 2025 · material visual</div>
+        <div style="border:2px dashed #efc3da;border-radius:14px;background:#fff8fb;padding:26px;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:560px">
+          <span style="font-size:26px">📊</span>
+          <div style="font-weight:700;font-size:13px;color:#e5007e">Infográfico — matriz energética brasileira 2025</div>
+          <div style="font-size:12px;color:#8a93ad;text-align:center;line-height:1.6">Imagem em alta resolução anexada pelo coordenador.<br>No caderno, é reproduzida em meia página, acima dos itens 42–47.</div>
+        </div>
+      </div>` : ''}
+      <div style="padding:18px 22px;display:flex;gap:9px;flex-wrap:wrap">
+        ${SLOTS5.map(slotPill).join('')}
+        ${addBtn}${addBtn}${addBtn}${addBtn}
+      </div>
+    </div>
+
+    <!-- Sugestão -->
+    <div style="background:#fffdf5;border:1.5px dashed #ffc224;border-radius:20px;padding:18px 22px;display:flex;gap:14px;align-items:center;${fu(.6,.35)}">
+      <div style="width:40px;height:40px;border-radius:12px;background:#ffc224;color:#5c4300;display:grid;place-items:center;font-weight:800;font-size:15px">S</div>
+      <div style="flex:1"><div style="font-weight:800;font-size:14.5px">Sugestão — “Carta da Terra” (trecho)</div><div style="font-size:12px;color:#5d6685;margin-top:2px">enviada por João Pedro (História) · fonte: ONU, 2000</div></div>
+      <span style="color:#e88b00;background:rgba(232,139,0,.12);font-size:12px;font-weight:700;padding:5px 13px;border-radius:99px">● Aguardando aprovação</span>
+    </div>
+  </div>`;
+}
+
+function screenItens(){
+  const linhasHl = LINHAS.map(l=>{
+    const mark = l.mark ? ';background:rgba(255,194,36,.28);border-radius:6px' : '';
+    return `<div style="display:flex;gap:10px${mark}"><span style="font-family:ui-monospace,monospace;font-size:11px;color:#e5007e;min-width:18px;text-align:right;padding-top:4px;user-select:none">${l.n}</span><span>${esc(l.txt)}</span></div>`;
+  }).join('');
+  const seg = (labels, onIdx) => `<div style="display:inline-flex;border:1.5px solid #e3e7f4;border-radius:11px;overflow:hidden">${labels.map((L,i)=>`<span class="seg ${i===0?'first':''} ${i===onIdx?'on':''}">${L}</span>`).join('')}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:20px;max-width:1080px">
+    <div style="${fu(.6)}">
+      ${eyebrow('Editor de item · fluxo de revisão')}
+      <div style="display:flex;align-items:center;gap:12px"><div style="font-size:26px;font-weight:800">Item · Texto 3</div><span style="color:#e88b00;background:rgba(232,139,0,.12);font-size:12px;font-weight:700;padding:5px 13px;border-radius:99px">● Em revisão — coord. de área</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px;align-items:start">
+
+      <div style="min-width:0;background:linear-gradient(160deg,#fff4fa,#fff);border-radius:20px;padding:24px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.15)}">
+        <div style="font-weight:800;font-size:14px;color:#e5007e">Texto 3 — “O Cerrado e as veredas”</div>
+        <div style="font-size:11.5px;color:#8a93ad;margin:4px 0 16px">Guimarães Rosa (adaptado) · aprovado em 03/08 · linhas 1–12</div>
+        <div style="display:flex;flex-direction:column;gap:2px;font-size:13.5px;line-height:1.75">${linhasHl}</div>
+        <div style="margin-top:14px;font-size:11.5px;color:#8a93ad">💡 As linhas destacadas são a referência selecionada para este item (5–7).</div>
+      </div>
+
+      <div style="min-width:0;display:flex;flex-direction:column;gap:16px;${fu(.6,.25)}">
+        <div style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06);display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <div><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a93ad;margin-bottom:6px">Tipo</div>${seg(['A','B','C','D'],0)}</div>
+            <div><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a93ad;margin-bottom:6px">Versão</div>${seg(['Regular','Adaptada','Ambas'],0)}</div>
+          </div>
+          <div><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a93ad;margin-bottom:6px">Habilidade</div>
+            <div style="border:1.5px solid #e3e7f4;border-radius:11px;padding:10px 13px;background:#f7f9fd;font-size:13.5px">H6 — Inferências · grupo Executar</div></div>
+          <div><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a93ad;margin-bottom:6px">Enunciado</div>
+            <div style="border:1.5px solid #e3e7f4;border-radius:11px;padding:12px 13px;background:#f7f9fd;font-size:13.5px;line-height:1.6">Com base nas linhas 5 a 7, julgue o item: as veredas funcionam como zonas de recarga hídrica, e sua supressão reduz a vazão de base dos rios que nascem no Cerrado.</div></div>
+          <div><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a93ad;margin-bottom:6px">Gabarito</div>
+            <div style="display:flex;gap:8px"><span style="width:38px;height:38px;border:2.5px solid #e5007e;background:#e5007e;color:#fff;border-radius:50%;display:grid;place-items:center;font-weight:800">C</span><span class="gab-empty">E</span></div></div>
+        </div>
+
+        <div style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06)">
+          <div style="font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:#8a93ad;margin-bottom:14px">Conversa da revisão</div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;gap:10px">
+              <div style="width:32px;height:32px;min-width:32px;border-radius:50%;background:#ff6b4a;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800">TU</div>
+              <div style="background:#f7f9fd;border-radius:4px 14px 14px 14px;padding:11px 14px;font-size:13px;flex:1"><b style="font-size:12.5px">Túlio · coord. de área</b><span style="font-size:11px;color:#8a93ad;margin-left:6px">ontem, 14h32</span><p style="margin:5px 0 0;line-height:1.55">O termo “compromete a vazão” pode gerar dupla interpretação. Sugiro fechar em “reduz a vazão de base dos rios”.</p></div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <div style="width:32px;height:32px;min-width:32px;border-radius:50%;background:#12b76a;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800">FE</div>
+              <div style="background:#eef3ff;border-radius:14px 4px 14px 14px;padding:11px 14px;font-size:13px;flex:1"><b style="font-size:12.5px">Fernanda · docente</b><span style="font-size:11px;color:#8a93ad;margin-left:6px">hoje, 8h15</span><p style="margin:5px 0 0;line-height:1.55">Boa! Ajustei o enunciado conforme sugerido. Pode reavaliar?</p></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="btn btn-ghost" style="border-radius:11px;padding:9px 16px;font-size:12.5px">Responder</button>
+            <button class="btn btn-green" style="border-radius:11px;padding:9px 16px;font-size:12.5px;box-shadow:none">Aprovar item</button>
+            <button class="btn btn-cta" style="border-radius:11px;padding:9px 16px;font-size:12.5px;box-shadow:none">Devolver com ajustes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function screenProvas(){
+  return `<div style="display:flex;flex-direction:column;gap:20px;max-width:1080px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${fu(.6)}">
+      <div>
+        ${eyebrow('Diagramação fiel ao padrão PAS')}
+        <div style="font-size:26px;font-weight:800">Caderno de provas</div>
+        <div style="font-size:13.5px;color:#5d6685;margin-top:4px">Prova Regular · 120 itens + redação · pré-visualização</div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" data-go="cartao">Ver cartão-resposta</button>
+        <button class="btn btn-cta">Exportar PDF ↓</button>
+      </div>
+    </div>
+    <div style="background:linear-gradient(160deg,#e9edf6,#dfe5f0);border-radius:24px;padding:34px;display:flex;justify-content:center;gap:28px;flex-wrap:wrap;${fu(.6,.15)}">
+
+      <!-- Capa -->
+      <div class="paper paper-l" style="background:#fff;color:#111;width:430px;max-width:100%;box-shadow:0 12px 34px rgba(13,47,138,.22);font-family:Arial,Helvetica,sans-serif">
+        <div style="border-bottom:3px solid #e5007e;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.4px;color:#0d2f8a;line-height:1.35">COLÉGIO MARISTA<br>ÁGUAS CLARAS</div>
+          <div style="font-size:9px;color:#666;text-align:center">Aplicação: 12/9/2026<br>Duração: 4h30</div>
+          <div style="border:2px solid #e5007e;color:#e5007e;font-weight:800;font-size:15px;padding:4px 10px;text-align:center;line-height:1.1"><small style="display:block;font-size:8px;letter-spacing:.6px">SALA</small>2101</div>
+        </div>
+        <div style="background:#e5007e;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:5px 16px;text-transform:uppercase">Simulado PAS · Subprograma 2026 · 1ª Etapa · Caderno de Provas</div>
+        <div style="text-align:center;padding:28px 24px">
+          <div style="font-size:22px;font-weight:800;color:#0d2f8a;letter-spacing:.5px">PROVA DE<br>CONHECIMENTOS</div>
+          <div style="width:56px;height:3px;background:#e5007e;margin:12px auto"></div>
+          <div style="font-size:10px;color:#333;line-height:1.6">Parte 1 — Língua Estrangeira (Inglês)<br>Parte 2 — Conhecimentos + Redação em Língua Portuguesa</div>
+          <div style="border:1.5px solid #0d2f8a;margin:18px 8px 0;padding:10px;text-align:left;font-size:8.5px;line-height:1.6;color:#222">
+            <b style="color:#e5007e">LEIA COM ATENÇÃO AS INSTRUÇÕES</b><br>
+            1&nbsp; Confira se este caderno contém 120 itens e uma prova de redação.<br>
+            2&nbsp; Não folheie antes de autorizado pelo chefe de sala.<br>
+            3&nbsp; A marcação do caderno de respostas é de sua responsabilidade.<br>
+            4&nbsp; Ao terminar, entregue o caderno de respostas ao aplicador.
+          </div>
+          <div style="margin-top:16px;font-size:8px;color:#999;font-family:ui-monospace,monospace">0518 9073 8 · MODELO</div>
+        </div>
+      </div>
+
+      <!-- Página interna -->
+      <div class="paper paper-r" style="background:#fff;color:#111;width:430px;max-width:100%;box-shadow:0 12px 34px rgba(13,47,138,.22);font-family:Arial,Helvetica,sans-serif">
+        <div style="background:#e5007e;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:5px 16px;text-transform:uppercase">Texto 3 · itens de 24 a 31</div>
+        <div style="padding:14px 16px 18px">
+          <div style="column-count:2;column-gap:18px;column-rule:1px solid #efc3da;font-size:9px;line-height:1.55;text-align:justify">
+            <div style="break-inside:avoid;margin-bottom:8px">
+              <b style="font-size:9.5px;color:#0d2f8a">Texto 3 — O Cerrado e as veredas</b>
+              <div style="display:flex;gap:7px;margin:6px 0 8px;break-inside:avoid"><span style="color:#e5007e;font-weight:700;font-size:8px;min-width:12px;text-align:right;font-family:ui-monospace,monospace">1</span><span>O buriti é a palmeira dos brejos, das veredas, onde a água aflora e o chão se faz úmido o ano inteiro.</span></div>
+              <div style="display:flex;gap:7px;margin-bottom:8px;break-inside:avoid"><span style="color:#e5007e;font-weight:700;font-size:8px;min-width:12px;text-align:right;font-family:ui-monospace,monospace">4</span><span>Ali, entre capões e chapadões, o sertão guarda suas nascentes como quem guarda segredo antigo.</span></div>
+              <div style="display:flex;gap:7px;margin-bottom:8px;break-inside:avoid"><span style="color:#e5007e;font-weight:700;font-size:8px;min-width:12px;text-align:right;font-family:ui-monospace,monospace">7</span><span>As veredas alimentam os rios que descem para todas as bacias do país, e por isso o Cerrado é chamado de caixa-d’água do Brasil.</span></div>
+              <div style="font-size:7px;color:#777;margin-top:4px">Guimarães Rosa (adaptado).</div>
+            </div>
+            <div style="break-inside:avoid;font-size:8.5px;margin:6px 0 4px"><b>Com base no texto 3, julgue os itens de 24 a 26.</b></div>
+            <div style="margin:10px 0;break-inside:avoid"><span style="color:#e5007e;font-weight:800;font-size:9px">24</span> &nbsp;No fragmento, a personificação do sertão (linhas 4–6) reforça o tom lírico característico da prosa de Guimarães Rosa.</div>
+            <div style="margin:10px 0;break-inside:avoid"><span style="color:#e5007e;font-weight:800;font-size:9px">25</span> &nbsp;A expressão “caixa-d’água do Brasil” refere-se ao papel do Cerrado na recarga dos aquíferos e das bacias hidrográficas do país.</div>
+            <div style="margin:10px 0;break-inside:avoid"><span style="color:#e5007e;font-weight:800;font-size:9px">26</span> &nbsp;As veredas descritas funcionam como zonas de recarga hídrica, e sua supressão compromete a vazão de base dos rios.</div>
+            <div style="margin:10px 0;break-inside:avoid"><span style="color:#e5007e;font-weight:800;font-size:9px">27</span> &nbsp;Considerando a fitofisionomia descrita no texto, assinale a opção correta acerca das adaptações do buriti.
+              <ul style="margin:4px 0 0 2px;padding:0;list-style:none"><li style="margin:2px 0"><b style="color:#0d2f8a">A</b> raízes pneumatóforas ausentes em solos alagados</li><li style="margin:2px 0"><b style="color:#0d2f8a">B</b> tolerância ao encharcamento permanente do solo</li><li style="margin:2px 0"><b style="color:#0d2f8a">C</b> caducifolia acentuada na estação chuvosa</li><li style="margin:2px 0"><b style="color:#0d2f8a">D</b> súber espesso como adaptação exclusiva ao fogo</li></ul>
+            </div>
+            <div style="margin:10px 0;break-inside:avoid"><span style="color:#e5007e;font-weight:800;font-size:9px">28</span> &nbsp;Se a vazão média de uma nascente é de 12 L/min, calcule, em litros, o volume acumulado em 1h20min. <span style="color:#555">Marque o resultado no caderno de respostas (000 a 999).</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:12.5px;color:#8a93ad;max-width:85ch;${fu(.6,.3)}">Miniatura ilustrativa — a diagramação final é calibrada página a página contra os PDFs reais do PAS (tipografia, comandos, numeração contínua, duas colunas, faixas e capa). A versão adaptada gera caderno próprio com a mesma identidade.</div>
+  </div>`;
+}
+
+/* ── cartão-resposta ── */
+const oFill = '#111', oRing = '#e5007e';
+function bubble(filled){ return `<span style="width:9px;height:9px;${filled?`background:${oFill};border:1.2px solid ${oFill}`:`border:1.2px solid ${oRing}`};border-radius:50%;display:inline-block"></span>`; }
+function ceRow(n, cFilled){
+  return `<div style="display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333"><span style="font-family:ui-monospace,monospace;font-weight:700;min-width:14px;color:#0d2f8a">${n}</span>${bubble(cFilled===true)}C ${bubble(cFilled===false)}E</div>`;
+}
+function digitRow(label, marked){
+  let cells = '';
+  for(let d=0; d<=9; d++){ cells += `${bubble(d===marked)}${d} `; }
+  return `<div style="display:flex;gap:3px;align-items:center;font-size:6.5px;margin:2px 0"><span style="color:#666;min-width:34px">${label}</span> ${cells.trim()}</div>`;
+}
+function screenCartao(){
+  // ITENS 1–5: gabarito C,E,C,—,C  (— = em branco no item 4)
+  const g15 = [true,false,true,null,true];
+  const g610 = [true,false,true,false,null]; // 6C 7E 8C 9E 10—(branco)
+  return `<div style="display:flex;flex-direction:column;gap:20px;max-width:1080px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${fu(.6)}">
+      <div>
+        ${eyebrow('Nominal · leitura óptica no scanner')}
+        <div style="font-size:26px;font-weight:800">Cartão-resposta</div>
+        <div style="font-size:13.5px;color:#5d6685;margin-top:4px">Gerado por estudante a partir da lista de matrícula</div>
+      </div>
+      <button class="btn btn-blue">Gerar lote (398) ↓</button>
+    </div>
+    <div style="background:linear-gradient(160deg,#e9edf6,#dfe5f0);border-radius:24px;padding:34px;display:flex;justify-content:center;${fu(.6,.15)}">
+      <div class="paper" style="background:#fff;color:#111;width:520px;max-width:100%;box-shadow:0 12px 34px rgba(13,47,138,.22);font-family:Arial,Helvetica,sans-serif">
+        <div style="border-bottom:3px solid #e5007e;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.4px;color:#0d2f8a;line-height:1.35">COLÉGIO MARISTA ÁGUAS CLARAS<br><span style="color:#e5007e">SIMULADO PAS 2026 · 1ª ETAPA</span></div>
+          <div style="font-size:8px;color:#333;line-height:1.5">Estudante: <b>ANTONIA SILVA</b><br>Matrícula: <b style="font-family:ui-monospace,monospace">2026-0142</b> · 2ª série B · Regular</div>
+          <div style="border:2px solid #e5007e;color:#e5007e;font-weight:800;font-size:15px;padding:4px 10px;text-align:center;line-height:1.1"><small style="display:block;font-size:8px;letter-spacing:.6px">SALA</small>2101</div>
+        </div>
+        <div style="background:#e5007e;color:#fff;font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:5px 16px;text-transform:uppercase">Caderno de Respostas — uso exclusivo do estudante</div>
+        <div style="padding:14px 16px 18px">
+          <div style="font-size:7.5px;color:#555;border:1px solid #efc3da;border-radius:4px;padding:6px;margin-bottom:8px">As marcações devem ser feitas com caneta esferográfica de tinta <b>preta</b>, preenchendo totalmente o círculo. Itens tipo A: marque C ou E. Tipo C: apenas uma opção. Tipo B: marque os três algarismos.</div>
+          <b style="font-size:8.5px;color:#e5007e">RESPOSTAS AOS ITENS DOS TIPOS A e C</b>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px">
+            <div style="border:1px solid #efc3da;border-radius:4px;padding:6px;background:#fff8fb">
+              <h5 style="margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px">ITENS 1–5</h5>
+              ${[1,2,3,4,5].map((n,i)=>ceRow(n,g15[i])).join('')}
+            </div>
+            <div style="border:1px solid #efc3da;border-radius:4px;padding:6px;background:#fff8fb">
+              <h5 style="margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px">ITENS 6–10</h5>
+              ${[6,7,8,9,10].map((n,i)=>ceRow(n,g610[i])).join('')}
+            </div>
+            <div style="border:1px solid #efc3da;border-radius:4px;padding:6px;background:#fff8fb">
+              <h5 style="margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px">ITEM 27 (TIPO C)</h5>
+              <div style="display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333"><span style="font-family:ui-monospace,monospace;font-weight:700;min-width:14px;color:#0d2f8a">A</span>${bubble(false)}</div>
+              <div style="display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333"><span style="font-family:ui-monospace,monospace;font-weight:700;min-width:14px;color:#0d2f8a">B</span>${bubble(true)}</div>
+              <div style="display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333"><span style="font-family:ui-monospace,monospace;font-weight:700;min-width:14px;color:#0d2f8a">C</span>${bubble(false)}</div>
+              <div style="display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333"><span style="font-family:ui-monospace,monospace;font-weight:700;min-width:14px;color:#0d2f8a">D</span>${bubble(false)}</div>
+            </div>
+            <div style="border:1px dashed #efc3da;border-radius:4px;padding:6px;background:#fff8fb">
+              <h5 style="margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px">MARCADORES ÓPTICOS</h5>
+              <div style="display:flex;justify-content:space-between;padding:2px 2px 0"><span style="width:8px;height:8px;background:#111"></span><span style="width:8px;height:8px;background:#111"></span></div>
+              <div style="font-size:6.5px;color:#777;margin-top:6px;text-align:center">âncoras de alinhamento<br>para leitura no scanner</div>
+              <div style="display:flex;justify-content:space-between;padding:6px 2px 0"><span style="width:8px;height:8px;background:#111"></span><span style="width:8px;height:8px;background:#111"></span></div>
+            </div>
+          </div>
+          <div style="border:1px solid #efc3da;border-radius:4px;padding:8px;margin-top:10px;background:#fff8fb">
+            <h5 style="margin:0 0 6px;font-size:8px;color:#e5007e;letter-spacing:.4px">ITEM 28 — TIPO B (resposta de 000 a 999)</h5>
+            ${digitRow('Centena',7)}
+            ${digitRow('Dezena',2)}
+            ${digitRow('Unidade',0)}
+          </div>
+          <div style="margin-top:10px;font-size:7.5px;color:#999;display:flex;justify-content:space-between;font-family:ui-monospace,monospace"><span>▮▯▮▮▯▮▮▯ 2026-0142</span><span>página 1/2</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:12.5px;color:#8a93ad;max-width:85ch;${fu(.6,.3)}">Cartão nominal (nome, matrícula, série/turma e tipo de prova impressos). As âncoras pretas e o código de matrícula permitem identificar e corrigir cada folha automaticamente no scanner, mesmo em lote.</div>
+  </div>`;
+}
+
+function screenCorrecao(){
+  return `<div style="display:flex;flex-direction:column;gap:20px;max-width:1080px">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;${fu(.6)}">
+      <div>
+        ${eyebrow('Leitura óptica · boletins')}
+        <div style="font-size:26px;font-weight:800">Correção e boletins</div>
+        <div style="font-size:13.5px;color:#5d6685;margin-top:4px">Simulado PAS 2026 · 1ª etapa · 2ª série EM</div>
+      </div>
+      <button class="btn btn-cta">📄 Boletins em PDF (lote)</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:20px;align-items:start">
+
+      <div style="min-width:0;display:flex;flex-direction:column;gap:18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+          <div class="lift" style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.1)}">
+            <div style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a93ad">Cartões lidos</div>
+            <div style="font-size:38px;font-weight:800;margin:8px 0 2px;font-variant-numeric:tabular-nums"><span data-count="392">0</span><span style="font-size:15px;color:#8a93ad;font-weight:600"> / 398</span></div>
+            ${bar(98,.5)}
+          </div>
+          <div class="lift" style="background:#fff;border-radius:20px;padding:22px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.2)}">
+            <div style="font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#8a93ad">Conferência manual</div>
+            <div style="font-size:38px;font-weight:800;margin:8px 0 2px;color:#ff6b4a;font-variant-numeric:tabular-nums" data-count="6">0</div>
+            <div style="font-size:12.5px;color:#5d6685">dupla marcação ou leitura duvidosa</div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border-radius:20px;padding:20px 22px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.3)}">
+          <div style="font-size:13px;font-weight:800;margin-bottom:12px">Exportações</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-blue" style="border-radius:11px;padding:9px 16px;font-size:12.5px;box-shadow:none">Relatório por turma</button>
+            <button class="btn btn-blue" style="border-radius:11px;padding:9px 16px;font-size:12.5px;box-shadow:none">Relatório por série</button>
+            <button class="btn btn-ghost" style="border-radius:11px;padding:9px 16px;font-size:12.5px">Planilha de notas</button>
+          </div>
+        </div>
+
+        <div style="background:#fff;border-radius:20px;padding:6px 22px 14px;box-shadow:0 6px 24px rgba(18,42,74,.06);${fu(.6,.4)}">
+          <div style="font-size:13px;font-weight:800;padding:16px 0 8px">Desempenho por turma — 2ª série</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr>
+              ${['Turma','Média EB','Redação','Interpretar','Executar'].map((h,i)=>`<th style="text-align:${i===0?'left':'right'};font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#8a93ad;padding:8px 0;border-bottom:2px solid #f0f3fa">${h}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${TURMAS.map(t=>`<tr class="row-hover"><td style="padding:10px 0;border-top:1px solid #f0f3fa;font-weight:700">${t.nome}</td><td style="text-align:right;border-top:1px solid #f0f3fa;font-variant-numeric:tabular-nums">${t.eb}</td><td style="text-align:right;border-top:1px solid #f0f3fa;font-variant-numeric:tabular-nums">${t.red}</td><td style="text-align:right;border-top:1px solid #f0f3fa;font-variant-numeric:tabular-nums">${t.interp}</td><td style="text-align:right;border-top:1px solid #f0f3fa;font-variant-numeric:tabular-nums">${t.exec}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="min-width:0;overflow:hidden;background:linear-gradient(160deg,#e9edf6,#dfe5f0);border-radius:24px;padding:24px;${fu(.6,.25)}">
+        <div class="paper" style="background:#fff;color:#111;box-shadow:0 12px 34px rgba(13,47,138,.22);font-family:Arial,Helvetica,sans-serif">
+          <div style="background:linear-gradient(115deg,#0d2f8a,#1d5cff);color:#fff;padding:12px 16px">
+            <h4 style="margin:0;font-size:13px">Boletim de Desempenho Individual</h4>
+            <p style="margin:2px 0 0;font-size:10px;opacity:.88">Simulado PAS 2026 · 1ª Etapa · ANTONIA SILVA · Matrícula 2026-0142 · 2ª B</p>
+          </div>
+          <div style="padding:12px 16px;border-bottom:1px solid #eee">
+            <h5 style="margin:0 0 8px;font-size:10px;color:#e5007e;text-transform:uppercase;letter-spacing:.5px">Proporção de acertos por grupo de habilidades</h5>
+            ${hbar('Interpretar',72,'0,72',.5)}
+            ${hbar('Planejar',55,'0,55',.6)}
+            ${hbar('Executar',64,'0,64',.7)}
+            ${hbar('Criticar',47,'0,47',.8)}
+            <div style="font-size:7px;color:#777;margin-top:5px">Barra azul: estudante · referência: média da turma</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 16px">
+            <div style="border:1px solid #eee;border-radius:8px;padding:8px;text-align:center"><b style="display:block;font-size:16px;color:#0d2f8a;font-variant-numeric:tabular-nums">59,83</b><span style="font-size:8px;color:#777;text-transform:uppercase;letter-spacing:.4px">Escore bruto</span></div>
+            <div style="border:1px solid #eee;border-radius:8px;padding:8px;text-align:center"><b style="display:block;font-size:16px;color:#0d2f8a;font-variant-numeric:tabular-nums">8,40</b><span style="font-size:8px;color:#777;text-transform:uppercase;letter-spacing:.4px">Redação</span></div>
+            <div style="border:1px solid #eee;border-radius:8px;padding:8px;text-align:center"><b style="display:block;font-size:16px;color:#0d2f8a;font-variant-numeric:tabular-nums">42º</b><span style="font-size:8px;color:#777;text-transform:uppercase;letter-spacing:.4px">de 398</span></div>
+          </div>
+          <div style="padding:12px 16px;border-top:1px solid #eee">
+            <h5 style="margin:0 0 6px;font-size:10px;color:#e5007e;text-transform:uppercase;letter-spacing:.5px">Gabarito × suas marcações (trecho)</h5>
+            <div style="font-family:ui-monospace,monospace;font-size:8.5px;line-height:2;color:#333">
+              Item&nbsp;&nbsp; 1&nbsp; 2&nbsp; 3&nbsp; 4&nbsp; 5&nbsp; 6&nbsp; 7&nbsp; 8<br>
+              Gab.&nbsp;&nbsp; C&nbsp; E&nbsp; C&nbsp; E&nbsp; C&nbsp; C&nbsp; E&nbsp; C<br>
+              Você&nbsp;&nbsp;<b style="color:#12b76a">C</b>&nbsp; <b style="color:#12b76a">E</b>&nbsp; <b style="color:#12b76a">C</b>&nbsp; <span style="color:#999">—</span>&nbsp; <b style="color:#12b76a">C</b>&nbsp; <b style="color:#e5484d">E</b>&nbsp; <b style="color:#12b76a">E</b>&nbsp; <b style="color:#12b76a">C</b>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+const SCREENS = {
+  painel: screenPainel, textos: screenTextos, itens: screenItens,
+  provas: screenProvas, cartao: screenCartao, correcao: screenCorrecao,
+};
+
+/* ════════════════════════════ RUNTIME ════════════════════════════ */
+
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = NAV.map(it =>
+    `<div class="nav-item ${it.id===state.tela?'active':''}" data-nav="${it.id}"><span class="ico">${it.ico}</span>${it.label}</div>`
+  ).join('');
+}
+
+function runCounters(){
+  const els = [...document.querySelectorAll('[data-count]')];
+  if(!animar()){ els.forEach(el => el.textContent = el.dataset.count); return; }
+  const t0 = performance.now(), dur = 1400;
+  const tick = now => {
+    const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    els.forEach(el => el.textContent = Math.round(e * (+el.dataset.count)));
+    if(p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function render(){
+  renderNav();
+  const main = document.getElementById('main');
+  main.innerHTML = SCREENS[state.tela]();  // remonta → reexecuta cascata fadeUp / barGrow
+  main.scrollTop = 0;
+  runCounters();
+}
+
+function nav(tela){ if(tela && SCREENS[tela]){ state.tela = tela; render(); } }
+
+/* delegação de eventos */
+document.addEventListener('click', e => {
+  const navEl = e.target.closest('[data-nav]');
+  if(navEl){ nav(navEl.dataset.nav); return; }
+  const goEl = e.target.closest('[data-go]');
+  if(goEl){ nav(goEl.dataset.go); return; }
+  const tgl = e.target.closest('[data-toggle]');
+  if(tgl){
+    if(tgl.dataset.toggle === '3') state.exp3 = !state.exp3;
+    else state.exp5 = !state.exp5;
+    render();
+    return;
+  }
+});
+
+render();
+</script>
+</body>
+</html>
