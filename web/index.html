@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema PAS Marista</title>
+<meta name="description" content="Simulados no formato PAS/UnB — textos-base, itens, revisão, cadernos, cartões-resposta e correção.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d2f8a'/%3E%3Ctext x='32' y='40' font-family='Arial' font-size='22' font-weight='800' fill='%23fff' text-anchor='middle'%3EPAS%3C/text%3E%3Crect x='14' y='46' width='36' height='4' rx='2' fill='%23e5007e'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topo">
+  <div class="topo-in">
+    <div class="logo"><span>PAS</span></div>
+    <div>
+      <h1 id="h-titulo">Sistema PAS Marista</h1>
+      <p id="h-sub"></p>
+    </div>
+    <div class="quem" id="quem"></div>
+  </div>
+  <nav class="abas" id="nav" aria-label="Telas do sistema"></nav>
+</header>
+
+<main id="app"></main>
+
+<div id="print-area" aria-hidden="true"></div>
+<dialog id="dlg"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

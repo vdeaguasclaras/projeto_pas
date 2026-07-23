@@ -1,0 +1,4 @@
+opencv-python>=4.10
+numpy>=1.26
+pypdfium2>=4.30
+click>=8.1
