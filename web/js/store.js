@@ -1,25 +1,27 @@
-// Camada de dados do MVP — persistência em localStorage do navegador.
-// Fase 2 do plano de implantação: substituir load/save/persistência por
-// Supabase (Postgres + Auth + RLS) mantendo esta mesma interface.
-// Ver docs/plano-implantacao.md.
+// Camada de dados local — persistência em localStorage do navegador.
+// Na fase 2, o modo nuvem (js/nuvem.js + Supabase) passa a ser a fonte de
+// verdade quando configurado em js/config-supabase.js; o localStorage vira
+// cache/fallback. Ver docs/plano-implantacao.md.
 
 const KEY = 'pas-marista-mvp-v1';
 
+// Componentes curriculares em ordem alfabética (única língua estrangeira: Inglês).
 export const COMPONENTES = {
-  'Português': 'd-lp', 'Literatura': 'd-lit', 'Matemática': 'd-mat', 'Biologia': 'd-bio',
-  'Química': 'd-qui', 'História': 'd-his', 'Física': 'd-fis', 'Geografia': 'd-geo',
-  'Inglês': 'd-ing', 'Filosofia': 'd-fil', 'Sociologia': 'd-soc', 'Espanhol': 'd-esp', 'Artes': 'd-art'
+  'Artes': 'd-art', 'Biologia': 'd-bio', 'Filosofia': 'd-fil', 'Física': 'd-fis',
+  'Geografia': 'd-geo', 'História': 'd-his', 'Inglês': 'd-ing', 'Literatura': 'd-lit',
+  'Matemática': 'd-mat', 'Português': 'd-lp', 'Química': 'd-qui', 'Sociologia': 'd-soc'
 };
 
 export const GRUPOS = ['Interpretar', 'Planejar', 'Executar', 'Criticar'];
 
-// Tipos de item no formato PAS. A pontuação (fase de calibração) segue a
-// simplificação: A = certo +1 / errado −1; B = certo +1; C e D = certo +1 / errado −1.
+// Tipos de item no formato PAS. Pontuação do MVP (calibrável na fase 3):
+// A: certo +1 / errado −1 · B: certo +1 · C: certo +1 / errado −1 ·
+// D (discursivo): nota lançada de 0 a 10, vale nota/10 no escore bruto.
 export const TIPOS = {
   A: { rotulo: 'A — Certo/Errado', respostas: ['C', 'E'] },
   B: { rotulo: 'B — Numérico (000 a 999)', respostas: null },
   C: { rotulo: 'C — Múltipla escolha', respostas: ['A', 'B', 'C', 'D'] },
-  D: { rotulo: 'D — Múltipla escolha', respostas: ['A', 'B', 'C', 'D'] }
+  D: { rotulo: 'D — Discursivo (resposta construída)', respostas: null }
 };
 
 export const STATUS_ITEM = {
@@ -37,7 +39,7 @@ export function blank() {
     versao: 1,
     config: {
       nome: 'Simulado PAS', etapa: '1ª Etapa', serie: '2ª série EM',
-      dataAplicacao: '', duracao: '4h30', sala: ''
+      dataAplicacao: '', duracao: '4h30'
     },
     perfil: { papel: 'coordenacao', nome: 'Coordenação', componente: null },
     textos: [],
@@ -51,7 +53,7 @@ export function seed() {
   const s = blank();
   s.config = {
     nome: 'Simulado PAS 2026', etapa: '1ª Etapa', serie: '2ª série EM',
-    dataAplicacao: '2026-09-12', duracao: '4h30', sala: '2101'
+    dataAplicacao: '2026-09-12', duracao: '4h30'
   };
   s.perfil = { papel: 'coordenacao', nome: 'Raul', componente: null };
 
@@ -164,6 +166,14 @@ export function seed() {
         c('Raul', 'coordenação geral', 'hoje, 9h02',
           'Aprovado na área. Verificar apenas se o comando “décimos percentuais” está claro para a 2ª série.')
       ]
+    },
+    {
+      id: 'it8', textoId: 'tx2', tipo: 'D', componente: 'História', autor: 'João Pedro',
+      habilidade: 'H10 — Argumentação', grupo: 'Criticar', versao: 'regular',
+      linhasRef: '5-6', opcoes: [], dLinhas: 8, dPauta: true,
+      gabarito: 'Espera-se que o estudante reconheça a alta participação renovável como argumento favorável e aponte uma limitação (sazonalidade hídrica, intermitência eólica/solar ou impactos socioambientais de hidrelétricas).',
+      enunciado: 'Com base no infográfico, avalie em que medida a matriz elétrica brasileira pode ser considerada “limpa”, apresentando um argumento favorável e uma limitação.',
+      status: 'aprovado', comentarios: []
     }
   ];
 
@@ -176,11 +186,12 @@ export function seed() {
     { id: 'e6', nome: 'Felipe Arruda',   matricula: '2026-0058', turma: '2ª A', versao: 'regular'  }
   ];
 
-  // Respostas por id de item; redação pela planilha oficial (NR = NC − 2·NE/TL).
+  // Respostas por id de item; discursivas (tipo D) por nota 0–10;
+  // redação pela planilha oficial (NR = NC − 2·NE/TL).
   s.respostas = {
-    e1: { marcacoes: { it1: 'C', it2: 'C', it3: 'B', it5: '960' }, redacao: { nc: 9.0, ne: 3, tl: 28 } },
-    e2: { marcacoes: { it1: 'C', it2: 'E', it3: 'D', it5: '720' }, redacao: { nc: 7.5, ne: 6, tl: 30 } },
-    e3: { marcacoes: { it1: 'E', it2: 'C', it3: 'B', it5: '960' }, redacao: { nc: 8.0, ne: 2, tl: 25 } }
+    e1: { marcacoes: { it1: 'C', it2: 'C', it3: 'B', it5: '960' }, discursivas: { it8: 8.5 }, redacao: { nc: 9.0, ne: 3, tl: 28 } },
+    e2: { marcacoes: { it1: 'C', it2: 'E', it3: 'D', it5: '720' }, discursivas: {}, redacao: { nc: 7.5, ne: 6, tl: 30 } },
+    e3: { marcacoes: { it1: 'E', it2: 'C', it3: 'B', it5: '960' }, discursivas: { it8: 6.0 }, redacao: { nc: 8.0, ne: 2, tl: 25 } }
   };
 
   return s;

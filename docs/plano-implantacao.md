@@ -1,19 +1,57 @@
 # Plano de implantação — Sistema PAS Marista
 
-Atualizado em 23/07/2026. Objetivo: sistema de simulados no formato PAS/UnB
-para o Colégio Marista Águas Claras, com interface on-line e um aplicativo
-local (Windows) para leitura óptica dos cartões-resposta.
+Atualizado em 23/07/2026 (2ª rodada). Objetivo: sistema de simulados no
+formato PAS/UnB para o Colégio Marista Águas Claras, com interface on-line
+e um aplicativo local (Windows) para leitura óptica dos cartões-resposta.
 
 ## Visão das fases
 
 | Fase | Entrega | Status |
 |---|---|---|
 | 0 | Protótipo navegável v2 + revisão de design | ✅ concluída |
-| 1 | **MVP funcional on-line** + organização do app local | ✅ esta entrega |
-| 2 | Backend Supabase (login, banco on-line, multiusuário real) | ⏳ próxima |
-| 3 | Calibração de fidelidade dos documentos contra os PDFs reais do PAS | ⏳ |
+| 1 | **MVP funcional on-line** + organização do app local | ✅ concluída |
+| 1.5 | Ajustes de UX/regras da revisão do Raul (23/07) | ✅ esta entrega |
+| 2 | Backend Supabase (login, banco on-line, multiusuário real) | ✅ esta entrega |
+| 3 | Calibração de fidelidade dos documentos contra os PDFs reais do PAS | ⏳ próxima |
 | 4 | App local de leitura óptica funcionando de ponta a ponta | ⏳ |
 | 5 | Piloto com um simulado real + ajustes | ⏳ |
+
+## Fase 1.5 — ajustes da revisão (23/07/2026)
+
+- Cabeçalho sem sobreposição das abas + alternador de tema claro/escuro.
+- Configuração do simulado sem "sala padrão" (campo SALA fica em branco nos
+  documentos, para preenchimento na aplicação).
+- Textos: título, fonte e corpo obrigatórios; quantidade de itens e regra
+  visíveis/editáveis apenas pela coordenação; coordenação reordena textos
+  (▲▼) e itens dentro de cada texto (◀▶) — a numeração da prova segue.
+- Editor de item sem rolagem horizontal (diálogo largo responsivo).
+- **Tipo D = item discursivo**: enunciado + resposta esperada, com escolha
+  de espaço de resposta (com/sem linhas e quantidade). Sai do
+  cartão-resposta; no caderno reserva o espaço; a nota (0–10) é lançada na
+  Correção e vale nota/10 no escore bruto do MVP.
+- Componentes em ordem alfabética, sem Espanhol (única LE: Inglês).
+- Correção por papel: professora de redação vê apenas a tabela de NC/NE/TL;
+  docente com itens D aprovados vê apenas o lançamento de notas dos seus
+  itens; coordenação vê tudo.
+
+## Fase 2 — Backend Supabase (implantada)
+
+- Projeto **pas-marista** criado (`wtlmkyeukkvviqqrgiei`, região sa-east-1,
+  plano pago — US$ 10/mês confirmados pelo Raul).
+- Esquema em `supabase/migrations/0001_esquema_inicial.sql`: tabelas jsonb
+  (`simulado_config`, `textos`, `itens`, `estudantes`, `respostas`) com RLS
+  "somente usuários autenticados" e trigger de `updated_at`.
+- Web: modo nuvem em `web/js/config-supabase.js` (chave publicável — segura
+  em código de navegador) + driver `web/js/nuvem.js` (supabase-js embutido
+  em `web/js/vendor/`, com fallback CDN). Login por e-mail/senha, papéis em
+  metadados da conta (coordenação/docente/redação), sincronização granular
+  por linha a cada mutação e botão "usar sem conexão" (modo local).
+- Primeiro login com banco vazio inicializa a nuvem com os dados do
+  navegador; conta da coordenação criada para raul.cardoso@gmail.com
+  (senha temporária informada no chat — trocar no primeiro acesso).
+- Observação: contas novas criadas pela equipe exigem confirmação por
+  e-mail (padrão do Supabase). Para dispensar a confirmação:
+  painel Supabase → Authentication → Sign In / Up → Confirm email (off).
 
 ## Fase 1 — MVP (esta entrega)
 
@@ -40,8 +78,9 @@ local (Windows) para leitura óptica dos cartões-resposta.
   Botões de backup (exportar/importar JSON) cobrem o intervalo até o
   Supabase. A camada de dados está isolada em `web/js/store.js` justamente
   para essa troca.
-- Pontuação simplificada e parametrizável: A ±1 · B +1 · C/D ±1 · branco 0.
-  Pesos oficiais (parâmetro *x*) entram na fase 3.
+- Pontuação simplificada e parametrizável: A ±1 · B +1 · C ±1 · branco 0 ·
+  D (discursivo) = nota lançada/10. Pesos oficiais (parâmetro *x*) entram
+  na fase 3.
 - Sem paginação tipográfica real do caderno (fase 3, calibrada contra os
   PDFs do PAS que o Raul forneceu).
 
@@ -50,19 +89,6 @@ local (Windows) para leitura óptica dos cartões-resposta.
 de dados web ⇄ leitor documentado (`desktop/docs/contrato-dados.md`),
 pipeline OMR especificado (`desktop/docs/pipeline-omr.md`) e esqueleto de
 CLI que já valida o gabarito JSON exportado pelo web.
-
-## Fase 2 — Backend Supabase
-
-- Criar projeto Supabase dedicado. **Atenção**: a conta está no limite de
-  2 projetos ativos do plano gratuito (`mapa-de-sala` e
-  `sistema-acompanhamento-pedagogico`). Decidir: pausar um projeto,
-  ou upgrade do plano.
-- Esquema: `usuarios` (papéis: coordenacao, coord_area, docente), `textos`,
-  `itens`, `comentarios`, `estudantes`, `respostas`, `simulados` — com RLS
-  por papel.
-- Trocar `web/js/store.js` por chamadas supabase-js (Auth + Postgres),
-  mantendo a interface atual da camada de dados.
-- Migração: o backup JSON do MVP importa direto no novo banco.
 
 ## Fase 3 — Fidelidade documental
 

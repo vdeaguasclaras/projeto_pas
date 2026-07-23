@@ -26,7 +26,9 @@ de que tipo é cada um (para saber quantas bolhas procurar por linha).
 }
 ```
 
-- `tipo A` → 2 bolhas (C/E) · `tipo C/D` → 4 bolhas (A–D) · `tipo B` → 3 linhas de 10 dígitos.
+- `tipo A` → 2 bolhas (C/E) · `tipo C` → 4 bolhas (A–D) · `tipo B` → 3 linhas de 10 dígitos.
+- Itens **tipo D (discursivos)** não aparecem no arquivo nem no cartão: são
+  respondidos no próprio caderno e a nota é lançada direto no sistema web.
 - O campo `gabarito` é opcional para o leitor (a correção acontece no web),
   mas permite conferência local quando conveniente.
 

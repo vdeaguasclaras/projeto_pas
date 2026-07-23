@@ -9,8 +9,9 @@ correção com boletins.
 
 | Pasta | Conteúdo |
 |---|---|
-| `web/` | **MVP on-line** — SPA estática (HTML/CSS/JS, sem build), publicada no Vercel. Persistência local no navegador nesta fase, com backup JSON. |
+| `web/` | **Interface on-line** — SPA estática (HTML/CSS/JS, sem build). Com o modo nuvem ativo (`web/js/config-supabase.js`), usa login por conta e banco Supabase compartilhado; sem nuvem, roda 100% local no navegador com backup JSON. |
 | `desktop/` | **App local Windows** — leitor óptico (OMR) dos cartões digitalizados. Nesta fase: stack, estrutura, contrato de dados e esqueleto de CLI. |
+| `supabase/migrations/` | Esquema do banco on-line (registro versionado do que foi aplicado no projeto `pas-marista`). |
 | `docs/plano-implantacao.md` | Plano de implantação por fases (0 a 5) e decisões registradas. |
 | `docs/prototipos/` | Protótipo navegável v2 que orientou o design (abrir direto no navegador). |
 

@@ -1,8 +1,13 @@
-// Sistema PAS Marista — MVP web (fase 1 do plano de implantação).
-// SPA sem build: ES modules + localStorage. Ver docs/plano-implantacao.md.
+// Sistema PAS Marista — SPA sem build (fases 1 e 2 do plano de implantação).
+// Estado em memória (S) com cache em localStorage; quando o modo nuvem está
+// configurado (js/config-supabase.js), o Supabase é a fonte de verdade e cada
+// mutação é sincronizada por linha através do facade PERS.
 import { COMPONENTES, GRUPOS, TIPOS, STATUS_ITEM, uid, blank, seed, load, save, substituir } from './store.js';
+import { NUVEM } from './config-supabase.js';
+import * as nuvem from './nuvem.js';
 
 let S = load();
+let modoNuvem = false;
 
 /* ---------------- utilidades ---------------- */
 const $ = (sel, raiz = document) => raiz.querySelector(sel);
@@ -40,10 +45,56 @@ function baixar(nome, conteudo, tipo = 'application/json') {
 
 function commit() { save(S); render(); }
 
+/* ---------------- tema claro/escuro ---------------- */
+function temaAtual() {
+  return document.documentElement.dataset.theme ||
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+(function aplicarTemaSalvo() {
+  try {
+    const t = localStorage.getItem('pas-tema');
+    if (t) document.documentElement.dataset.theme = t;
+  } catch { /* sem preferência salva */ }
+})();
+function botaoTema() {
+  return `<button class="tema-btn" data-acao="tema" title="Alternar tema claro/escuro">${temaAtual() === 'dark' ? '☀️' : '🌙'}</button>`;
+}
+
+/* ---------------- sincronização com a nuvem ---------------- */
+// Cada mutação local chama o método correspondente; em modo local tudo é no-op.
+const PERS = {
+  falha: e => toast('⚠ Falha ao sincronizar com a nuvem: ' + (e?.message || e)),
+  config() { if (modoNuvem) nuvem.gravarConfig(S.config).catch(PERS.falha); },
+  texto(t) { if (modoNuvem) nuvem.gravarLinha('textos', t).catch(PERS.falha); },
+  textosTodos() { if (modoNuvem) nuvem.gravarLinhas('textos', S.textos).catch(PERS.falha); },
+  removerTexto(id) { if (modoNuvem) nuvem.removerLinha('textos', id).catch(PERS.falha); },
+  item(i) {
+    if (modoNuvem) nuvem.gravarLinha('itens',
+      { ...i, ordem: S.itens.findIndex(x => x.id === i.id) }).catch(PERS.falha);
+  },
+  itens(ids) {
+    if (!modoNuvem) return;
+    const lista = ids.map(id => ({ ...S.itens.find(x => x.id === id), ordem: S.itens.findIndex(x => x.id === id) }));
+    nuvem.gravarLinhas('itens', lista).catch(PERS.falha);
+  },
+  removerItem(id) { if (modoNuvem) nuvem.removerLinha('itens', id).catch(PERS.falha); },
+  estudante(e) { if (modoNuvem) nuvem.gravarLinha('estudantes', e).catch(PERS.falha); },
+  estudantesTodos() { if (modoNuvem) nuvem.gravarLinhas('estudantes', S.estudantes).catch(PERS.falha); },
+  removerEstudante(id) { if (modoNuvem) nuvem.removerLinha('estudantes', id).catch(PERS.falha); },
+  resposta(estId) { if (modoNuvem && S.respostas[estId]) nuvem.gravarResposta(estId, S.respostas[estId]).catch(PERS.falha); },
+  respostas(ids) { if (modoNuvem) nuvem.gravarRespostas(S.respostas, ids).catch(PERS.falha); },
+  removerResposta(id) { if (modoNuvem) nuvem.removerResposta(id).catch(PERS.falha); },
+  tudo() { if (modoNuvem) nuvem.substituirTudo(S).catch(PERS.falha); }
+};
+
 const ehCoord = () => S.perfil.papel === 'coordenacao';
-const nomePerfil = () => S.perfil.papel === 'docente'
-  ? `Docente · ${S.perfil.nome}${S.perfil.componente ? ' (' + S.perfil.componente + ')' : ''}`
-  : `Coordenação · ${S.perfil.nome}`;
+const ehRedacao = () => S.perfil.papel === 'redacao';
+const nomePerfil = () => {
+  if (S.perfil.papel === 'docente')
+    return `Docente · ${S.perfil.nome}${S.perfil.componente ? ' (' + S.perfil.componente + ')' : ''}`;
+  if (S.perfil.papel === 'redacao') return `Redação · ${S.perfil.nome}`;
+  return `Coordenação · ${S.perfil.nome}`;
+};
 
 const discChip = comp => `<span class="disc ${COMPONENTES[comp] || 'd-soc'}">${esc(comp)}</span>`;
 const textoDe = item => S.textos.find(t => t.id === item.textoId);
@@ -68,11 +119,24 @@ function prova(versao) {
 function corrigir(est) {
   const pv = prova(est.versao);
   const resp = S.respostas[est.id] || { marcacoes: {}, redacao: null };
-  let ac = 0, er = 0, br = 0, eb = 0;
+  let ac = 0, er = 0, br = 0, eb = 0, dLanc = 0, dTotal = 0;
   const porGrupo = {};
   GRUPOS.forEach(g => porGrupo[g] = { ac: 0, tot: 0 });
   const detalhes = [];
   for (const { item, numero } of pv) {
+    const g = porGrupo[item.grupo] || (porGrupo[item.grupo] = { ac: 0, tot: 0 });
+    if (item.tipo === 'D') {
+      // Discursivo: nota lançada de 0 a 10 vale nota/10 no escore bruto.
+      dTotal++;
+      const bruta = resp.discursivas?.[item.id];
+      if (bruta !== undefined && bruta !== null && bruta !== '') {
+        const nota = Math.max(0, Math.min(10, parseFloat(bruta) || 0));
+        eb += nota / 10;
+        g.tot++; g.ac += nota / 10;
+        dLanc++;
+      }
+      continue;
+    }
     const m = String(resp.marcacoes?.[item.id] ?? '').trim().toUpperCase();
     const gab = item.tipo === 'B' ? String(item.gabarito).padStart(3, '0') : String(item.gabarito).toUpperCase();
     const marcada = m !== '';
@@ -80,14 +144,14 @@ function corrigir(est) {
     if (!marcada) br++;
     else if (certa) { ac++; eb += 1; }
     else { er++; if (item.tipo !== 'B') eb -= 1; }
-    const g = porGrupo[item.grupo] || (porGrupo[item.grupo] = { ac: 0, tot: 0 });
     g.tot++; if (certa) g.ac++;
     detalhes.push({ numero, gab, m: marcada ? m : null, certa });
   }
   const red = resp.redacao;
   const nr = (red && red.tl > 0) ? Math.max(0, red.nc - 2 * red.ne / red.tl) : null;
-  const temResp = Object.keys(resp.marcacoes || {}).length > 0;
-  return { ac, er, br, eb, porGrupo, nr, detalhes, temResp, total: pv.length };
+  const temResp = Object.keys(resp.marcacoes || {}).length > 0 ||
+    Object.keys(resp.discursivas || {}).length > 0;
+  return { ac, er, br, eb, porGrupo, nr, detalhes, temResp, total: pv.length, dLanc, dTotal };
 }
 
 function ranking(versao) {
@@ -116,14 +180,26 @@ function render() {
   $('#h-titulo').textContent = 'Sistema PAS Marista';
   $('#h-sub').textContent = `${c.nome} — ${c.etapa} · ${c.serie}` +
     (c.dataAplicacao ? ` · Aplicação: ${dataBR(c.dataAplicacao)}` : '');
+
+  if (modoNuvem && !nuvem.usuario()) {
+    $('#quem').innerHTML = botaoTema();
+    $('#nav').innerHTML = '';
+    telaLogin();
+    return;
+  }
+
   const ini = (S.perfil.nome || '?').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
-  $('#quem').innerHTML = `
-    <select id="sel-perfil" aria-label="Perfil ativo">
-      <option value="coordenacao" ${ehCoord() ? 'selected' : ''}>Coordenação · ${esc(S.perfil.papel === 'coordenacao' ? S.perfil.nome : 'entrar')}</option>
-      <option value="docente" ${!ehCoord() ? 'selected' : ''}>${!ehCoord() ? esc(nomePerfil()) : 'Docente · entrar'}</option>
-    </select>
-    <div class="avatar">${esc(ini)}</div>`;
-  $('#sel-perfil').addEventListener('change', ev => dlgPerfil(ev.target.value));
+  const identidade = modoNuvem
+    ? `<span style="font-weight:700;font-size:13px">${esc(nomePerfil())}</span>
+       <button class="sair-btn" data-acao="nuvem-sair" title="Sair da conta">Sair</button>`
+    : `<select id="sel-perfil" aria-label="Perfil ativo">
+        <option value="coordenacao" ${ehCoord() ? 'selected' : ''}>${ehCoord() ? esc(nomePerfil()) : 'Coordenação · entrar'}</option>
+        <option value="docente" ${S.perfil.papel === 'docente' ? 'selected' : ''}>${S.perfil.papel === 'docente' ? esc(nomePerfil()) : 'Docente · entrar'}</option>
+        <option value="redacao" ${ehRedacao() ? 'selected' : ''}>${ehRedacao() ? esc(nomePerfil()) : 'Prof. de redação · entrar'}</option>
+      </select>`;
+  $('#quem').innerHTML = `${botaoTema()}${identidade}<div class="avatar">${esc(ini)}</div>`;
+  const sel = $('#sel-perfil');
+  if (sel) sel.addEventListener('change', ev => dlgPerfil(ev.target.value));
 
   const atual = telaAtual();
   $('#nav').innerHTML = Object.entries(TELAS)
@@ -148,9 +224,16 @@ document.addEventListener('change', e => {
 });
 const MUDS = {};
 ACOES['fechar-dlg'] = () => $('#dlg').close();
+ACOES['tema'] = () => {
+  const novo = temaAtual() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = novo;
+  try { localStorage.setItem('pas-tema', novo); } catch { /* segue sem salvar */ }
+  render();
+};
 
-function abrirDlg(html) {
+function abrirDlg(html, grande = false) {
   const d = $('#dlg');
+  d.classList.toggle('grande', grande);
   d.innerHTML = html;
   if (!d.open) d.showModal();
 }
@@ -244,7 +327,6 @@ ACOES['cfg'] = () => {
         <div class="campo"><label>Série</label><input class="caixa" id="cfg-serie" value="${esc(c.serie)}"></div>
         <div class="campo"><label>Data de aplicação</label><input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
         <div class="campo"><label>Duração</label><input class="caixa" id="cfg-dur" value="${esc(c.duracao)}"></div>
-        <div class="campo"><label>Sala padrão</label><input class="caixa" id="cfg-sala" value="${esc(c.sala || '')}"></div>
       </div>
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
@@ -254,9 +336,9 @@ ACOES['cfg-salvar'] = () => {
   Object.assign(S.config, {
     nome: $('#cfg-nome').value.trim(), etapa: $('#cfg-etapa').value.trim(),
     serie: $('#cfg-serie').value.trim(), dataAplicacao: $('#cfg-data').value,
-    duracao: $('#cfg-dur').value.trim(), sala: $('#cfg-sala').value.trim()
+    duracao: $('#cfg-dur').value.trim()
   });
-  $('#dlg').close(); commit(); toast('Configurações salvas.');
+  $('#dlg').close(); commit(); PERS.config(); toast('Configurações salvas.');
 };
 
 ACOES['exportar-json'] = () => {
@@ -272,13 +354,13 @@ ACOES['importar-json'] = () => {
       try {
         const novo = JSON.parse(txt);
         if (novo?.versao !== 1) throw new Error('formato');
-        S = substituir(novo); render(); toast('Backup importado.');
+        S = substituir(novo); render(); PERS.tudo(); toast('Backup importado.');
       } catch { toast('Arquivo inválido — esperava um backup deste sistema.'); }
     });
   };
   inp.click();
 };
-ACOES['carregar-exemplo'] = () => { S = substituir(seed()); render(); toast('Dados de exemplo carregados.'); };
+ACOES['carregar-exemplo'] = () => { S = substituir(seed()); render(); PERS.tudo(); toast('Dados de exemplo carregados.'); };
 ACOES['zerar'] = () => {
   abrirDlg(`
     <div class="dlg-cab"><h2>Zerar todos os dados?</h2><button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
@@ -286,10 +368,22 @@ ACOES['zerar'] = () => {
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn vermelho" data-acao="zerar-confirmado">Apagar tudo</button></div>`);
 };
-ACOES['zerar-confirmado'] = () => { S = substituir(blank()); $('#dlg').close(); render(); toast('Dados zerados.'); };
+ACOES['zerar-confirmado'] = () => { S = substituir(blank()); $('#dlg').close(); render(); PERS.tudo(); toast('Dados zerados.'); };
 
 /* ---------------- perfil ---------------- */
 function dlgPerfil(papel) {
+  if (papel === 'redacao') {
+    abrirDlg(`
+      <div class="dlg-cab"><h2>Entrar como professora de redação</h2><button class="fechar-x" data-acao="perfil-cancelar">✕</button></div>
+      <div class="dlg-corpo">
+        <div class="campo"><label>Seu nome</label>
+          <input class="caixa" id="pf-nome" value="${esc(ehRedacao() ? S.perfil.nome : '')}" placeholder="ex.: Helena"></div>
+        <p style="font-size:12.5px;color:var(--ink-2)">Este perfil vê, na tela de Correção, apenas o lançamento das informações de redação (NC, NE e TL) por estudante.</p>
+      </div>
+      <div class="dlg-pe"><button class="btn fantasma" data-acao="perfil-cancelar">Cancelar</button>
+        <button class="btn" data-acao="perfil-redacao">Entrar</button></div>`);
+    return;
+  }
   if (papel === 'coordenacao') {
     abrirDlg(`
       <div class="dlg-cab"><h2>Entrar como coordenação</h2><button class="fechar-x" data-acao="perfil-cancelar">✕</button></div>
@@ -322,17 +416,25 @@ ACOES['perfil-docente'] = () => {
   S.perfil = { papel: 'docente', nome: $('#pf-nome').value.trim() || 'Docente', componente: $('#pf-comp').value };
   $('#dlg').close(); commit(); toast('Perfil: ' + nomePerfil());
 };
+ACOES['perfil-redacao'] = () => {
+  S.perfil = { papel: 'redacao', nome: $('#pf-nome').value.trim() || 'Redação', componente: null };
+  $('#dlg').close(); commit(); toast('Perfil: ' + nomePerfil());
+};
 
 /* ================= TELA 2 · TEXTOS ================= */
 function telaTextos() {
-  const blocos = textosAprovados().map(t => {
+  const aprovados = textosAprovados();
+  const blocos = aprovados.map((t, ti) => {
     const itens = S.itens.filter(i => i.textoId === t.id);
     const livres = Math.max(0, (t.slots || 0) - itens.length);
-    const chips = itens.map(i => `
-      <button class="slot" data-acao="abrir-item" data-id="${i.id}" title="${esc(STATUS_ITEM[i.status].rot)}"
-        style="${i.autor === S.perfil.nome ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
+    const chips = itens.map((i, ii) => `
+      <span class="slot" data-acao="abrir-item" data-id="${i.id}" role="button" tabindex="0"
+        title="${esc(STATUS_ITEM[i.status].rot)}" style="cursor:pointer;${i.autor === S.perfil.nome ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
         <span class="t t${i.tipo}">${i.tipo}</span>${discChip(i.componente)} ${esc(i.autor.split(' ')[0])}${i.status !== 'aprovado' ? ' ·⏳' : ''}
-      </button>`).join('');
+        ${ehCoord() ? `
+          <button class="mv" data-acao="item-mover" data-id="${i.id}" data-dir="-1" title="Mover item para a esquerda" ${ii === 0 ? 'disabled' : ''}>◀</button>
+          <button class="mv" data-acao="item-mover" data-id="${i.id}" data-dir="1" title="Mover item para a direita" ${ii === itens.length - 1 ? 'disabled' : ''}>▶</button>` : ''}
+      </span>`).join('');
     const slotsLivres = Array.from({ length: livres }, () =>
       `<button class="slot livre" data-acao="novo-item" data-texto="${t.id}">＋ espaço livre — alocar item</button>`).join('');
     return `
@@ -344,7 +446,12 @@ function telaTextos() {
           <p>${t.slots} itens no total · ${itens.length} alocados · ${livres} livres</p>
         </div>
         ${t.regra ? `<span class="regra">🔒 ${esc(t.regra)}</span>` : '<span class="regra">sem restrições</span>'}
-        ${ehCoord() ? `<button class="btn mini fantasma" data-acao="editar-texto" data-id="${t.id}">Editar</button>` : ''}
+        ${ehCoord() ? `
+          <span style="display:inline-flex;gap:4px">
+            <button class="mv" data-acao="texto-mover" data-id="${t.id}" data-dir="-1" title="Mover texto para cima" ${ti === 0 ? 'disabled' : ''}>▲</button>
+            <button class="mv" data-acao="texto-mover" data-id="${t.id}" data-dir="1" title="Mover texto para baixo" ${ti === aprovados.length - 1 ? 'disabled' : ''}>▼</button>
+          </span>
+          <button class="btn mini fantasma" data-acao="editar-texto" data-id="${t.id}">Editar</button>` : ''}
       </div>
       <div class="texto-corpo"><div class="slots">${chips}${slotsLivres}</div></div>
     </div>`;
@@ -395,13 +502,13 @@ function dlgTexto(t) {
       </div>
       <div class="campo" style="margin-bottom:12px"><label>Corpo do texto (uma linha por linha numerada)</label>
         <textarea class="caixa" id="tx-corpo" rows="8">${esc((t?.linhas || []).join('\n'))}</textarea></div>
-      <div class="form-linha">
+      ${ehCoord() ? `<div class="form-linha">
         <div class="campo"><label>Quantidade de itens (slots)</label>
           <input class="caixa" type="number" min="1" max="40" id="tx-slots" value="${t?.slots ?? 6}"></div>
-        ${ehCoord() ? `<div class="campo" style="min-width:260px"><label>Regra do coordenador (opcional)</label>
-          <input class="caixa" id="tx-regra" value="${esc(t?.regra || '')}" placeholder="ex.: sem itens tipo D neste texto"></div>` : ''}
-      </div>
-      ${!ehCoord() && novo ? '<p style="font-size:12.5px;color:var(--ink-2)">Sua sugestão ficará visível a todos após aprovação da coordenação.</p>' : ''}
+        <div class="campo" style="min-width:260px"><label>Regra do coordenador (opcional)</label>
+          <input class="caixa" id="tx-regra" value="${esc(t?.regra || '')}" placeholder="ex.: sem itens tipo D neste texto"></div>
+      </div>` : ''}
+      ${!ehCoord() && novo ? '<p style="font-size:12.5px;color:var(--ink-2)">Sua sugestão ficará visível a todos após aprovação da coordenação, que define a quantidade de itens do texto.</p>' : ''}
     </div>
     <div class="dlg-pe">
       ${!novo && ehCoord() ? `<button class="btn vermelho" style="margin-right:auto" data-acao="excluir-texto" data-id="${t.id}">Excluir</button>` : ''}
@@ -413,38 +520,61 @@ ACOES['novo-texto'] = () => dlgTexto(null);
 ACOES['sugerir-texto'] = () => dlgTexto(null);
 ACOES['editar-texto'] = d => dlgTexto(S.textos.find(t => t.id === d.id));
 ACOES['salvar-texto'] = d => {
-  const titulo = $('#tx-titulo').value.trim();
-  if (!titulo) { toast('Dê um título ao texto.'); return; }
+  const anterior = d.id ? S.textos.find(t => t.id === d.id) : null;
   const dados = {
-    titulo, fonte: $('#tx-fonte').value.trim(),
+    titulo: $('#tx-titulo').value.trim(),
+    fonte: $('#tx-fonte').value.trim(),
     linhas: $('#tx-corpo').value.split('\n').map(l => l.trim()).filter(Boolean),
-    slots: Math.max(1, parseInt($('#tx-slots').value, 10) || 6),
-    regra: $('#tx-regra') ? $('#tx-regra').value.trim() : ''
+    slots: ehCoord() ? Math.max(1, parseInt($('#tx-slots').value, 10) || 6) : (anterior?.slots ?? 6),
+    regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || '')
   };
-  if (d.id) {
-    Object.assign(S.textos.find(t => t.id === d.id), dados);
-  } else if (ehCoord()) {
-    const numero = Math.max(0, ...textosAprovados().map(t => t.numero)) + 1;
-    S.textos.push({ id: uid(), numero, status: 'aprovado', sugeridoPor: null, ...dados });
-  } else {
-    S.textos.push({
-      id: uid(), numero: null, status: 'sugestao',
-      sugeridoPor: `${S.perfil.nome} (${S.perfil.componente || 'docente'})`, ...dados
-    });
+  if (!dados.titulo || !dados.fonte || !dados.linhas.length) {
+    toast('Título, fonte e corpo do texto são obrigatórios.'); return;
   }
-  $('#dlg').close(); commit(); toast(d.id ? 'Texto atualizado.' : (ehCoord() ? 'Texto criado.' : 'Sugestão enviada à coordenação.'));
+  let alvo;
+  if (anterior) {
+    Object.assign(anterior, dados); alvo = anterior;
+  } else if (ehCoord()) {
+    alvo = { id: uid(), numero: Math.max(0, ...textosAprovados().map(t => t.numero)) + 1, status: 'aprovado', sugeridoPor: null, ...dados };
+    S.textos.push(alvo);
+  } else {
+    alvo = { id: uid(), numero: null, status: 'sugestao', sugeridoPor: `${S.perfil.nome} (${S.perfil.componente || 'docente'})`, ...dados };
+    S.textos.push(alvo);
+  }
+  $('#dlg').close(); commit(); PERS.texto(alvo);
+  toast(anterior ? 'Texto atualizado.' : (ehCoord() ? 'Texto criado.' : 'Sugestão enviada à coordenação.'));
 };
 ACOES['aprovar-texto'] = d => {
   const t = S.textos.find(x => x.id === d.id);
   t.status = 'aprovado';
   t.numero = Math.max(0, ...textosAprovados().filter(x => x.id !== t.id).map(x => x.numero)) + 1;
-  commit(); toast(`Texto aprovado como Texto ${t.numero}.`);
+  commit(); PERS.texto(t); toast(`Texto aprovado como Texto ${t.numero}.`);
 };
 ACOES['excluir-texto'] = d => {
   const usados = S.itens.filter(i => i.textoId === d.id).length;
   if (usados) { toast(`Este texto tem ${usados} item(ns) alocado(s) — remova-os antes.`); return; }
   S.textos = S.textos.filter(t => t.id !== d.id);
-  $('#dlg').close(); commit(); toast('Texto excluído.');
+  $('#dlg').close(); commit(); PERS.removerTexto(d.id); toast('Texto excluído.');
+};
+ACOES['texto-mover'] = d => {
+  const lista = textosAprovados();
+  const i = lista.findIndex(t => t.id === d.id);
+  const j = i + parseInt(d.dir, 10);
+  if (i < 0 || j < 0 || j >= lista.length) return;
+  [lista[i].numero, lista[j].numero] = [lista[j].numero, lista[i].numero];
+  textosAprovados().forEach((t, k) => t.numero = k + 1);
+  commit(); PERS.textosTodos();
+};
+ACOES['item-mover'] = d => {
+  const item = S.itens.find(x => x.id === d.id);
+  if (!item) return;
+  const doTexto = S.itens.filter(i => i.textoId === item.textoId);
+  const pos = doTexto.findIndex(i => i.id === d.id);
+  const alvo = pos + parseInt(d.dir, 10);
+  if (alvo < 0 || alvo >= doTexto.length) return;
+  const gi = S.itens.indexOf(doTexto[pos]), gj = S.itens.indexOf(doTexto[alvo]);
+  [S.itens[gi], S.itens[gj]] = [S.itens[gj], S.itens[gi]];
+  commit(); PERS.itens([S.itens[gi].id, S.itens[gj].id]);
 };
 
 /* ================= TELA 3 · ITENS ================= */
@@ -542,15 +672,33 @@ function dlgItem() {
   const segVersao = ['regular', 'adaptada', 'ambas'].map(v =>
     `<button class="${rasc.versao === v ? 'sel' : ''}" data-acao="it-versao" data-v="${v}" style="text-transform:capitalize">${v}</button>`).join('');
 
-  let gab = '';
+  let respostaHtml = '';
   if (rasc.tipo === 'B') {
-    gab = `<input class="caixa" style="width:110px;font-family:var(--mono)" maxlength="3" inputmode="numeric"
-      data-mud="it-campo" data-campo="gabarito" value="${esc(rasc.gabarito)}" placeholder="000–999">`;
+    respostaHtml = `<div class="form-linha"><div class="campo"><label>Gabarito</label>
+      <input class="caixa" style="width:110px;font-family:var(--mono)" maxlength="3" inputmode="numeric"
+        data-mud="it-campo" data-campo="gabarito" value="${esc(rasc.gabarito)}" placeholder="000–999"></div></div>`;
+  } else if (rasc.tipo === 'D') {
+    respostaHtml = `
+      <div class="campo" style="margin-bottom:12px"><label>Resposta esperada (guia de correção)</label>
+        <textarea class="caixa" rows="3" data-mud="it-campo" data-campo="gabarito"
+          placeholder="O que se espera na resposta construída do estudante">${esc(rasc.gabarito || '')}</textarea></div>
+      <div class="form-linha">
+        <div class="campo" style="flex:0;min-width:160px"><label>Linhas de resposta</label>
+          <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"></div>
+        <div class="campo" style="flex:0"><label>Espaço de resposta</label>
+          <div class="seg">
+            <button class="${rasc.dPauta !== false ? 'sel' : ''}" data-acao="it-dpauta" data-v="1">Com linhas</button>
+            <button class="${rasc.dPauta === false ? 'sel' : ''}" data-acao="it-dpauta" data-v="0">Sem linhas</button>
+          </div></div>
+      </div>
+      <p style="font-size:12px;color:var(--ink-2);margin:0 0 12px">Mesmo sem linhas impressas, a quantidade define o espaço reservado à resposta no caderno. Itens discursivos não entram no cartão-resposta — a nota (0 a 10) é lançada na tela de Correção pelo docente responsável.</p>`;
   } else {
-    gab = TIPOS[rasc.tipo].respostas.map(r =>
-      `<button class="gab-op ${String(rasc.gabarito).toUpperCase() === r ? 'certo' : ''}" data-acao="it-gab" data-v="${r}">${r}</button>`).join('');
+    respostaHtml = `<div class="form-linha"><div class="campo"><label>Gabarito</label><div>` +
+      TIPOS[rasc.tipo].respostas.map(r =>
+        `<button class="gab-op ${String(rasc.gabarito).toUpperCase() === r ? 'certo' : ''}" data-acao="it-gab" data-v="${r}">${r}</button>`).join('') +
+      `</div></div></div>`;
   }
-  const opcoesHtml = (rasc.tipo === 'C' || rasc.tipo === 'D') ? `
+  const opcoesHtml = rasc.tipo === 'C' ? `
     <div class="campo" style="margin-bottom:12px"><label>Opções (A a D)</label>
       ${['A', 'B', 'C', 'D'].map((L, i) => `
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
@@ -590,7 +738,7 @@ function dlgItem() {
         '<button class="btn mini vermelho" data-acao="it-excluir">Excluir</button>' : ''}
       <button class="fechar-x" data-acao="fechar-dlg">✕</button>
     </div>
-    <div class="dlg-corpo dlg-larga">
+    <div class="dlg-corpo">
       <div class="grade g2">
         <div>
           <div class="painel-texto">
@@ -619,8 +767,7 @@ function dlgItem() {
           </div>
           <div class="campo" style="margin-bottom:12px"><label>Enunciado</label>
             <textarea class="caixa" rows="4" data-mud="it-campo" data-campo="enunciado">${esc(rasc.enunciado)}</textarea></div>
-          ${opcoesHtml}
-          <div class="form-linha"><div class="campo"><label>Gabarito</label><div>${gab}</div></div></div>
+          ${opcoesHtml}${respostaHtml}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
           <div class="fio">${fio || '<span style="font-size:13px;color:var(--ink-2)">Nenhum comentário ainda.</span>'}</div>
@@ -631,7 +778,7 @@ function dlgItem() {
         </div>
       </div>
     </div>
-    <div class="dlg-pe">${botoes.join('')}</div>`);
+    <div class="dlg-pe">${botoes.join('')}</div>`, true);
 }
 
 function reabrirDlgItem() { dlgItem(); }
@@ -641,11 +788,20 @@ MUDS['it-campo'] = (d, el) => {
   if (el.dataset.campo === 'linhasRef') reabrirDlgItem();
 };
 MUDS['it-opcao'] = (d, el) => { rasc.opcoes[parseInt(el.dataset.i, 10)] = el.value; };
+MUDS['it-dlinhas'] = (d, el) => { rasc.dLinhas = Math.max(1, Math.min(40, parseInt(el.value, 10) || 10)); };
 ACOES['it-tipo'] = d => {
   rasc.tipo = d.v;
-  rasc.gabarito = d.v === 'B' ? '' : (TIPOS[d.v].respostas.includes(String(rasc.gabarito).toUpperCase()) ? rasc.gabarito : TIPOS[d.v].respostas[0]);
+  if (d.v === 'B') rasc.gabarito = /^\d{1,3}$/.test(String(rasc.gabarito)) ? rasc.gabarito : '';
+  else if (d.v === 'D') {
+    rasc.dLinhas = rasc.dLinhas ?? 10;
+    rasc.dPauta = rasc.dPauta ?? true;
+    if (/^[A-E]$/.test(String(rasc.gabarito).toUpperCase())) rasc.gabarito = '';
+  } else {
+    rasc.gabarito = TIPOS[d.v].respostas.includes(String(rasc.gabarito).toUpperCase()) ? rasc.gabarito : TIPOS[d.v].respostas[0];
+  }
   reabrirDlgItem();
 };
+ACOES['it-dpauta'] = d => { rasc.dPauta = d.v === '1'; reabrirDlgItem(); };
 ACOES['it-grupo'] = d => { rasc.grupo = d.v; reabrirDlgItem(); };
 ACOES['it-versao'] = d => { rasc.versao = d.v; reabrirDlgItem(); };
 ACOES['it-gab'] = d => { rasc.gabarito = d.v; reabrirDlgItem(); };
@@ -653,11 +809,13 @@ ACOES['it-gab'] = d => { rasc.gabarito = d.v; reabrirDlgItem(); };
 function persistirRascunho() {
   if (!rasc.enunciado.trim()) { toast('Escreva o enunciado do item.'); return false; }
   if (rasc.tipo === 'B' && !/^\d{1,3}$/.test(String(rasc.gabarito).trim())) { toast('Gabarito do tipo B: número de 0 a 999.'); return false; }
+  if (rasc.tipo === 'D' && !(rasc.dLinhas >= 1)) { toast('Informe a quantidade de linhas de resposta do item discursivo.'); return false; }
   if (!rasc.id) { rasc.id = uid(); S.itens.push(rasc); }
   else {
     const idx = S.itens.findIndex(i => i.id === rasc.id);
     S.itens[idx] = rasc;
   }
+  PERS.item(rasc);
   return true;
 }
 ACOES['it-salvar'] = () => {
@@ -705,7 +863,7 @@ ACOES['it-comentar'] = () => {
 ACOES['it-excluir'] = () => {
   if (!rasc.id) { $('#dlg').close(); return; }
   S.itens = S.itens.filter(i => i.id !== rasc.id);
-  $('#dlg').close(); commit(); toast('Item excluído.');
+  $('#dlg').close(); commit(); PERS.removerItem(rasc.id); toast('Item excluído.');
 };
 
 /* ================= TELA 4 · CADERNO ================= */
@@ -718,7 +876,7 @@ function htmlCapa(versao, totalItens) {
     <div class="cab">
       <div class="inst">COLÉGIO MARISTA<br>ÁGUAS CLARAS</div>
       <div style="font-size:9px;color:#666;text-align:center">Aplicação: ${dataBR(c.dataAplicacao)}<br>Duração: ${esc(c.duracao)}</div>
-      <div class="sala"><small>SALA</small>${esc(c.sala || '—')}</div>
+      <div class="sala"><small>SALA</small><span style="display:inline-block;min-width:34px">&nbsp;</span></div>
     </div>
     <div class="faixa">${esc(c.nome)} · ${esc(c.etapa)} · Caderno de Provas${versao === 'adaptada' ? ' · Versão Adaptada' : ''}</div>
     <div class="corpo" style="text-align:center;padding:28px 24px">
@@ -751,12 +909,22 @@ function htmlFolhasTexto(versao) {
     const comando = tiposA.length
       ? `<div style="break-inside:avoid;font-size:8.5px;margin:6px 0 4px"><b>Com base no texto ${texto.numero}, julgue os itens ${tiposA.length > 1 ? 'de ' + tiposA[0].numero + ' a ' + tiposA[tiposA.length - 1].numero : tiposA[0].numero}.</b></div>` : '';
     const corpoItens = itens.map(({ item, numero }) => {
-      if (item.tipo === 'C' || item.tipo === 'D') {
+      if (item.tipo === 'C') {
         const ops = item.opcoes.map((o, i) => `<li><b>${'ABCD'[i]}</b> ${esc(o)}</li>`).join('');
         return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}<ul class="opcoes">${ops}</ul></div>`;
       }
       if (item.tipo === 'B') {
         return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)} <span style="color:#555">Marque o resultado no caderno de respostas (000 a 999).</span></div>`;
+      }
+      if (item.tipo === 'D') {
+        const n = Math.max(1, item.dLinhas || 10);
+        const pauta = item.dPauta !== false;
+        const espaco = pauta
+          ? Array.from({ length: n }, () => '<div style="height:13px;border-bottom:0.7px solid #999"></div>').join('')
+          : `<div style="height:${n * 13}px;border:0.7px solid #bbb"></div>`;
+        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}
+          <span style="color:#555">Responda no espaço abaixo${pauta ? '' : ' (sem linhas)'}.</span>
+          <div style="margin-top:6px">${espaco}</div></div>`;
       }
       return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}</div>`;
     }).join('');
@@ -808,7 +976,8 @@ ACOES['cad-imprimir'] = () => {
 /* ================= TELA 5 · CARTÕES ================= */
 function htmlCartao(est) {
   const pv = prova(est.versao);
-  const ac = pv.filter(e => e.item.tipo !== 'B');
+  // Discursivos (tipo D) são respondidos no próprio caderno — fora do cartão.
+  const ac = pv.filter(e => e.item.tipo === 'A' || e.item.tipo === 'C');
   const bs = pv.filter(e => e.item.tipo === 'B');
   const cols = [];
   for (let i = 0; i < ac.length; i += 5) cols.push(ac.slice(i, i + 5));
@@ -832,16 +1001,17 @@ function htmlCartao(est) {
       <div class="inst">COLÉGIO MARISTA ÁGUAS CLARAS<br><span style="color:#e5007e">${esc(c.nome).toUpperCase()} · ${esc(c.etapa).toUpperCase()}</span></div>
       <div style="font-size:8px;color:#333;line-height:1.5">Estudante: <b>${esc(est.nome).toUpperCase()}</b><br>
         Matrícula: <b style="font-family:var(--mono)">${esc(est.matricula)}</b> · ${esc(est.turma)} · ${est.versao === 'adaptada' ? 'Adaptada' : 'Regular'}</div>
-      <div class="sala"><small>SALA</small>${esc(c.sala || '—')}</div>
+      <div class="sala"><small>SALA</small><span style="display:inline-block;min-width:34px">&nbsp;</span></div>
     </div>
     <div class="faixa">Caderno de Respostas — uso exclusivo do estudante</div>
     <div class="corpo">
       <div class="ancoras"><i></i><i></i></div>
       <div style="font-size:7.5px;color:#555;border:1px solid #efc3da;border-radius:4px;padding:6px;margin-bottom:8px">
         As marcações devem ser feitas com caneta esferográfica de tinta <b>preta</b>, preenchendo totalmente o círculo.
-        Itens tipo A: marque C ou E. Tipos C e D: apenas uma opção. Tipo B: marque os três algarismos.
+        Itens tipo A: marque C ou E. Tipo C: apenas uma opção. Tipo B: marque os três algarismos.
+        Itens discursivos (tipo D) são respondidos no próprio caderno de provas.
       </div>
-      ${ac.length ? '<b style="font-size:8.5px;color:#e5007e">RESPOSTAS AOS ITENS DOS TIPOS A, C e D</b>' : ''}
+      ${ac.length ? '<b style="font-size:8.5px;color:#e5007e">RESPOSTAS AOS ITENS DOS TIPOS A e C</b>' : ''}
       <div class="cr-grid">${colsHtml}</div>
       ${bsHtml}
       <div style="margin-top:10px;font-size:7.5px;color:#999;display:flex;justify-content:space-between;font-family:var(--mono)">
@@ -922,14 +1092,15 @@ ACOES['est-salvar'] = d => {
     turma: $('#es-turma').value.trim(), versao: $('#es-versao').value
   };
   if (!dados.nome || !dados.matricula) { toast('Nome e matrícula são obrigatórios.'); return; }
-  if (d.id) Object.assign(S.estudantes.find(e => e.id === d.id), dados);
-  else S.estudantes.push({ id: uid(), ...dados });
-  $('#dlg').close(); commit(); toast('Estudante salvo.');
+  let alvo;
+  if (d.id) { alvo = S.estudantes.find(e => e.id === d.id); Object.assign(alvo, dados); }
+  else { alvo = { id: uid(), ...dados }; S.estudantes.push(alvo); }
+  $('#dlg').close(); commit(); PERS.estudante(alvo); toast('Estudante salvo.');
 };
 ACOES['est-remover'] = d => {
   S.estudantes = S.estudantes.filter(e => e.id !== d.id);
   delete S.respostas[d.id];
-  commit(); toast('Estudante removido.');
+  commit(); PERS.removerEstudante(d.id); PERS.removerResposta(d.id); toast('Estudante removido.');
 };
 ACOES['est-importar'] = () => {
   abrirDlg(`
@@ -953,7 +1124,8 @@ ACOES['est-importar-ok'] = () => {
     if (ja) Object.assign(ja, dados); else S.estudantes.push({ id: uid(), ...dados });
     n++;
   }
-  $('#dlg').close(); commit(); toast(`${n} estudante(s) importado(s)/atualizado(s).`);
+  $('#dlg').close(); commit(); PERS.estudantesTodos();
+  toast(`${n} estudante(s) importado(s)/atualizado(s).`);
 };
 ACOES['cart-imprimir'] = () => {
   const filtrados = S.estudantes.filter(e => cartTurma === 'todas' || e.turma === cartTurma)
@@ -967,7 +1139,9 @@ ACOES['cart-template'] = () => {
     simulado: S.config.nome, etapa: S.config.etapa,
     geradoEm: new Date().toISOString(),
     versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v,
-      prova(v).map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
+      // Discursivos (D) ficam fora: não têm bolhas no cartão.
+      prova(v).filter(({ item }) => item.tipo !== 'D')
+        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
     ]))
   };
   baixar('pas-gabarito-leitor.json', JSON.stringify(tpl, null, 2));
@@ -977,7 +1151,86 @@ ACOES['cart-template'] = () => {
 /* ================= TELA 6 · CORREÇÃO ================= */
 let corrEstId = null, corrTurmaBol = 'todas';
 
+function estudantesOrdenados() {
+  return S.estudantes.slice().sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
+}
+
+// Tabela de lançamento da redação (NC, NE, TL → NR calculado).
+function tabelaRedacao() {
+  const lista = estudantesOrdenados();
+  if (!lista.length) return '<div class="vazio">Nenhum estudante cadastrado ainda.</div>';
+  const linhas = lista.map(e => {
+    const red = S.respostas[e.id]?.redacao || { nc: '', ne: '', tl: '' };
+    const r = corrigir(e);
+    return `<tr><td>${esc(e.nome)}</td><td>${esc(e.turma)}</td>
+      <td><input class="caixa" style="width:84px" type="number" step="0.1" min="0" max="10" value="${red.nc}" data-mud="red" data-campo="nc" data-est="${e.id}"></td>
+      <td><input class="caixa" style="width:74px" type="number" min="0" value="${red.ne}" data-mud="red" data-campo="ne" data-est="${e.id}"></td>
+      <td><input class="caixa" style="width:74px" type="number" min="0" value="${red.tl}" data-mud="red" data-campo="tl" data-est="${e.id}"></td>
+      <td><b>${num(r.nr, 1)}</b></td></tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Estudante</th><th>Turma</th><th>NC (0–10)</th><th>Erros (NE)</th><th>Linhas (TL)</th><th>NR</th></tr></thead>
+    <tbody>${linhas}</tbody></table></div>`;
+}
+
+// Tabela de notas dos itens discursivos (tipo D). Coordenação vê todos;
+// docente vê apenas os itens aprovados de sua autoria.
+function tabelaDiscursivos() {
+  const meus = S.itens.filter(i => i.status === 'aprovado' && i.tipo === 'D' &&
+    (ehCoord() || i.autor === S.perfil.nome));
+  if (!meus.length) return null;
+  const numeros = {};
+  for (const v of ['regular', 'adaptada'])
+    for (const { item, numero } of prova(v))
+      if (item.tipo === 'D') (numeros[item.id] = numeros[item.id] || {})[v] = numero;
+  const cab = meus.map(i => {
+    const n = numeros[i.id] || {};
+    const rot = ['regular', 'adaptada'].filter(v => n[v])
+      .map(v => (v === 'regular' ? 'R-' : 'A-') + n[v]).join(' / ');
+    return `<th title="${esc(i.enunciado.slice(0, 100))}">Item ${rot || '—'}<br>
+      <span style="font-weight:400;text-transform:none">${esc(i.componente)} · ${esc(i.autor.split(' ')[0])}</span></th>`;
+  }).join('');
+  const linhas = estudantesOrdenados().map(e => {
+    const cels = meus.map(i => {
+      const aplicavel = i.versao === 'ambas' || i.versao === e.versao;
+      if (!aplicavel) return '<td style="color:var(--ink-2)">—</td>';
+      const v = S.respostas[e.id]?.discursivas?.[i.id];
+      return `<td><input class="caixa" style="width:78px" type="number" step="0.5" min="0" max="10" placeholder="—"
+        value="${v ?? ''}" data-mud="dnota" data-est="${e.id}" data-item="${i.id}"></td>`;
+    }).join('');
+    return `<tr><td>${esc(e.nome)}</td><td>${esc(e.turma)}</td>${cels}</tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Estudante</th><th>Turma</th>${cab}</tr></thead><tbody>${linhas}</tbody></table></div>`;
+}
+
+// Visão restrita: professora de redação lança NC/NE/TL de todos.
+function telaCorrecaoRedacao() {
+  $('#app').innerHTML = `
+  <div class="quadro"><div class="miolo">
+    <div class="cab-tela"><div><h2>Redação — lançamento</h2>
+      <span class="sub">NR = NC − 2·NE/TL, pela planilha oficial · salvo automaticamente a cada campo</span></div></div>
+    <div class="cartao">${tabelaRedacao()}</div>
+  </div></div>
+  <p class="nota-tela"><strong>Perfil de redação:</strong> esta visualização mostra apenas o lançamento das informações de redação. NC = nota de conteúdo (0 a 10) · NE = número de erros · TL = total de linhas escritas.</p>`;
+}
+
+// Visão restrita: docente lança notas dos próprios itens discursivos.
+function telaCorrecaoDiscursivos() {
+  const tabela = tabelaDiscursivos();
+  $('#app').innerHTML = `
+  <div class="quadro"><div class="miolo">
+    <div class="cab-tela"><div><h2>Itens discursivos — lançamento de notas</h2>
+      <span class="sub">notas de 0 a 10 por estudante, apenas dos seus itens aprovados · salvas automaticamente</span></div></div>
+    ${tabela ? `<div class="cartao">${tabela}</div>`
+      : '<div class="vazio">Você não tem itens discursivos (tipo D) aprovados neste simulado.</div>'}
+  </div></div>
+  <p class="nota-tela"><strong>Como conta no escore:</strong> no MVP cada item discursivo vale 1 ponto no escore bruto — a nota lançada (0 a 10) entra como nota/10. Os pesos oficiais entram na fase de calibração.</p>`;
+}
+
 function telaCorrecao() {
+  if (ehRedacao()) { telaCorrecaoRedacao(); return; }
+  if (S.perfil.papel === 'docente') { telaCorrecaoDiscursivos(); return; }
   const comResp = S.estudantes.filter(e => corrigir(e).temResp);
   const est = S.estudantes.find(e => e.id === corrEstId) || null;
   const turmas = [...new Set(S.estudantes.map(e => e.turma))].sort();
@@ -990,7 +1243,7 @@ function telaCorrecao() {
   if (est) {
     const pv = prova(est.versao);
     const resp = S.respostas[est.id] || { marcacoes: {}, redacao: null };
-    const grade = pv.map(({ item, numero }) => {
+    const grade = pv.filter(x => x.item.tipo !== 'D').map(({ item, numero }) => {
       const m = String(resp.marcacoes?.[item.id] ?? '');
       const gab = item.tipo === 'B' ? String(item.gabarito).padStart(3, '0') : String(item.gabarito).toUpperCase();
       const certa = m !== '' && (item.tipo === 'B' ? m.padStart(3, '0') === gab : m.toUpperCase() === gab);
@@ -1085,6 +1338,15 @@ function telaCorrecao() {
         <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Gera um boletim por estudante com respostas lançadas (escolha “Salvar como PDF” na impressão). Cada boletim traz escore, redação, posição e proporção de acertos por grupo de habilidades comparada à média da turma.</p>
       </div>
     </div>
+
+    <div class="cartao" style="margin-top:16px">
+      <h3>Redação — lançamento por estudante (a professora de redação vê só esta tabela)</h3>
+      ${tabelaRedacao()}
+    </div>
+    ${(() => { const t = tabelaDiscursivos(); return t ? `<div class="cartao" style="margin-top:16px">
+      <h3>Itens discursivos (tipo D) — notas de 0 a 10 (cada docente vê só os seus)</h3>
+      ${t}
+    </div>` : ''; })()}
   </div></div>
   <p class="nota-tela"><strong>Pontuação do MVP:</strong> tipo A: certo +1, errado −1 · tipo B: certo +1 · tipos C e D: certo +1, errado −1 · em branco 0. Redação pela planilha oficial: NR = NC − 2·NE/TL. Os pesos finais do PAS (parâmetro x) entram na fase de calibração.</p>`;
 }
@@ -1094,13 +1356,21 @@ MUDS['marc'] = (d, el) => {
   const r = S.respostas[d.est] || (S.respostas[d.est] = { marcacoes: {}, redacao: null });
   const v = el.value.trim();
   if (v === '') delete r.marcacoes[d.item]; else r.marcacoes[d.item] = v.toUpperCase();
-  commit();
+  commit(); PERS.resposta(d.est);
 };
 MUDS['red'] = (d, el) => {
   const r = S.respostas[d.est] || (S.respostas[d.est] = { marcacoes: {}, redacao: null });
   r.redacao = r.redacao || { nc: 0, ne: 0, tl: 0 };
   r.redacao[d.campo] = parseFloat(el.value) || 0;
-  commit();
+  commit(); PERS.resposta(d.est);
+};
+MUDS['dnota'] = (d, el) => {
+  const r = S.respostas[d.est] || (S.respostas[d.est] = { marcacoes: {}, redacao: null });
+  r.discursivas = r.discursivas || {};
+  const v = el.value.trim();
+  if (v === '') delete r.discursivas[d.item];
+  else r.discursivas[d.item] = Math.max(0, Math.min(10, parseFloat(v) || 0));
+  commit(); PERS.resposta(d.est);
 };
 
 ACOES['resp-importar'] = () => {
@@ -1118,6 +1388,7 @@ ACOES['resp-importar'] = () => {
 ACOES['resp-importar-ok'] = () => {
   const linhas = $('#imp-resp').value.split('\n').map(l => l.trim()).filter(Boolean);
   const mapaProva = {};
+  const afetados = new Set();
   let ok = 0, ign = 0;
   for (const l of linhas) {
     const [mat, no, resp] = l.split(/[;,\t]/).map(x => (x || '').trim());
@@ -1130,9 +1401,10 @@ ACOES['resp-importar-ok'] = () => {
     const r = S.respostas[est.id] || (S.respostas[est.id] = { marcacoes: {}, redacao: null });
     if (resp === '') delete r.marcacoes[entrada.item.id];
     else r.marcacoes[entrada.item.id] = resp.toUpperCase();
+    afetados.add(est.id);
     ok++;
   }
-  $('#dlg').close(); commit();
+  $('#dlg').close(); commit(); PERS.respostas([...afetados]);
   toast(`${ok} marcação(ões) importada(s)${ign ? ' · ' + ign + ' linha(s) ignorada(s)' : ''}.`);
 };
 
@@ -1204,5 +1476,108 @@ ACOES['bol-imprimir'] = () => {
   window.print();
 };
 
-/* ---------------- primeira renderização ---------------- */
-render();
+/* ================= LOGIN (modo nuvem) ================= */
+let loginCriarConta = false;
+
+function telaLogin() {
+  const opsComp = Object.keys(COMPONENTES).map(c => `<option>${c}</option>`).join('');
+  const criar = loginCriarConta ? `
+    <div class="form-linha" style="margin-top:4px">
+      <div class="campo"><label>Seu nome</label><input class="caixa" id="lg-nome" placeholder="ex.: Fernanda"></div>
+      <div class="campo"><label>Papel</label>
+        <select class="caixa" id="lg-papel" data-mud="lg-papel">
+          <option value="docente">Docente</option>
+          <option value="coordenacao">Coordenação</option>
+          <option value="redacao">Professora de redação</option>
+        </select></div>
+      <div class="campo" id="lg-comp-wrap"><label>Componente</label>
+        <select class="caixa" id="lg-comp">${opsComp}</select></div>
+    </div>` : '';
+  $('#app').innerHTML = `
+  <div class="quadro" style="max-width:460px;margin:36px auto"><div class="miolo">
+    <h2 style="font-size:19px;margin-bottom:4px">${loginCriarConta ? 'Criar conta da equipe' : 'Entrar'}</h2>
+    <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 16px">
+      ${loginCriarConta ? 'A conta identifica seus itens, comentários e lançamentos.' : 'Use a conta cadastrada pela coordenação ou crie a sua.'}</p>
+    ${criar}
+    <div class="campo" style="margin-bottom:12px"><label>E-mail</label>
+      <input class="caixa" id="lg-email" type="email" autocomplete="username"></div>
+    <div class="campo" style="margin-bottom:16px"><label>Senha</label>
+      <input class="caixa" id="lg-senha" type="password" autocomplete="${loginCriarConta ? 'new-password' : 'current-password'}"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn" data-acao="${loginCriarConta ? 'nuvem-cadastrar' : 'nuvem-entrar'}">${loginCriarConta ? 'Criar conta' : 'Entrar'}</button>
+      <button class="btn fantasma" data-acao="login-alternar">${loginCriarConta ? 'Já tenho conta' : 'Criar conta'}</button>
+      <button class="btn mini fantasma" style="margin-left:auto" data-acao="nuvem-local" title="Sem login: os dados ficam só neste navegador">usar sem conexão</button>
+    </div>
+  </div></div>
+  <p class="nota-tela" style="text-align:center">Os dados ficam no banco on-line da escola (Supabase) — o mesmo simulado para toda a equipe, cada um com seu papel.</p>`;
+  const papelSel = $('#lg-papel');
+  if (papelSel) MUDS['lg-papel'] = () => { $('#lg-comp-wrap').style.display = papelSel.value === 'docente' ? '' : 'none'; };
+}
+ACOES['login-alternar'] = () => { loginCriarConta = !loginCriarConta; render(); };
+ACOES['nuvem-local'] = () => { modoNuvem = false; toast('Modo local: os dados ficam apenas neste navegador.'); render(); };
+ACOES['nuvem-entrar'] = async () => {
+  try {
+    await nuvem.entrar($('#lg-email').value.trim(), $('#lg-senha').value);
+    await aposLogin();
+  } catch (e) {
+    toast(/confirm/i.test(e.message || '') ? 'E-mail ainda não confirmado — verifique sua caixa de entrada.'
+      : 'Não foi possível entrar: ' + (e.message || e));
+  }
+};
+ACOES['nuvem-cadastrar'] = async () => {
+  const papel = $('#lg-papel').value;
+  const meta = {
+    nome: $('#lg-nome').value.trim() || $('#lg-email').value.split('@')[0],
+    papel, componente: papel === 'docente' ? $('#lg-comp').value : null
+  };
+  try {
+    const r = await nuvem.cadastrar($('#lg-email').value.trim(), $('#lg-senha').value, meta);
+    if (r.session) await aposLogin();
+    else { loginCriarConta = false; render(); toast('Conta criada! Confirme pelo link enviado ao seu e-mail e então entre.'); }
+  } catch (e) { toast('Não foi possível criar a conta: ' + (e.message || e)); }
+};
+ACOES['nuvem-sair'] = async () => {
+  await nuvem.sair();
+  toast('Você saiu da conta.');
+  render();
+};
+
+async function aposLogin() {
+  const u = nuvem.usuario();
+  const meta = u.user_metadata || {};
+  S.perfil = {
+    papel: ['coordenacao', 'docente', 'redacao'].includes(meta.papel) ? meta.papel : 'docente',
+    nome: meta.nome || u.email, componente: meta.componente || null
+  };
+  try {
+    const dados = await nuvem.carregarTudo();
+    if (!dados.config) {
+      // Nuvem vazia (primeiro acesso): sobe o estado local como ponto de partida.
+      await nuvem.substituirTudo(S);
+      toast('Banco on-line inicializado com os dados deste navegador.');
+    } else {
+      S.config = dados.config;
+      S.textos = dados.textos;
+      S.itens = dados.itens;
+      S.estudantes = dados.estudantes;
+      S.respostas = dados.respostas;
+    }
+  } catch (e) { toast('Erro ao carregar da nuvem: ' + (e.message || e)); }
+  save(S);
+  render();
+}
+
+/* ---------------- inicialização ---------------- */
+(async function iniciarApp() {
+  if (NUVEM.ativa && NUVEM.chave && !NUVEM.chave.startsWith('PREENCHER')) {
+    try {
+      await nuvem.iniciar(NUVEM.url, NUVEM.chave);
+      modoNuvem = true;
+    } catch {
+      modoNuvem = false;
+      toast('Nuvem indisponível neste ambiente — rodando em modo local.');
+    }
+  }
+  if (modoNuvem && nuvem.usuario()) { await aposLogin(); return; }
+  render();
+})();
