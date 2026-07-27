@@ -45,9 +45,10 @@ sistema roda inteiro no navegador, com dados de exemplo.
 
 ## Publicação
 
-O workflow `.github/workflows/publicar.yml` publica o repositório no GitHub
-Pages a cada push. Qualquer hospedagem de arquivos estáticos serve — não há
-servidor próprio.
+O site está na Vercel, conectada a este repositório: cada push na branch de
+produção republica sozinho, sem etapa de build (`vercel.json` só acrescenta
+cabeçalhos de segurança e cache). Qualquer hospedagem de arquivos estáticos
+serve — não há servidor próprio.
 
 ## Segurança
 

@@ -75,10 +75,18 @@ certo +1 / errado −1; tipo B certo +1; tipos C e D certo +1 / errado −1; bra
 0. Redação pela planilha oficial, `NR = NC − 2·NE/TL`. Falta aplicar os pesos
 oficiais e o parâmetro *x* de cada versão da prova.
 
+## Hospedagem
+
+Vercel (projeto `projeto-pas`), conectada ao repositório do GitHub. Sem etapa
+de build: o site é servido direto da raiz do repositório. `.vercelignore` deixa
+de fora `supabase/`, `docs/` e `.github/`, que existem só para o
+desenvolvimento.
+
 ## Pendências operacionais
 
 - **Proteção contra senha vazada** (Supabase → Authentication → Passwords):
   ligar a verificação no HaveIBeenPwned. Não dá para ativar por API; é um
   clique no painel.
 - **Contas da equipe**: criar pela tela “7 · Equipe” conforme os docentes
-  entrarem no projeto.
+  entrarem no projeto. A coordenação inicial é
+  `vde.aguasclaras@maristabrasil.org`.
