@@ -1,11 +1,28 @@
 # Manual rápido — Sistema PAS Marista
 
-## Entrar
+## Primeiro acesso
 
-Abra o endereço do sistema, informe o e-mail e a senha que a coordenação
-entregou e clique em **Entrar**. Troque a senha pelo botão 🔑 no topo.
+Abra o endereço do sistema e entre com o seu e-mail e a **senha provisória** que
+a coordenação entregou. O sistema pede, na hora, que você **crie a sua própria
+senha** — só depois disso o resto aparece. Em seguida, um **tutorial rápido**
+mostra as telas do seu perfil; ele abre uma vez só, e você pode revê-lo quando
+quiser no botão 🔑 → “Rever o tutorial”.
 
 Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
+
+## Quem é quem
+
+| Papel | O que faz |
+|---|---|
+| **Coordenação pedagógica** | Vê e faz tudo: configura o simulado, aprova a etapa final da revisão, gera caderno, cartões e boletins, e administra as contas da equipe. |
+| **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. |
+| **Docente** | Escreve itens, acompanha a revisão dos seus e lança as notas dos próprios itens discursivos. |
+| **Professora de redação** | Lança NC, NE e TL da redação de cada estudante. |
+
+As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
+Artes), **Humanas** (História, Geografia, Filosofia, Sociologia),
+**Matemática**, **Ciências da Natureza** (Biologia, Física, Química) e
+**Inglês**.
 
 ## As telas
 
@@ -23,6 +40,11 @@ rascunho → coordenação de área → coordenação geral → aprovado. Quem r
 comenta dentro do item; quem escreveu responde ali mesmo. **Só item aprovado
 entra no caderno, no cartão e na correção.**
 
+Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação da
+área daquele componente** decide a primeira etapa; a **coordenação geral** decide
+a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
+na sua mão.
+
 Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar em
 “linhas de referência” aparecem destacadas em amarelo.
 
@@ -30,11 +52,40 @@ Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múlt
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
 **4 · Caderno** — o caderno montado com os itens aprovados, em numeração
-contínua, nas versões regular e adaptada. Use “Imprimir caderno” e escolha
-“Salvar como PDF”.
+contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
+PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
+e escolha “Salvar como PDF”.
+
+O **comando de cada bloco é escrito pelo sistema** a partir dos tipos dos itens
+alocados — “julgue os itens de 11 a 19 e assinale a opção correta no item 20,
+que é do tipo C”. Você só escreve a abertura da frase, no cadastro do texto-base
+(campo “Abertura do comando no caderno”). Os itens saem agrupados por tipo
+dentro de cada texto, como no PAS.
+
+Ainda no cadastro do texto-base, o campo **“Formato no caderno”** define como o
+texto é impresso: *prosa* (reflui e é justificado — o padrão), *verso* (mantém
+as quebras, para canções e poemas) ou *linhas numeradas* (só quando algum item
+precisa citar linhas; o PAS não numera).
+
+A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
+uma imagem temática e o texto das instruções ao estudante.
 
 **5 · Cartões-resposta** — cadastro de estudantes (um a um ou colando a lista no
 formato `nome;matrícula;turma;versão`) e impressão dos cartões nominais.
+
+Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
+
+- **objetiva** — todos os itens em ordem numérica; os tipos A e C com bolhas, os
+  tipos B e D rotulados. Os itens tipo B têm campo próprio na coluna à direita,
+  com centena, dezena e unidade;
+- **discursiva** — uma pauta por item tipo D, com as bolhas de percentual de
+  acerto (0, 25, 50, 75 e 100%) que **quem corrige** preenche;
+- **redação** — pauta de 30 linhas. A coordenação decide se imprime, em
+  “Configurar simulado”.
+
+Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos e
+“folha N de M”, para a digitalização em lote saber a que estudante e a que parte
+da prova cada imagem pertence.
 
 **6 · Correção e boletins** — lançamento das marcações (à mão ou importando o
 CSV do leitor óptico), notas dos itens discursivos, redação (NC, NE e TL) e
@@ -58,13 +109,15 @@ atualiza sozinho quando você volta para a aba).
 ## Coordenação: criar o acesso de alguém
 
 1. Tela **7 · Equipe** → **+ Adicionar pessoa**.
-2. Preencha nome, e-mail, papel e (se for docente) o componente.
-3. O sistema sugere uma senha provisória — pode aceitar ou trocar.
-4. Clique em **Criar conta** e entregue à pessoa o endereço, o e-mail e a senha
-   que aparecem na tela. **A senha só aparece nesse momento**; se perder, use
-   “Nova senha”.
+2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
+   que a pessoa coordena e, se quiser, o componente que ela leciona.
+3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar
+   ou trocar.
+4. Clique em **Criar conta** e entregue à pessoa o endereço, o e-mail e a senha.
 
-Nenhum e-mail é enviado: a conta já nasce liberada.
+Nenhum e-mail é enviado: a conta já nasce liberada, e **o sistema obriga a
+pessoa a criar a própria senha no primeiro acesso**. A coluna “Acesso” da tabela
+mostra quem ainda está com senha provisória. “Nova senha” volta a exigir a troca.
 
 ## Cuidados
 

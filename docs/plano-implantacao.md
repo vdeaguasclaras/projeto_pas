@@ -8,7 +8,7 @@ Estado em 27/07/2026.
 |---|---|---|
 | 1 · MVP navegável | Todas as telas funcionando com dados no navegador (localStorage) | **concluída** |
 | 2 · Multiusuário | Banco on-line, login por conta, papéis e mesmo simulado para toda a equipe | **concluída** |
-| 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | a fazer |
+| 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | **concluída** |
 | 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões digitalizados em lote | a fazer |
 | 5 · Calibração da pontuação | Parâmetro *x*, pesos oficiais por tipo de item e escore padronizado | a fazer |
 
@@ -37,10 +37,40 @@ O `localStorage` continua como cache e como modo de contingência: se o banco
 estiver fora do ar, dá para trabalhar off-line em “usar sem conexão” e exportar
 o backup em JSON.
 
+## Papéis
+
+| Papel | Alcance |
+|---|---|
+| `coordenacao` | Tudo, inclusive administrar contas e decidir a etapa final da revisão. |
+| `coordenacao_area` | Docente + primeira etapa da revisão dos itens da sua área (`equipe.area`). |
+| `docente` | Escreve itens e lança as notas dos próprios discursivos. |
+| `redacao` | Só o lançamento da redação. |
+
+Áreas em `AREAS` (js/app.js): Linguagens (Português, Literatura, Artes),
+Humanas (História, Geografia, Filosofia, Sociologia), Matemática, Ciências da
+Natureza (Biologia, Física, Química) e Inglês. `revisaArea(item)` compara a área
+do componente do item com a área de quem está logado.
+
+## Primeiro acesso
+
+Duas etapas obrigatórias, marcadas em `public.equipe`:
+
+- `trocar_senha` — a conta nasce com a senha provisória da escola
+  (`Marista@2026`) e o `render()` trava na tela de criação de senha até a pessoa
+  definir a sua. Redefinir a senha pela tela de Equipe volta a exigir a troca.
+- `tutorial_visto` — na estreia abre um tutorial curto e animado, com roteiro
+  próprio para cada papel (`TUTORIAL` em js/app.js). Dá para revê-lo em
+  “Minha conta”.
+
+Como a pessoa não pode editar a própria linha da equipe — isso permitiria mudar
+o próprio papel —, os dois campos são marcados por funções `SECURITY DEFINER`
+(`marcar_senha_trocada` e `marcar_tutorial_visto`), restritas à conta que chama.
+
 ## Como o acesso funciona
 
 1. A tabela `public.equipe` é a lista de quem pode entrar, com o **papel** de
-   cada pessoa (coordenação, docente, professora de redação).
+   cada pessoa (coordenação, coordenação de área, docente, professora de
+   redação) e, para a coordenação de área, a **área** que ela revisa.
 2. Um gatilho em `auth.users` recusa a criação de conta de e-mail fora dessa
    lista — mesmo que alguém chame a API do Supabase por fora do sistema.
 3. O RLS de **todas** as tabelas exige `eh_equipe()`: sair da lista é perder o
@@ -55,18 +85,83 @@ A chave que aparece em `js/config-supabase.js` é a chave **publicável**: ela �
 feita para ficar no navegador e não dá acesso a nada sozinha — quem manda é o
 login mais as regras de RLS.
 
-## Fase 3 — fidelidade dos documentos (próximo passo)
+## Fase 3 — fidelidade dos documentos
 
-O que precisa ser calibrado contra os PDFs reais do PAS/Cebraspe:
+### Caderno — concluído
 
-- tipografia e medidas de coluna do caderno;
-- numeração das linhas do texto-base de 3 em 3;
-- quebras de página (nenhum item partido entre páginas);
-- posição das âncoras de leitura óptica no cartão-resposta;
-- folha de rosto e instruções ao estudante.
+Medidas extraídas dos cadernos CEBRASPE/UnB — PAS 1, 2 e 3, edital 2025 — e
+reproduzidas em `css/estilo.css` (bloco “caderno de provas”):
 
-Método: colocar o PDF real ao lado da impressão do sistema, página a página, e
-ajustar `css/estilo.css` (blocos `.folha`, `.colunas`, `.item-prova`, `.cr-*`).
+| Elemento | Medida |
+|---|---|
+| Página | A4, 595×842pt |
+| Fio do cabeçalho | y 41,3 · x 27→568,4 · cinza 50%, 1,4pt |
+| Fio do rodapé | y 805,7 |
+| Identificação | 9pt, alinhada à direita, y 31,9 |
+| “-- PARTE 2 --” | 12pt, centralizado, y 49,7 |
+| Colunas | 266,05pt cada, vão de 9pt, fio preto de 0,7pt em x 297,4 |
+| Área de texto | y 69,8 → 802,3 (730pt por coluna) |
+| Corpo | 10pt, entrelinha 13,3pt, justificado |
+| Recuo de parágrafo | 28,4pt na primeira linha |
+| Nº do item | 9pt em negrito, recuado 18pt para fora da coluna |
+| Opções (tipo C) | letra em negrito, texto recuado 14,3pt |
+| Crédito da fonte | 6pt, alinhado à direita |
+| Pauta de resposta | linhas de 17pt, como no rascunho da redação |
+
+A conferência é automatizável: gera-se o PDF pelo Chromium e comparam-se as
+coordenadas com as dos PDFs de referência (PyMuPDF). Na última medição, **13 de
+13 elementos ficaram dentro de 2pt** do original.
+
+**Dois achados que corrigiram suposições do protótipo:**
+
+1. **O PAS não numera as linhas dos textos-base.** O que parecia numeração nos
+   PDFs é o número do item, recuado para fora da coluna. A numeração continua
+   disponível por texto (formato “linhas numeradas”), mas desligada por padrão.
+2. **Dentro de cada bloco, os itens vêm agrupados por tipo** (A, depois B, C e
+   D). É isso que permite o comando contínuo do original — “julgue os itens de
+   11 a 19 e assinale a opção correta no item 20, que é do tipo C”. O sistema
+   agora ordena assim ao montar a prova e **redige o comando sozinho** a partir
+   da composição do bloco; só a abertura da frase é escrita pela coordenação.
+
+A paginação é feita em JavaScript (`medirPecas` e `distribuir` em `js/app.js`),
+não pelo CSS de impressão: o Chrome posiciona cabeçalhos `position:fixed` de
+forma errática entre páginas. Cada página é uma folha A4 completa, o que faz a
+prévia na tela mostrar exatamente o que sai impresso.
+
+### Cartão-resposta — concluído
+
+Calcado no caderno de respostas do PAS. Deixou de ser uma folha e passou a ser
+um **conjunto de folhas por estudante**, cada uma com cabeçalho completo,
+âncoras de leitura óptica no topo e no rodapé e a identificação “folha N de M”:
+
+| Folha | Conteúdo |
+|---|---|
+| Objetiva | Todos os itens em ordem numérica ocupando 4/5 da folha, em 4 colunas. Só os tipos **A** (C/E) e **C** (A–D) recebem bolhas; os tipos **B** e **D** aparecem rotulados, remetendo ao seu campo próprio. A coluna à direita traz os itens do **tipo B**, com centena, dezena e unidade. |
+| Discursiva | Uma pauta de resposta por item do **tipo D**, com as bolhas de **percentual de acerto** — 0, 25, 50, 75 e 100% —, preenchidas por quem corrige. |
+| Redação | Pauta de 30 linhas de 17pt, igual à do rascunho oficial. **Opcional**: a coordenação decide em “Configurar simulado” se imprime. |
+
+Quando o conteúdo não cabe, a folha se desdobra em vez de cortar: a coluna dos
+itens tipo B vira duas antes de gerar uma folha de continuação, e os discursivos
+quebram por altura acumulada.
+
+**Consequência para a leitura óptica**, apontada pela coordenação: cada
+estudante passa a ter mais de uma folha digitalizada. O gabarito exportado para
+o leitor local mudou para `pas-marista/gabarito-v2` e agora descreve as folhas —
+qual é objetiva, qual é discursiva (com os percentuais aceitos) e qual é a
+redação —, além da chave de identificação (matrícula) e das âncoras.
+
+O lançamento das notas dos discursivos, na tela de correção, passou a oferecer
+exatamente os mesmos cinco níveis do cartão, em vez de um número livre de 0 a
+10, para que o que se marca no papel e o que se digita no sistema sejam a mesma
+coisa.
+
+### Capa
+
+A capa reproduz a estrutura do caderno original: arte temática à esquerda com a
+faixa de subprograma e etapa, instruções numeradas à direita e as observações no
+rodapé. Tanto a imagem quanto o texto das instruções são editáveis na tela do
+caderno (“Capa e instruções”), já que a arte muda a cada edição e costuma
+remeter aos textos da prova ou ao tema da redação.
 
 ## Fase 5 — pontuação
 

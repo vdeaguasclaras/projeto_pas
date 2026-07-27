@@ -205,20 +205,105 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .opcoes{margin:4px 0 0 2px;padding:0;list-style:none}
 .opcoes li{margin:2px 0}
 .opcoes b{color:#0d2f8a}
-/* cartão-resposta */
-.cr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
-.cr-col{border:1px solid #efc3da;border-radius:4px;padding:6px;background:#fff8fb;break-inside:avoid}
-.cr-col h5{margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px}
-.cr-linha{display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333}
-.cr-linha .no{font-family:var(--mono);font-weight:700;min-width:14px;color:#0d2f8a}
-.bolha{width:9px;height:9px;border:1.2px solid #e5007e;border-radius:50%;display:inline-block;flex:none}
+/* ---------- cartão-resposta: calcado no caderno de respostas do PAS ----------
+   Conjunto de folhas A4 por estudante:
+   1. objetiva — todos os itens em ordem numérica ocupando 4/5 da folha (só os
+      tipos A e C recebem bolhas; B e D aparecem rotulados) e uma coluna à
+      direita só para os itens do tipo B, com centena, dezena e unidade;
+   2. discursiva — uma pauta por item do tipo D e as bolhas de percentual de
+      acerto (0, 25, 50, 75 e 100%), marcadas por quem corrige;
+   3. redação — pauta de 30 linhas de 17pt, como o rascunho oficial. Opcional.  */
+.cr-folha{
+  position:relative; width:595pt; height:842pt; background:#fff; color:#111;
+  font-family:Arial,Helvetica,sans-serif; font-size:8pt; line-height:1.3;
+  padding:22pt 25.4pt; page-break-after:always; break-after:page; margin:0 auto;
+  display:flex; flex-direction:column;
+}
+.cr-folha:last-child{page-break-after:auto;break-after:auto}
+.cr-folha *{box-sizing:border-box}
+
+/* cabeçalho de identificação */
+.cr-cab{display:flex;gap:8pt;align-items:stretch;border:1pt solid #111;padding:6pt 8pt}
+.cr-cab-prova{flex:0 0 30%;border-right:.7pt solid #bbb;padding-right:8pt}
+.cr-cab-prova b{display:block;font-size:9pt;color:#0d2f8a;line-height:1.2}
+.cr-cab-prova span{display:block;font-size:7pt;color:#555;margin-top:2pt}
+.cr-cab-est{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:2pt 10pt;align-content:center}
+.cr-cab-est div{display:flex;gap:5pt;align-items:baseline;border-bottom:.5pt dotted #bbb}
+.cr-cab-est span{font-size:6pt;letter-spacing:.4pt;color:#777;min-width:44pt}
+.cr-cab-est b{font-size:8.5pt}
+.cr-sala{flex:0 0 52pt;border:1.5pt solid #e5007e;color:#e5007e;text-align:center;
+  display:flex;flex-direction:column;justify-content:center;font-weight:800}
+.cr-sala small{display:block;font-size:6pt;letter-spacing:.6pt}
+.cr-sala i{display:block;height:16pt}
+.cr-faixa{background:#e5007e;color:#fff;font-size:7.5pt;font-weight:800;letter-spacing:.5pt;
+  padding:3pt 8pt;text-transform:uppercase;margin-top:4pt}
+
+/* orientação + exemplo */
+.cr-orient{display:flex;gap:8pt;margin-top:6pt;font-size:6.8pt;line-height:1.35}
+.cr-orient .txt{flex:1;border:.7pt solid #efc3da;background:#fff8fb;padding:5pt 7pt}
+.cr-orient .txt b{color:#e5007e}
+.cr-exemplo{flex:0 0 168pt;border:.7pt solid #efc3da;background:#fff8fb;padding:4pt 6pt}
+.cr-exemplo h6{margin:0 0 3pt;font-size:6.2pt;color:#e5007e;letter-spacing:.3pt}
+.cr-exemplo .ex{display:flex;align-items:center;gap:4pt;margin:1.5pt 0;font-size:6.2pt}
+.cr-exemplo .ex i{font-style:normal;color:#777;min-width:34pt}
+
+/* corpo: itens A/C à esquerda, tipo B à direita */
+.cr-corpo{flex:1;display:flex;gap:9pt;margin-top:6pt;min-height:0}
+.cr-ac{flex:1;display:flex;gap:7pt}
+.cr-ac-col{flex:1;border:.7pt solid #efc3da;border-radius:2pt;padding:3pt 4pt;background:#fff}
+.cr-tit{font-size:6.2pt;color:#e5007e;text-align:center;letter-spacing:.4pt;font-weight:800;
+  border-bottom:.5pt solid #efc3da;padding-bottom:2pt;margin-bottom:2pt}
+.cr-linha{display:flex;align-items:center;gap:2.5pt;height:15pt;font-size:6.5pt;color:#333}
+.cr-linha .no{font-family:var(--mono);font-weight:700;font-size:7pt;color:#0d2f8a;
+  min-width:15pt;text-align:right}
+.bolha{width:8.5pt;height:8.5pt;border:.9pt solid #e5007e;border-radius:50%;display:inline-block;flex:none}
 .bolha.m{background:#111;border-color:#111}
-.cr-b{border:1px solid #efc3da;border-radius:4px;padding:8px;margin-top:10px;background:#fff8fb;break-inside:avoid}
-.cr-b h5{margin:0 0 6px;font-size:8px;color:#e5007e;letter-spacing:.4px}
-.cr-b .dig{display:flex;gap:3px;align-items:center;font-size:6.5px;margin:2px 0}
-.cr-b .dig span{color:#666;min-width:34px}
-.ancoras{display:flex;justify-content:space-between;padding:0 2px;margin:4px 0}
-.ancoras i{width:9px;height:9px;background:#111;display:block}
+.cr-linha .rot{font-size:6pt;font-weight:800;color:#8b5cf6;letter-spacing:.3pt}
+.cr-linha.outro{background:color-mix(in srgb,#8b5cf6 8%,transparent);border-radius:2pt}
+
+/* coluna dos itens do tipo B */
+.cr-bcol{flex:0 0 118pt;border:.7pt solid #efc3da;border-radius:2pt;padding:3pt 4pt;background:#fff8fb;
+  display:flex;flex-direction:column;gap:4pt}
+.cr-bcol.duplo{flex:0 0 126pt;display:grid;grid-template-columns:1fr 1fr;gap:3pt;align-content:start}
+.cr-bcol.duplo>.cr-tit{grid-column:1/-1}
+.cr-bcol.duplo .cr-bloco-b{padding:2pt}
+.cr-bcol.duplo .bolha{width:7pt;height:7pt}
+.cr-bcol.duplo .cr-bgrade{grid-template-columns:7pt repeat(3,1fr);font-size:5pt}
+.cr-bloco-b{border:.6pt solid #efc3da;border-radius:2pt;padding:3pt;background:#fff}
+.cr-bloco-b h6{margin:0 0 2pt;font-size:6.5pt;color:#0d2f8a;text-align:center;font-family:var(--mono)}
+.cr-bgrade{display:grid;grid-template-columns:9pt repeat(3,1fr);gap:1pt;font-size:5.6pt;color:#666}
+.cr-bgrade .cab{text-align:center;font-weight:800;color:#e5007e;font-size:5.6pt}
+.cr-bgrade .dig{text-align:right;font-family:var(--mono);font-weight:700;color:#333}
+.cr-bgrade .cel{display:flex;justify-content:center}
+
+/* folha dos discursivos */
+.cr-d{border:.7pt solid #efc3da;border-radius:2pt;padding:5pt 7pt;margin-top:6pt;background:#fff}
+.cr-d-cab{display:flex;align-items:center;justify-content:space-between;gap:8pt;
+  border-bottom:.6pt solid #efc3da;padding-bottom:3pt;margin-bottom:4pt}
+.cr-d-cab b{font-size:8pt;color:#0d2f8a}
+.cr-d-cab span{font-size:6.5pt;color:#777}
+.cr-pauta i{display:block;height:17pt;border-bottom:.6pt solid #999}
+.cr-nota{display:flex;align-items:center;gap:7pt;margin-top:5pt;padding-top:4pt;
+  border-top:.6pt dashed #efc3da;font-size:6.5pt;color:#555}
+.cr-nota b{color:#e5007e;font-size:6.5pt;letter-spacing:.3pt}
+.cr-nota .op{display:flex;align-items:center;gap:2.5pt}
+
+/* folha da redação */
+.cr-red-pauta{margin-top:8pt;counter-reset:cr-red}
+.cr-red-pauta i{display:block;height:17pt;border-bottom:.6pt solid #999;position:relative}
+.cr-red-pauta i::before{counter-increment:cr-red;content:counter(cr-red);
+  position:absolute;left:-16pt;bottom:1.5pt;font-size:6.5pt;color:#777;font-family:var(--mono)}
+.cr-red-pauta{padding-left:18pt}
+
+/* rodapé de leitura óptica */
+.cr-ancoras{display:flex;justify-content:space-between;margin:4pt 0}
+.cr-ancoras i{width:9pt;height:9pt;background:#111;display:block}
+.cr-rodape{display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--mono);font-size:6.5pt;color:#666;margin-top:2pt}
+
+.cr-previa{background:#e9e4de;padding:24px;overflow:auto}
+.cr-previa .cr-folha{box-shadow:0 3px 14px rgba(0,0,0,.3);margin-bottom:18px}
+
 /* boletim */
 .bol-cab{background:linear-gradient(115deg,#0d2f8a,#1d5cff);color:#fff;padding:12px 16px}
 .bol-cab h4{margin:0;font-size:13px}
@@ -235,13 +320,217 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .bol-nota b{display:block;font-size:16px;color:#0d2f8a;font-variant-numeric:tabular-nums}
 .bol-nota span{font-size:8px;color:#777;text-transform:uppercase;letter-spacing:.4px}
 
+/* ---------- caderno de provas: medidas tiradas dos PDFs reais do PAS ----------
+   Referência: cadernos CEBRASPE/UnB — PAS 1, 2 e 3, edital 2025 (A4 595×842pt).
+   Coluna 266,05pt · vão 9pt · fio central 0,7pt · corpo 10pt/13,3pt ·
+   nº do item 9pt recuado 18pt para fora · crédito da fonte 6pt à direita.
+   Área útil: x 28,4→569,5 · y 69,8→802,3 · fios do cabeçalho/rodapé em x 27→568,4. */
+.pas{
+  --col: 266.05pt; --vao: 9pt;
+  --marg-esq: 28.4pt; --topo: 69.8pt; --alt-col: 732.5pt;
+  background:#fff; color:#000;
+  font-family:Arial,Helvetica,sans-serif; font-size:10pt; line-height:1.33;
+}
+.pas *{box-sizing:border-box}
+.pas p{margin:0}
+
+/* Cada página é uma folha A4 de verdade — a paginação é feita em js/app.js,
+   medindo os blocos, porque o Chrome posiciona cabeçalhos fixos de forma
+   errática na impressão. */
+.pas-pagina{
+  position:relative; width:595pt; height:842pt; overflow:hidden;
+  background:#fff; page-break-after:always; break-after:page; margin:0 auto;
+}
+.pas-pagina:last-child{page-break-after:auto;break-after:auto}
+.pas-ident{position:absolute;top:31.9pt;left:27pt;right:26.6pt;font-size:9pt;text-align:right;line-height:1}
+.pas-fio-topo,.pas-fio-base{position:absolute;left:27pt;right:26.6pt;height:1.4pt;background:#808080}
+.pas-fio-topo{top:41.3pt}
+.pas-fio-base{top:805.7pt}
+.pas-parte{position:absolute;top:50.6pt;left:0;right:0;text-align:center;font-size:12pt;line-height:1}
+.pas-fol{position:absolute;bottom:19pt;left:0;right:0;text-align:center;font-size:8pt;color:#444}
+.pas-corpo{
+  position:absolute; top:var(--topo); left:var(--marg-esq);
+  width:541.1pt; height:var(--alt-col); display:flex; gap:var(--vao);
+}
+.pas-col{width:var(--col);padding-top:2.5pt;text-align:justify;overflow:hidden}
+.pas-fio-vert{position:absolute;top:var(--topo);left:297.4pt;width:.7pt;height:var(--alt-col);background:#000}
+
+/* régua invisível usada para medir a altura de cada bloco antes de paginar */
+.pas-regua{
+  position:absolute;left:-10000pt;top:0;width:var(--col);visibility:hidden;
+  display:flow-root;   /* contém as margens dos filhos: sem isso a medida sai curta */
+  text-align:justify;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.33;
+}
+.pas-bloco{margin-bottom:13.3pt}
+.pas-texto-titulo{font-weight:700;margin-bottom:2pt}
+.pas-texto p{text-indent:28.4pt}
+.pas-texto p.solto{text-indent:0}
+.pas-verso{text-indent:0;padding-left:28.4pt}
+.pas-fonte{font-size:6pt;text-align:right;margin-top:4pt;line-height:1.3}
+.pas-figura{margin:6pt 0;text-align:center}
+.pas-figura img{max-width:100%}
+.pas-comando{margin:11pt 0 6pt;text-indent:0}
+.pas-linhas{counter-reset:pas-linha}
+.pas-linhas p{text-indent:0;padding-left:20pt;position:relative}
+.pas-linhas p::before{
+  counter-increment:pas-linha;content:counter(pas-linha);
+  position:absolute;left:0;width:15pt;text-align:right;font-size:7pt;color:#444}
+
+/* itens: número recuado para fora da coluna */
+.pas-item{padding-left:18pt;text-indent:-18pt;margin-bottom:2.2pt;break-inside:avoid}
+.pas-item .n{font-size:9pt;font-weight:700}
+.pas-op{margin-left:1.9pt;padding-left:14.3pt;text-indent:-14.3pt}
+.pas-op b{font-weight:700}
+.pas-pauta{margin-top:5pt;text-indent:0;counter-reset:pas-pauta}
+.pas-pauta i{display:block;height:17pt;border-bottom:.7px solid #999;position:relative}
+.pas-pauta.numerada i::before{
+  counter-increment:pas-pauta;content:counter(pas-pauta);
+  position:absolute;left:-16pt;bottom:1pt;font-size:7pt;color:#666}
+.pas-pauta.sem-linhas{border:.7px solid #999}
+.pas-pauta.sem-linhas i{border:none}
+
+/* capa: imagem temática à esquerda, instruções à direita */
+.pas-capa{display:flex;gap:0;height:842pt}
+.pas-capa-arte{
+  width:44%;position:relative;background:#0d2f8a;color:#fff;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:space-between}
+.pas-capa-arte img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.62}
+.pas-capa-marca{position:relative;padding:34pt 22pt 0;font-size:34pt;font-weight:800;letter-spacing:2pt;line-height:1}
+.pas-capa-marca small{display:block;font-size:8.5pt;font-weight:600;letter-spacing:.4pt;margin-top:3pt}
+.pas-capa-faixa{position:relative;background:rgba(0,0,0,.78);padding:14pt 22pt;margin-bottom:96pt}
+.pas-capa-faixa span{display:block;font-size:9pt;letter-spacing:1.6pt}
+.pas-capa-faixa b{display:block;font-size:30pt;line-height:1.05}
+.pas-capa-texto{width:56%;padding:34pt 27pt 20pt 20pt}
+.pas-capa-texto h2{font-size:11pt;text-align:center;margin-bottom:10pt;letter-spacing:.3pt}
+.pas-capa-texto ol{margin:0;padding-left:16pt;font-size:8.5pt;line-height:1.42;text-align:justify}
+.pas-capa-texto li{margin-bottom:6pt}
+.pas-capa-obs{margin-top:14pt;border-top:1pt solid #999;padding-top:8pt;font-size:7.5pt;line-height:1.4}
+.pas-capa-obs .rot{display:block;font-size:8pt;font-weight:700;margin-bottom:3pt}
+
+/* prévia na tela: folha real, apenas reduzida */
+.pas-previa{background:#e9e4de;padding:24px;overflow:auto}
+.pas-previa .pas{box-shadow:0 3px 14px rgba(0,0,0,.3)}
+.pas-previa .pas-miolo{padding-bottom:24pt}
+
+
+/* ---------- tutorial de boas-vindas ----------
+   Uma miniatura animada do próprio sistema: a casca, as abas com a do passo
+   em destaque e uma cena curta ilustrando o que se faz naquela tela.        */
+.tut-corpo{display:flex;flex-direction:column;gap:14px}
+.tut-mock{border:1px solid var(--borda);border-radius:14px;overflow:hidden;background:var(--fundo)}
+.tut-topo{background:linear-gradient(120deg,var(--azul-esc),var(--azul) 55%,var(--rosa));
+  padding:10px 12px;display:flex;align-items:center;gap:8px}
+.tut-topo span{width:22px;height:22px;border-radius:6px;background:#fff;flex:none}
+.tut-topo em{height:8px;width:120px;border-radius:99px;background:rgba(255,255,255,.55)}
+.tut-abas{display:flex;gap:5px;padding:8px 12px;background:linear-gradient(180deg,var(--rosa),transparent 260%);
+  flex-wrap:wrap}
+.tut-abas i{font-style:normal;font-size:10.5px;font-weight:700;color:#fff;padding:4px 9px;border-radius:8px;
+  background:rgba(255,255,255,.22);transition:all .3s}
+.tut-abas i.on{background:#fff;color:var(--azul-esc);animation:tut-pulsa 1.6s ease-in-out infinite}
+@keyframes tut-pulsa{0%,100%{transform:translateY(0);box-shadow:0 0 0 0 rgba(255,255,255,.5)}
+  50%{transform:translateY(-2px);box-shadow:0 0 0 5px rgba(255,255,255,0)}}
+.tut-palco{height:150px;padding:14px;display:flex;align-items:center;justify-content:center;gap:10px;
+  background:var(--papel);overflow:hidden}
+
+@keyframes tut-sobe{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes tut-cresce{from{transform:scaleY(.05)}to{transform:scaleY(1)}}
+@keyframes tut-entra{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes tut-preenche{0%,40%{background:transparent}100%{background:var(--ink)}}
+@keyframes tut-anda{0%{opacity:.25}60%,100%{opacity:1}}
+
+.tut-ola{display:flex;align-items:center;gap:10px;animation:tut-sobe .5s ease both}
+.tut-ola span{width:52px;height:52px;border-radius:14px;background:var(--azul-esc);color:#fff;
+  display:grid;place-items:center;font-weight:800;font-size:16px}
+.tut-ola b{font-size:22px;color:var(--rosa)}
+
+.tut-cartoes{display:flex;gap:8px;flex:1}
+.tut-cartoes u{flex:1;text-decoration:none;border:1px solid var(--borda);border-radius:10px;padding:10px;
+  background:var(--papel);animation:tut-sobe .5s var(--d) ease both}
+.tut-cartoes s{display:block;height:8px;border-radius:99px;text-decoration:none;
+  background:linear-gradient(90deg,var(--azul),var(--ciano));animation:tut-entra .6s var(--d) ease both}
+.tut-tabela{display:flex;flex-direction:column;gap:5px;flex:1}
+.tut-tabela b{height:10px;border-radius:4px;background:var(--azul-claro);animation:tut-entra .5s ease both}
+.tut-tabela b:nth-child(2){animation-delay:.1s}.tut-tabela b:nth-child(3){animation-delay:.2s}
+.tut-tabela b:nth-child(4){animation-delay:.3s}
+
+.tut-texto{width:110px;height:96px;border-radius:8px;background:var(--rosa-fundo);
+  border:1px solid var(--rosa-claro);animation:tut-sobe .5s ease both}
+.tut-slots{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1;max-width:200px}
+.tut-slots i{height:26px;border-radius:8px;background:var(--azul-claro);animation:tut-sobe .5s var(--d) ease both}
+.tut-slots i.livre{background:transparent;border:2px dashed var(--verde);animation:tut-anda 1.5s var(--d) ease-in-out infinite}
+
+.tut-editor{display:flex;gap:10px;flex:1;align-items:stretch}
+.tut-fonte{width:104px;border-radius:8px;background:var(--rosa-fundo);border:1px solid var(--rosa-claro)}
+.tut-form{flex:1;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.tut-form i{height:14px;border-radius:6px;background:var(--azul-claro);animation:tut-entra .5s var(--d) ease both}
+.tut-form i:nth-child(2){width:75%}.tut-form i:nth-child(3){width:52%}
+
+.tut-fluxo{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+.tut-fluxo i{font-style:normal;font-size:11px;font-weight:700;padding:6px 10px;border-radius:99px;
+  background:var(--azul-claro);color:var(--azul-esc);animation:tut-sobe .45s var(--d) ease both}
+.tut-fluxo i.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.tut-fluxo b{width:14px;height:2px;background:var(--borda);border-radius:99px}
+
+.tut-caderno{display:flex;gap:9px;flex:1;max-width:230px}
+.tut-caderno div{flex:1;display:flex;flex-direction:column;gap:5px;border-right:1px solid var(--borda);padding-right:9px}
+.tut-caderno div:last-child{border-right:none;padding-right:0}
+.tut-caderno s{height:5px;border-radius:2px;background:var(--borda);text-decoration:none;
+  animation:tut-entra .4s ease both}
+.tut-caderno s:nth-child(2n){width:88%}.tut-caderno s:nth-child(3n){width:72%}
+.tut-caderno s:nth-child(1){animation-delay:0s}.tut-caderno s:nth-child(2){animation-delay:.05s}
+.tut-caderno s:nth-child(3){animation-delay:.1s}.tut-caderno s:nth-child(4){animation-delay:.15s}
+.tut-caderno s:nth-child(5){animation-delay:.2s}.tut-caderno s:nth-child(6){animation-delay:.25s}
+.tut-caderno s:nth-child(7){animation-delay:.3s}.tut-caderno s:nth-child(8){animation-delay:.35s}
+.tut-caderno s:nth-child(9){animation-delay:.4s}
+
+.tut-cartao{display:flex;flex-direction:column;gap:7px}
+.tut-cartao u{display:flex;gap:7px;align-items:center;text-decoration:none;animation:tut-entra .4s var(--d) ease both}
+.tut-cartao o{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--rosa);display:block}
+.tut-cartao o.m{animation:tut-preenche 1.8s var(--d) ease-in-out infinite}
+
+.tut-barras{display:flex;align-items:flex-end;gap:10px;height:100%}
+.tut-barras i{width:24px;height:var(--h);border-radius:6px 6px 0 0;transform-origin:bottom;
+  background:linear-gradient(180deg,var(--azul),var(--ciano));animation:tut-cresce .6s var(--d) ease both}
+
+.tut-equipe{display:flex;flex-direction:column;gap:8px;width:210px}
+.tut-equipe u{display:flex;gap:8px;align-items:center;text-decoration:none;animation:tut-entra .45s var(--d) ease both}
+.tut-equipe o{width:18px;height:18px;border-radius:50%;background:var(--rosa);display:block;flex:none}
+.tut-equipe s{flex:1;height:8px;border-radius:99px;background:var(--azul-claro);text-decoration:none}
+
+.tut-pauta{display:flex;flex-direction:column;gap:9px;width:220px}
+.tut-pauta s{height:1.5px;background:var(--ink-2);opacity:.5;text-decoration:none;
+  animation:tut-entra .4s var(--d) ease both}
+.tut-formula{font-size:19px;font-weight:800;color:var(--azul-esc);letter-spacing:.5px;
+  animation:tut-sobe .5s ease both}
+:root[data-theme="dark"] .tut-formula{color:#9db8ff}
+
+.tut-texto-passo{animation:tut-sobe .35s ease both}
+.tut-texto-passo h3{font-size:17px;margin-bottom:6px}
+.tut-texto-passo p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.55;max-width:64ch}
+.tut-pontos{display:flex;gap:6px;justify-content:center}
+.tut-pontos i{width:8px;height:8px;border-radius:50%;background:var(--borda);cursor:pointer;transition:all .2s}
+.tut-pontos i.on{background:var(--rosa);width:22px;border-radius:99px}
+
 /* ---------- impressão ---------- */
 #print-area{display:none}
 @media print{
   body>*:not(#print-area){display:none!important}
   #print-area{display:block}
+
+  /* boletins seguem no formato antigo; o cartão tem folha própria */
+  @page{size:A4;margin:12mm}
+  @page cartao{size:A4;margin:0}
+  #print-area .cr-folha{page:cartao;box-shadow:none;margin:0}
+  #print-area .cr-previa{background:none;padding:0;overflow:visible}
   #print-area .folha{width:100%;max-width:none;box-shadow:none;page-break-after:always;margin:0}
   #print-area .folha:last-child{page-break-after:auto}
-  @page{size:A4;margin:12mm}
+
+  /* O caderno já vem paginado em folhas A4 completas: a página não tem margem,
+     cada .pas-pagina ocupa exatamente uma folha. */
+  @page caderno{size:A4;margin:0}
+  #print-area .pas{page:caderno}
+  #print-area .pas-previa{background:none;padding:0;overflow:visible}
+  #print-area .pas-pagina{box-shadow:none;margin:0}
+  #print-area .pas-capa{min-height:842pt;height:842pt}
 }
 

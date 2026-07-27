@@ -90,11 +90,28 @@ const PERS = {
   tudo() { if (modoNuvem) nuvem.substituirTudo(S).catch(PERS.falha); }
 };
 
+// Áreas do conhecimento — é por elas que a coordenação de área revisa.
+const AREAS = {
+  'Linguagens': ['Português', 'Literatura', 'Artes'],
+  'Humanas': ['História', 'Geografia', 'Filosofia', 'Sociologia'],
+  'Matemática': ['Matemática'],
+  'Ciências da Natureza': ['Biologia', 'Física', 'Química'],
+  'Inglês': ['Inglês']
+};
+const areaDoComponente = c => Object.keys(AREAS).find(a => AREAS[a].includes(c)) || null;
+
 const ehCoord = () => S.perfil.papel === 'coordenacao';
+const ehCoordArea = () => S.perfil.papel === 'coordenacao_area';
 const ehRedacao = () => S.perfil.papel === 'redacao';
+// Quem pode decidir a etapa “coord. de área” de um item: a coordenação geral
+// ou quem coordena justamente a área do componente daquele item.
+const revisaArea = item => ehCoord() ||
+  (ehCoordArea() && !!S.perfil.area && areaDoComponente(item.componente) === S.perfil.area);
 const nomePerfil = () => {
   if (S.perfil.papel === 'docente')
     return `Docente · ${S.perfil.nome}${S.perfil.componente ? ' (' + S.perfil.componente + ')' : ''}`;
+  if (S.perfil.papel === 'coordenacao_area')
+    return `Coord. de área · ${S.perfil.nome}${S.perfil.area ? ' (' + S.perfil.area + ')' : ''}`;
   if (S.perfil.papel === 'redacao') return `Redação · ${S.perfil.nome}`;
   return `Coordenação · ${S.perfil.nome}`;
 };
@@ -105,13 +122,21 @@ const textosAprovados = () => S.textos.filter(t => t.status === 'aprovado').sort
 
 /* ---------------- montagem da prova ---------------- */
 // Numeração contínua: itens aprovados da versão, na ordem dos textos aprovados.
+// Dentro de cada texto os itens saem agrupados por tipo (A, B, C, D), como no
+// PAS — é isso que faz o comando ficar contínuo (“julgue os itens de 11 a 19 e
+// assinale a opção correta no item 20”). A ordem definida pela coordenação é
+// preservada dentro de cada tipo.
+const ORDEM_TIPO = { A: 0, B: 1, C: 2, D: 3 };
+
 function prova(versao) {
   const lista = [];
   for (const t of textosAprovados()) {
-    for (const it of S.itens.filter(i => i.textoId === t.id && i.status === 'aprovado' &&
-      (i.versao === versao || i.versao === 'ambas'))) {
-      lista.push({ item: it, texto: t });
-    }
+    const doTexto = S.itens.filter(i => i.textoId === t.id && i.status === 'aprovado' &&
+      (i.versao === versao || i.versao === 'ambas'));
+    doTexto
+      .map((item, ordem) => ({ item, ordem }))
+      .sort((a, b) => (ORDEM_TIPO[a.item.tipo] ?? 9) - (ORDEM_TIPO[b.item.tipo] ?? 9) || a.ordem - b.ordem)
+      .forEach(({ item }) => lista.push({ item, texto: t }));
   }
   return lista.map((e, i) => ({ ...e, numero: i + 1 }));
 }
@@ -198,6 +223,14 @@ function render() {
     return;
   }
 
+  // Senha provisória: nada mais aparece até a pessoa criar a sua.
+  if (modoNuvem && S.perfil.trocarSenha) {
+    $('#quem').innerHTML = `${botaoTema()}<button class="sair-btn" data-acao="nuvem-sair">Sair</button>`;
+    $('#nav').innerHTML = '';
+    telaTrocarSenha();
+    return;
+  }
+
   const ini = (S.perfil.nome || '?').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
   const identidade = modoNuvem
     ? `<span style="font-weight:700;font-size:13px">${esc(nomePerfil())}</span>
@@ -220,6 +253,10 @@ function render() {
     painel: telaPainel, textos: telaTextos, itens: telaItens, caderno: telaCaderno,
     cartoes: telaCartoes, correcao: telaCorrecao, equipe: telaEquipe
   }[atual])();
+
+  // Estreia: o tutorial do papel abre sozinho, uma única vez.
+  if (modoNuvem && S.perfil.tutorialVisto === false && !tutorialAberto && !$('#dlg').open)
+    abrirTutorial(0);
 }
 window.addEventListener('hashchange', render);
 
@@ -345,6 +382,9 @@ ACOES['cfg'] = () => {
         <div class="campo"><label>Data de aplicação</label><input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
         <div class="campo"><label>Duração</label><input class="caixa" id="cfg-dur" value="${esc(c.duracao)}"></div>
       </div>
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+        <input type="checkbox" id="cfg-red" ${c.imprimirRedacao !== false ? 'checked' : ''}> imprimir o cartão de redação
+        <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="cfg-salvar">Salvar</button></div>`);
@@ -353,7 +393,7 @@ ACOES['cfg-salvar'] = () => {
   Object.assign(S.config, {
     nome: $('#cfg-nome').value.trim(), etapa: $('#cfg-etapa').value.trim(),
     serie: $('#cfg-serie').value.trim(), dataAplicacao: $('#cfg-data').value,
-    duracao: $('#cfg-dur').value.trim()
+    duracao: $('#cfg-dur').value.trim(), imprimirRedacao: $('#cfg-red').checked
   });
   $('#dlg').close(); commit(); PERS.config(); toast('Configurações salvas.');
 };
@@ -525,7 +565,20 @@ function dlgTexto(t) {
           <input class="caixa" type="number" min="1" max="40" id="tx-slots" value="${t?.slots ?? 6}"></div>
         <div class="campo" style="min-width:260px"><label>Regra do coordenador (opcional)</label>
           <input class="caixa" id="tx-regra" value="${esc(t?.regra || '')}" placeholder="ex.: sem itens tipo D neste texto"></div>
-      </div>` : ''}
+      </div>
+      <div class="campo" style="margin-bottom:12px"><label>Abertura do comando no caderno</label>
+        <input class="caixa" id="tx-comando" value="${esc(t?.comando || '')}"
+          placeholder="Considerando o texto precedente e os múltiplos aspectos a ele relacionados">
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">O resto da frase o sistema monta sozinho pelos tipos dos itens alocados —
+          “<em>, julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C.</em>”</p></div>
+      <div class="campo"><label>Formato no caderno</label>
+        <select class="caixa" id="tx-formato">
+          <option value="prosa" ${(t?.formato || 'prosa') === 'prosa' ? 'selected' : ''}>Prosa — o texto reflui e é justificado</option>
+          <option value="verso" ${t?.formato === 'verso' ? 'selected' : ''}>Verso — mantém as quebras de linha (canções, poemas)</option>
+          <option value="numerado" ${t?.formato === 'numerado' ? 'selected' : ''}>Linhas numeradas — só se algum item citar linhas</option>
+        </select>
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Em prosa, uma linha em branco separa parágrafos.
+          O PAS não numera linhas dos textos-base.</p></div>` : ''}
       ${!ehCoord() && novo ? '<p style="font-size:12.5px;color:var(--ink-2)">Sua sugestão ficará visível a todos após aprovação da coordenação, que define a quantidade de itens do texto.</p>' : ''}
     </div>
     <div class="dlg-pe">
@@ -542,9 +595,13 @@ ACOES['salvar-texto'] = d => {
   const dados = {
     titulo: $('#tx-titulo').value.trim(),
     fonte: $('#tx-fonte').value.trim(),
-    linhas: $('#tx-corpo').value.split('\n').map(l => l.trim()).filter(Boolean),
+    // linhas em branco no meio são separadores de parágrafo — só as das pontas caem
+    linhas: $('#tx-corpo').value.split('\n').map(l => l.trim())
+      .join('\n').replace(/^\n+|\n+$/g, '').split('\n'),
     slots: ehCoord() ? Math.max(1, parseInt($('#tx-slots').value, 10) || 6) : (anterior?.slots ?? 6),
-    regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || '')
+    regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || ''),
+    comando: ehCoord() && $('#tx-comando') ? $('#tx-comando').value.trim() : (anterior?.comando || ''),
+    formato: ehCoord() && $('#tx-formato') ? $('#tx-formato').value : (anterior?.formato || 'prosa')
   };
   if (!dados.titulo || !dados.fonte || !dados.linhas.length) {
     toast('Título, fonte e corpo do texto são obrigatórios.'); return;
@@ -596,19 +653,24 @@ ACOES['item-mover'] = d => {
 };
 
 /* ================= TELA 3 · ITENS ================= */
-let filtroStatus = 'todos', soMeus = false;
+let filtroStatus = 'todos', soMeus = false, soMinhaArea = false;
 function telaItens() {
-  if (S.perfil.papel === 'docente' && telaItens._primeiraVez === undefined) { soMeus = true; telaItens._primeiraVez = false; }
+  if (telaItens._primeiraVez === undefined) {
+    telaItens._primeiraVez = false;
+    if (S.perfil.papel === 'docente') soMeus = true;
+    if (ehCoordArea()) soMinhaArea = true;
+  }
   const lista = S.itens.filter(i =>
     (filtroStatus === 'todos' || i.status === filtroStatus) &&
-    (!soMeus || i.autor === S.perfil.nome));
+    (!soMeus || i.autor === S.perfil.nome) &&
+    (!soMinhaArea || areaDoComponente(i.componente) === S.perfil.area));
   const linhas = lista.map(i => {
     const t = textoDe(i);
     const st = STATUS_ITEM[i.status];
     return `<tr class="clic" data-acao="abrir-item" data-id="${i.id}">
       <td>Texto ${t?.numero ?? '—'}</td>
       <td><span class="t t${i.tipo}" style="display:inline-grid;width:22px;height:22px;place-items:center;border-radius:6px;color:#fff;font-size:11px;font-weight:800">${i.tipo}</span></td>
-      <td>${discChip(i.componente)}</td>
+      <td>${discChip(i.componente)}<br><span style="font-size:11px;color:var(--ink-2)">${esc(areaDoComponente(i.componente) || '—')}</span></td>
       <td>${esc(i.autor)}</td>
       <td style="text-transform:capitalize">${esc(i.versao)}</td>
       <td><span class="chip ${st.cls}">${st.rot}</span></td>
@@ -626,6 +688,8 @@ function telaItens() {
         <select class="caixa" style="width:auto" data-mud="filtro-status">${ops}</select>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
           <input type="checkbox" data-mud="so-meus" ${soMeus ? 'checked' : ''}> só meus itens</label>
+        ${ehCoordArea() ? `<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
+          <input type="checkbox" data-mud="so-area" ${soMinhaArea ? 'checked' : ''}> só a minha área</label>` : ''}
         <button class="btn" data-acao="novo-item">+ Novo item</button>
       </div>
     </div>
@@ -637,6 +701,7 @@ function telaItens() {
 }
 MUDS['filtro-status'] = (d, el) => { filtroStatus = el.value; render(); };
 MUDS['so-meus'] = (d, el) => { soMeus = el.checked; render(); };
+MUDS['so-area'] = (d, el) => { soMinhaArea = el.checked; render(); };
 
 /* ----- editor de item (diálogo) ----- */
 let rasc = null; // cópia de trabalho do item aberto
@@ -732,22 +797,21 @@ function dlgItem() {
         <p>${esc(c.texto)}</p></div>
     </div>`).join('');
 
+  // Quem faz o quê no fluxo: quem escreveu envia; a coordenação da área do
+  // item decide a 1ª etapa; a coordenação geral decide a última.
   const botoes = [];
   botoes.push('<button class="btn" data-acao="it-salvar">Salvar</button>');
-  if (S.perfil.papel === 'docente' && ['rascunho', 'devolvido'].includes(rasc.status) )
+  const meuItem = rasc.autor === S.perfil.nome;
+  if ((meuItem || ehCoord()) && ['rascunho', 'devolvido'].includes(rasc.status))
     botoes.push('<button class="btn rosa" data-acao="it-enviar">Enviar para revisão</button>');
-  if (ehCoord()) {
-    if (rasc.status === 'rascunho' || rasc.status === 'devolvido')
-      botoes.push('<button class="btn rosa" data-acao="it-enviar">Enviar para revisão</button>');
-    if (rasc.status === 'area')
-      botoes.push('<button class="btn verde" data-acao="it-aprovar-area">Aprovar → coordenação geral</button>',
-                  '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
-    if (rasc.status === 'geral')
-      botoes.push('<button class="btn verde" data-acao="it-aprovar">Aprovar item</button>',
-                  '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
-    if (rasc.status === 'aprovado')
-      botoes.push('<button class="btn fantasma" data-acao="it-reabrir">Reabrir revisão</button>');
-  }
+  if (rasc.status === 'area' && revisaArea(rasc))
+    botoes.push('<button class="btn verde" data-acao="it-aprovar-area">Aprovar → coordenação geral</button>',
+                '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
+  if (rasc.status === 'geral' && ehCoord())
+    botoes.push('<button class="btn verde" data-acao="it-aprovar">Aprovar item</button>',
+                '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
+  if (rasc.status === 'aprovado' && ehCoord())
+    botoes.push('<button class="btn fantasma" data-acao="it-reabrir">Reabrir revisão</button>');
 
   abrirDlg(`
     <div class="dlg-cab">
@@ -872,7 +936,10 @@ ACOES['it-comentar'] = () => {
   rasc.comentarios = rasc.comentarios || [];
   rasc.comentarios.push({
     autor: S.perfil.nome,
-    papel: ehCoord() ? 'coordenação' : `docente (${S.perfil.componente || ''})`,
+    papel: ehCoord() ? 'coordenação geral'
+      : ehCoordArea() ? `coord. de área (${S.perfil.area || ''})`
+      : ehRedacao() ? 'redação'
+      : `docente (${S.perfil.componente || ''})`,
     quando: agora(), texto: txt
   });
   if (rasc.id) { persistirRascunho(); save(S); }
@@ -885,159 +952,471 @@ ACOES['it-excluir'] = () => {
 };
 
 /* ================= TELA 4 · CADERNO ================= */
+// Diagramação calibrada contra os cadernos reais do PAS/CEBRASPE (edital 2025):
+// A4, duas colunas de 266pt com fio central, corpo 10pt/13,3pt, número do item
+// em 9pt recuado 18pt para fora da coluna e crédito da fonte em 6pt à direita.
+// As medidas vivem em css/estilo.css, bloco “caderno de provas”.
 let cadVersao = 'regular';
+
+const INSTRUCOES_PADRAO = [
+  'Ao receber este caderno de provas, confira se os seus dados pessoais, transcritos acima, estão corretos e coincidem com o que está registrado no seu caderno de respostas.',
+  'Verifique se este caderno contém a quantidade de itens indicada na capa. Caso o caderno esteja incompleto ou tenha qualquer defeito, solicite ao(à) aplicador(a) de provas que tome as providências necessárias.',
+  'Nos itens do <b>tipo A</b>, marque, para cada item, o campo designado com o código <b>C</b>, caso julgue o item <b>CERTO</b>, ou o campo designado com o código <b>E</b>, caso julgue o item <b>ERRADO</b>.',
+  'Nos itens do <b>tipo B</b>, marque, de acordo com o comando, o algarismo das <b>CENTENAS</b>, o das <b>DEZENAS</b> e o das <b>UNIDADES</b>. Todos esses campos devem ser obrigatoriamente marcados, mesmo que sejam iguais a zero.',
+  'Nos itens do <b>tipo C</b>, marque a única opção correta de acordo com o respectivo comando.',
+  'No item do <b>tipo D</b>, que é de resposta construída, faça o que se pede usando o espaço reservado no próprio caderno. Em caso de erro, risque com um traço simples a palavra, a frase ou o símbolo e escreva o respectivo substitutivo — parênteses não podem ser usados para essa finalidade.',
+  'Nos itens do <b>tipo A</b> e do <b>tipo C</b>, siga a recomendação de não marcar ao acaso: para cada item cuja resposta divirja do gabarito oficial, será atribuída pontuação negativa.',
+  'Não deixe de registrar suas respostas no <b>caderno de respostas</b>, único documento válido para a correção das suas provas.',
+  'Não utilize material de consulta que não seja fornecido pela escola e não se comunique com outros(as) estudantes durante a prova.',
+  'Fique atento(a) à duração da prova, já incluído o tempo destinado à transcrição das respostas para o caderno de respostas.'
+];
+
+function instrucoes() {
+  const c = S.config.instrucoes;
+  if (Array.isArray(c) && c.length) return c;
+  if (typeof c === 'string' && c.trim())
+    return c.split('\n').map(l => l.trim()).filter(Boolean);
+  return INSTRUCOES_PADRAO;
+}
 
 function htmlCapa(versao, totalItens) {
   const c = S.config;
+  const arte = c.capaImagem
+    ? `<img src="${esc(c.capaImagem)}" alt="">`
+    : '';
   return `
-  <div class="folha">
-    <div class="cab">
-      <div class="inst">COLÉGIO MARISTA<br>ÁGUAS CLARAS</div>
-      <div style="font-size:9px;color:#666;text-align:center">Aplicação: ${dataBR(c.dataAplicacao)}<br>Duração: ${esc(c.duracao)}</div>
-      <div class="sala"><small>SALA</small><span style="display:inline-block;min-width:34px">&nbsp;</span></div>
+  <div class="pas-capa">
+    <div class="pas-capa-arte">
+      ${arte}
+      <div class="pas-capa-marca">PAS<small>Simulado — Programa de Avaliação Seriada</small></div>
+      <div class="pas-capa-faixa">
+        <span>SUBPROGRAMA</span>
+        <b>${esc(String(c.dataAplicacao || '').slice(0, 4) || '—')}</b>
+        <span>${esc(c.etapa).toUpperCase()}</span>
+      </div>
     </div>
-    <div class="faixa">${esc(c.nome)} · ${esc(c.etapa)} · Caderno de Provas${versao === 'adaptada' ? ' · Versão Adaptada' : ''}</div>
-    <div class="corpo" style="text-align:center;padding:28px 24px">
-      <div style="font-size:22px;font-weight:800;color:#0d2f8a;letter-spacing:.5px">PROVA DE<br>CONHECIMENTOS</div>
-      <div style="width:56px;height:3px;background:#e5007e;margin:12px auto"></div>
-      <div style="font-size:10px;color:#333;line-height:1.6">Parte 1 — Língua Estrangeira<br>Parte 2 — Conhecimentos + Redação em Língua Portuguesa</div>
-      <div style="border:1.5px solid #0d2f8a;margin:18px 8px 0;padding:10px;text-align:left;font-size:8.5px;line-height:1.6;color:#222">
-        <b style="color:#e5007e">LEIA COM ATENÇÃO AS INSTRUÇÕES</b><br>
-        1&nbsp; Confira se este caderno contém ${totalItens} itens e uma prova de redação.<br>
-        2&nbsp; Não folheie antes de autorizado pelo chefe de sala.<br>
-        3&nbsp; A marcação do caderno de respostas é de sua responsabilidade.<br>
-        4&nbsp; Ao terminar, entregue o caderno de respostas ao aplicador.
+    <div class="pas-capa-texto">
+      <h2>LEIA COM ATENÇÃO AS INSTRUÇÕES ABAIXO.</h2>
+      <ol>${instrucoes().map(i => `<li>${i}</li>`).join('')}</ol>
+      <div class="pas-capa-obs">
+        <span class="rot">OBSERVAÇÕES</span>
+        • Este caderno contém <b>${totalItens} ${totalItens === 1 ? 'item' : 'itens'}</b>${versao === 'adaptada' ? ' (versão adaptada)' : ''}.<br>
+        • ${esc(c.nome)} · ${esc(c.etapa)} · ${esc(c.serie)}.<br>
+        • Aplicação: ${dataBR(c.dataAplicacao)} · Duração: ${esc(c.duracao)}.<br>
+        • Colégio Marista Águas Claras.
       </div>
     </div>
   </div>`;
 }
 
-function htmlFolhasTexto(versao) {
+// Frase de comando montada pela composição do bloco, como no PAS:
+// “…, julgue os itens de 11 a 19 e assinale a opção correta no item 20,
+//  que é do tipo C.”
+// `artigo` = 'o'  → “o item 5” / “os itens de 11 a 19” (objeto direto)
+// `artigo` = 'no' → “no item 5” / “nos itens de 49 a 51” (regido por “em”)
+function listaDeNumeros(ns, artigo = 'o') {
+  const um = artigo === 'no' ? 'no item' : 'o item';
+  const varios = artigo === 'no' ? 'nos itens' : 'os itens';
+  if (ns.length === 1) return `${um} ${ns[0]}`;
+  if (ns.length === 2) return `${varios} ${ns[0]} e ${ns[1]}`;
+  const seguidos = ns.every((n, i) => i === 0 || n === ns[i - 1] + 1);
+  return seguidos ? `${varios} de ${ns[0]} a ${ns[ns.length - 1]}`
+                  : `${varios} ${ns.slice(0, -1).join(', ')} e ${ns[ns.length - 1]}`;
+}
+
+function comandoDoBloco(itens, texto) {
+  const nsDe = tipo => itens.filter(e => e.item.tipo === tipo).map(e => e.numero);
+  const partes = [];
+  const a = nsDe('A'), b = nsDe('B'), cc = nsDe('C'), dd = nsDe('D');
+  if (a.length) partes.push(`julgue ${listaDeNumeros(a)}`);
+  for (const [ns, tipo] of [[b, 'B'], [dd, 'D']]) {
+    if (!ns.length) continue;
+    partes.push(`faça o que se pede ${listaDeNumeros(ns, 'no')}, que ${ns.length > 1 ? 'são' : 'é'} do tipo ${tipo}`);
+  }
+  if (cc.length)
+    partes.push(`assinale a opção correta ${listaDeNumeros(cc, 'no')}, que ${cc.length > 1 ? 'são' : 'é'} do tipo C`);
+  if (!partes.length) return '';
+  const acoes = partes.length === 1 ? partes[0]
+    : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+  const abertura = (texto.comando || '').trim() ||
+    'Considerando o texto precedente e os múltiplos aspectos a ele relacionados';
+  return `${abertura}, ${acoes}.`;
+}
+
+function htmlItem({ item, numero }) {
+  const enun = esc(item.enunciado);
+  if (item.tipo === 'C') {
+    const ops = (item.opcoes || []).map((o, i) =>
+      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${esc(o)}</p>`).join('');
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${ops}</div>`;
+  }
+  if (item.tipo === 'D') {
+    const n = Math.max(1, item.dLinhas || 10);
+    const pauta = item.dPauta !== false;
+    const linhas = Array.from({ length: n }, () => '<i></i>').join('');
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}
+      <div class="pas-pauta${pauta ? ' numerada' : ' sem-linhas'}">${pauta ? linhas : '<i style="height:' + (n * 17) + 'pt"></i>'}</div></div>`;
+  }
+  return `<div class="pas-item"><span class="n">${numero}</span> ${enun}</div>`;
+}
+
+// Peças que fluem pelas colunas. Cada peça é indivisível — itens e parágrafos
+// não se partem entre colunas, como nos cadernos impressos.
+// Prosa reflui e é justificada, como no caderno impresso; verso mantém as
+// quebras do autor; “numerado” só quando algum item precisa citar linhas.
+function htmlCorpoTexto(texto) {
+  const linhas = texto.linhas || [];
+  if (texto.formato === 'numerado')
+    return `<div class="pas-linhas">${linhas.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
+  if (texto.formato === 'verso')
+    return `<div class="pas-texto">${linhas.map(l =>
+      l.trim() ? `<p class="pas-verso">${esc(l)}</p>` : '<p>&nbsp;</p>').join('')}</div>`;
+  // prosa: linhas em branco separam parágrafos
+  const paragrafos = [];
+  let atual = [];
+  for (const l of linhas) {
+    if (l.trim()) atual.push(l.trim());
+    else if (atual.length) { paragrafos.push(atual.join(' ')); atual = []; }
+  }
+  if (atual.length) paragrafos.push(atual.join(' '));
+  return `<div class="pas-texto">${paragrafos.map(p => `<p>${esc(p)}</p>`).join('')}</div>`;
+}
+
+function pecasDoBloco(texto, itens) {
+  const pecas = [htmlCorpoTexto(texto)];
+  pecas.push(`<p class="pas-fonte">${esc(texto.fonte)}</p>`);
+  pecas.push(`<p class="pas-comando">${comandoDoBloco(itens, texto)}</p>`);
+  itens.forEach(e => pecas.push(htmlItem(e)));
+  pecas.push('<div style="height:13.3pt"></div>');   // respiro entre blocos
+  return pecas;
+}
+
+const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
+const PX_POR_PT = 4 / 3;
+
+// Mede cada peça numa régua com a largura exata da coluna.
+function medirPecas(pecas) {
+  const regua = document.createElement('div');
+  regua.className = 'pas pas-regua';
+  document.body.appendChild(regua);
+  const alturas = pecas.map(html => {
+    regua.innerHTML = html;
+    return regua.getBoundingClientRect().height / PX_POR_PT;
+  });
+  regua.remove();
+  return alturas;
+}
+
+// Distribui as peças em colunas de altura fixa, duas por página.
+function distribuir(pecas, alturas) {
+  const paginas = [];
+  let colunas = [[], []], ci = 0, altura = 0;
+  const proximaColuna = () => {
+    ci++; altura = 0;
+    if (ci > 1) { paginas.push(colunas); colunas = [[], []]; ci = 0; }
+  };
+  pecas.forEach((html, i) => {
+    const alt = alturas[i];
+    if (altura > 0 && altura + alt > ALTURA_COLUNA) proximaColuna();
+    colunas[ci].push(html);
+    altura += alt;
+  });
+  if (colunas[0].length || colunas[1].length) paginas.push(colunas);
+  return paginas;
+}
+
+function htmlPagina(colunas, ident, numero, total) {
+  return `
+  <div class="pas-pagina">
+    <div class="pas-ident">${ident}</div>
+    <div class="pas-fio-topo"></div>
+    <div class="pas-parte">-- PARTE 2 --</div>
+    <div class="pas-fio-vert"></div>
+    <div class="pas-corpo">
+      <div class="pas-col">${colunas[0].join('')}</div>
+      <div class="pas-col">${colunas[1].join('')}</div>
+    </div>
+    <div class="pas-fio-base"></div>
+    <div class="pas-fol">${numero} / ${total}</div>
+  </div>`;
+}
+
+// Monta o caderno inteiro já paginado. Precisa do DOM para medir as peças.
+function htmlCaderno(versao, comCapa = true) {
   const pv = prova(versao);
+  if (!pv.length) return '';
   const porTexto = new Map();
   for (const e of pv) {
     if (!porTexto.has(e.texto.id)) porTexto.set(e.texto.id, { texto: e.texto, itens: [] });
     porTexto.get(e.texto.id).itens.push(e);
   }
-  return [...porTexto.values()].map(({ texto, itens }) => {
-    const ns = itens.map(e => e.numero);
-    const corpoTx = texto.linhas.map((l, i) =>
-      `<div class="tx-num"><span class="n">${i + 1}</span><span>${esc(l)}</span></div>`).join('');
-    const tiposA = itens.filter(e => e.item.tipo === 'A');
-    const comando = tiposA.length
-      ? `<div style="break-inside:avoid;font-size:8.5px;margin:6px 0 4px"><b>Com base no texto ${texto.numero}, julgue os itens ${tiposA.length > 1 ? 'de ' + tiposA[0].numero + ' a ' + tiposA[tiposA.length - 1].numero : tiposA[0].numero}.</b></div>` : '';
-    const corpoItens = itens.map(({ item, numero }) => {
-      if (item.tipo === 'C') {
-        const ops = item.opcoes.map((o, i) => `<li><b>${'ABCD'[i]}</b> ${esc(o)}</li>`).join('');
-        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}<ul class="opcoes">${ops}</ul></div>`;
-      }
-      if (item.tipo === 'B') {
-        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)} <span style="color:#555">Marque o resultado no caderno de respostas (000 a 999).</span></div>`;
-      }
-      if (item.tipo === 'D') {
-        const n = Math.max(1, item.dLinhas || 10);
-        const pauta = item.dPauta !== false;
-        const espaco = pauta
-          ? Array.from({ length: n }, () => '<div style="height:13px;border-bottom:0.7px solid #999"></div>').join('')
-          : `<div style="height:${n * 13}px;border:0.7px solid #bbb"></div>`;
-        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}
-          <span style="color:#555">Responda no espaço abaixo${pauta ? '' : ' (sem linhas)'}.</span>
-          <div style="margin-top:6px">${espaco}</div></div>`;
-      }
-      return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}</div>`;
-    }).join('');
-    return `
-    <div class="folha">
-      <div class="faixa">Texto ${texto.numero} · ${ns.length > 1 ? 'itens de ' + ns[0] + ' a ' + ns[ns.length - 1] : 'item ' + ns[0]}</div>
-      <div class="corpo"><div class="colunas">
-        <div style="break-inside:avoid;margin-bottom:8px">
-          <b style="font-size:9.5px;color:#0d2f8a">Texto ${texto.numero} — ${esc(texto.titulo)}</b>
-          <div style="margin-top:6px">${corpoTx}</div>
-          <div style="font-size:7px;color:#777;margin-top:4px">${esc(texto.fonte)}.</div>
-        </div>
-        ${comando}${corpoItens}
-      </div></div>
-    </div>`;
-  }).join('');
+  const pecas = [...porTexto.values()].flatMap(({ texto, itens }) => pecasDoBloco(texto, itens));
+  const paginas = distribuir(pecas, medirPecas(pecas));
+  const ident = `${esc(S.config.nome)} — ${esc(S.config.etapa)}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
+  const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(versao, pv.length)}</div>` : '';
+  const total = paginas.length + (comCapa ? 1 : 0);
+  return `<div class="pas">${capa}${paginas
+    .map((c, i) => htmlPagina(c, ident, i + 1 + (comCapa ? 1 : 0), total)).join('')}</div>`;
 }
 
 function telaCaderno() {
   const pv = prova(cadVersao);
-  const html = pv.length ? htmlCapa(cadVersao, pv.length) + htmlFolhasTexto(cadVersao) : '';
   $('#app').innerHTML = `
   <div class="quadro">
     <div class="miolo" style="padding-bottom:0">
       <div class="cab-tela">
         <div><h2>Caderno de provas</h2>
-          <span class="sub">${pv.length} itens aprovados nesta versão · numeração contínua por texto</span></div>
+          <span class="sub">${pv.length} itens aprovados nesta versão · numeração contínua · diagramação no padrão PAS</span></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="seg">
             <button class="${cadVersao === 'regular' ? 'sel' : ''}" data-acao="cad-versao" data-v="regular">Regular</button>
             <button class="${cadVersao === 'adaptada' ? 'sel' : ''}" data-acao="cad-versao" data-v="adaptada">Adaptada</button>
           </div>
-          <button class="btn rosa" data-acao="cad-imprimir" ${pv.length ? '' : 'disabled'}>🖨 Imprimir caderno</button>
+          ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-capa">⚙ Capa e instruções</button>' : ''}
+          <button class="btn rosa" data-acao="cad-imprimir" ${pv.length ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
         </div>
       </div>
     </div>
-    ${pv.length ? `<div class="papelaria">${html}</div>`
+    ${pv.length ? `<div class="pas-previa">${htmlCaderno(cadVersao)}</div>`
       : '<div class="miolo"><div class="vazio">Nenhum item aprovado para esta versão ainda. Aprove itens na tela “Itens e revisão”.</div></div>'}
   </div>
-  <p class="nota-tela"><strong>Compromisso de fidelidade (fase de calibração):</strong> esta é a diagramação do MVP — a versão final será calibrada página a página contra os PDFs reais do PAS (tipografia, comandos, numeração de linhas de 3 em 3, quebra de páginas). Use “Imprimir” e escolha “Salvar como PDF” no navegador para gerar o arquivo.</p>`;
+  <p class="nota-tela"><strong>Diagramação calibrada</strong> contra os cadernos do PAS/CEBRASPE de 2025: A4 com duas colunas de 266pt e fio central, corpo de 10pt, número do item recuado para fora da coluna e crédito da fonte em 6pt. O <strong>comando de cada bloco é montado automaticamente</strong> a partir dos tipos de item — “julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C” —, e o texto de abertura é editável em cada texto-base. A quebra de páginas acontece na impressão: use “Imprimir” e escolha “Salvar como PDF”.</p>`;
 }
 ACOES['cad-versao'] = d => { cadVersao = d.v; render(); };
 ACOES['cad-imprimir'] = () => {
-  const pv = prova(cadVersao);
-  $('#print-area').innerHTML = htmlCapa(cadVersao, pv.length) + htmlFolhasTexto(cadVersao);
+  $('#print-area').innerHTML = htmlCaderno(cadVersao);
   window.print();
 };
 
+ACOES['cad-capa'] = () => {
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Capa e instruções do caderno</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <div class="campo" style="margin-bottom:12px"><label>Imagem da capa (endereço)</label>
+        <input class="caixa" id="cp-img" value="${esc(S.config.capaImagem || '')}"
+          placeholder="https://… — imagem inspirada nos textos ou no tema da redação"></div>
+      <div class="campo"><label>Instruções (uma por linha, numeradas automaticamente)</label>
+        <textarea class="caixa" id="cp-instr" rows="10">${esc(instrucoes().join('\n'))}</textarea></div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Aceita <code>&lt;b&gt;</code> para destacar termos, como no caderno original.</p>
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="cad-capa-padrao">Restaurar padrão</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="cad-capa-salvar">Salvar</button></div>`);
+};
+ACOES['cad-capa-padrao'] = () => { $('#cp-instr').value = INSTRUCOES_PADRAO.join('\n'); };
+ACOES['cad-capa-salvar'] = () => {
+  S.config.capaImagem = $('#cp-img').value.trim();
+  S.config.instrucoes = $('#cp-instr').value.split('\n').map(l => l.trim()).filter(Boolean);
+  $('#dlg').close(); commit(); PERS.config(); toast('Capa atualizada.');
+};
+
 /* ================= TELA 5 · CARTÕES ================= */
-function htmlCartao(est) {
-  const pv = prova(est.versao);
-  // Discursivos (tipo D) são respondidos no próprio caderno — fora do cartão.
-  const ac = pv.filter(e => e.item.tipo === 'A' || e.item.tipo === 'C');
-  const bs = pv.filter(e => e.item.tipo === 'B');
-  const cols = [];
-  for (let i = 0; i < ac.length; i += 5) cols.push(ac.slice(i, i + 5));
-  const colsHtml = cols.map(col => `
-    <div class="cr-col">
-      <h5>ITENS ${col[0].numero}–${col[col.length - 1].numero}</h5>
-      ${col.map(({ item, numero }) => {
-        const resp = TIPOS[item.tipo].respostas;
-        return `<div class="cr-linha"><span class="no">${numero}</span>${resp.map(r => `<span class="bolha"></span>${r}`).join(' ')}</div>`;
-      }).join('')}
-    </div>`).join('');
-  const bsHtml = bs.map(({ numero }) => `
-    <div class="cr-b"><h5>ITEM ${numero} — TIPO B (resposta de 000 a 999)</h5>
-      ${['Centena', 'Dezena', 'Unidade'].map(casa => `
-        <div class="dig"><span>${casa}</span>${Array.from({ length: 10 }, (_, i) => `<span class="bolha"></span>${i}`).join(' ')}</div>`).join('')}
-    </div>`).join('');
+// Conjunto de folhas por estudante, no desenho do caderno de respostas do PAS:
+//   folha 1 — objetiva: todos os itens em ordem numérica ocupando 4/5 da folha
+//             (só A e C recebem bolhas; B e D ficam rotulados) e uma coluna à
+//             direita só para os tipo B, com centena, dezena e unidade;
+//   folha 2 — discursiva: uma pauta por item tipo D e as bolhas de percentual
+//             de acerto (0, 25, 50, 75, 100%), marcadas por quem corrige;
+//   folha 3 — redação: pauta de 30 linhas de 17pt. Opcional, definido pela
+//             coordenação em “Configurar simulado”.
+const SENHA_PROVISORIA = 'Marista@2026';
+const PERCENTUAIS_D = [0, 25, 50, 75, 100];
+const COLUNAS_CARTAO = 4;
+const LINHAS_REDACAO = 30;
+// Capacidade de uma folha A4 neste desenho — o que não couber vai para uma
+// folha de continuação, em vez de ser cortado em silêncio.
+const LINHAS_POR_COLUNA = 42;
+const BLOCOS_B_POR_COLUNA = 5;
+const BLOCOS_B_POR_FOLHA = 10;   // a coluna se desdobra em duas antes de virar folha nova
+const ALTURA_UTIL_D = 650;
+
+function cabecalhoCartao(est, faixa) {
   const c = S.config;
   return `
-  <div class="folha" style="width:520px">
-    <div class="cab">
-      <div class="inst">COLÉGIO MARISTA ÁGUAS CLARAS<br><span style="color:#e5007e">${esc(c.nome).toUpperCase()} · ${esc(c.etapa).toUpperCase()}</span></div>
-      <div style="font-size:8px;color:#333;line-height:1.5">Estudante: <b>${esc(est.nome).toUpperCase()}</b><br>
-        Matrícula: <b style="font-family:var(--mono)">${esc(est.matricula)}</b> · ${esc(est.turma)} · ${est.versao === 'adaptada' ? 'Adaptada' : 'Regular'}</div>
-      <div class="sala"><small>SALA</small><span style="display:inline-block;min-width:34px">&nbsp;</span></div>
+  <div class="cr-cab">
+    <div class="cr-cab-prova">
+      <b>${esc(c.nome)}</b>
+      <span>${esc(c.etapa)} · ${esc(c.serie)}</span>
+      <span>Colégio Marista Águas Claras</span>
+      <span>Aplicação: ${dataBR(c.dataAplicacao)}</span>
     </div>
-    <div class="faixa">Caderno de Respostas — uso exclusivo do estudante</div>
-    <div class="corpo">
-      <div class="ancoras"><i></i><i></i></div>
-      <div style="font-size:7.5px;color:#555;border:1px solid #efc3da;border-radius:4px;padding:6px;margin-bottom:8px">
-        As marcações devem ser feitas com caneta esferográfica de tinta <b>preta</b>, preenchendo totalmente o círculo.
-        Itens tipo A: marque C ou E. Tipo C: apenas uma opção. Tipo B: marque os três algarismos.
-        Itens discursivos (tipo D) são respondidos no próprio caderno de provas.
-      </div>
-      ${ac.length ? '<b style="font-size:8.5px;color:#e5007e">RESPOSTAS AOS ITENS DOS TIPOS A e C</b>' : ''}
-      <div class="cr-grid">${colsHtml}</div>
-      ${bsHtml}
-      <div style="margin-top:10px;font-size:7.5px;color:#999;display:flex;justify-content:space-between;font-family:var(--mono)">
-        <span>▮▯▮▮▯▮▮▯ ${esc(est.matricula)}</span><span>${esc(est.turma)}</span>
-      </div>
-      <div class="ancoras"><i></i><i></i></div>
+    <div class="cr-cab-est">
+      <div><span>ESTUDANTE</span><b>${esc(est.nome).toUpperCase()}</b></div>
+      <div><span>MATRÍCULA</span><b>${esc(est.matricula)}</b></div>
+      <div><span>TURMA</span><b>${esc(est.turma)}</b></div>
+      <div><span>PROVA</span><b>${est.versao === 'adaptada' ? 'ADAPTADA' : 'REGULAR'}</b></div>
     </div>
+    <div class="cr-sala"><small>SALA</small><i></i></div>
+  </div>
+  <div class="cr-faixa">${faixa}</div>
+  <div class="cr-ancoras"><i></i><i></i></div>`;
+}
+
+function rodapeCartao(est, folha, total) {
+  return `
+  <div class="cr-ancoras"><i></i><i></i></div>
+  <div class="cr-rodape">
+    <span>▮▯▮▮▯▮▮▯ ${esc(est.matricula)}</span>
+    <span>folha ${folha} de ${total}</span>
   </div>`;
+}
+
+function bolhasDe(tipo) {
+  return TIPOS[tipo].respostas.map(r =>
+    `<span class="bolha"></span><span>${r}</span>`).join('');
+}
+
+// Folhas objetivas — todos os itens em ordem numérica; só A e C recebem
+// bolhas aqui. Quando não cabem numa folha, seguem em folhas de continuação.
+function corposObjetivos(pv) {
+  const bs = pv.filter(e => e.item.tipo === 'B');
+  const porFolha = COLUNAS_CARTAO * LINHAS_POR_COLUNA;
+  const quantas = Math.max(Math.ceil(pv.length / porFolha),
+                           Math.ceil(bs.length / BLOCOS_B_POR_FOLHA), 1);
+  const corpos = [];
+  for (let f = 0; f < quantas; f++) {
+    const daFolha = pv.slice(f * porFolha, (f + 1) * porFolha);
+    const bsDaFolha = bs.slice(f * BLOCOS_B_POR_FOLHA, (f + 1) * BLOCOS_B_POR_FOLHA);
+    const porColuna = Math.ceil(daFolha.length / COLUNAS_CARTAO) || 1;
+    const colunas = [];
+    for (let i = 0; i < daFolha.length; i += porColuna) colunas.push(daFolha.slice(i, i + porColuna));
+
+    const acHtml = colunas.map(col => `
+      <div class="cr-ac-col">
+        <div class="cr-tit">ITENS ${col[0].numero}–${col[col.length - 1].numero}</div>
+        ${col.map(({ item, numero }) => {
+          if (item.tipo === 'B')
+            return `<div class="cr-linha outro"><span class="no">${numero}</span><span class="rot">TIPO B →</span></div>`;
+          if (item.tipo === 'D')
+            return `<div class="cr-linha outro"><span class="no">${numero}</span><span class="rot">TIPO D ↗</span></div>`;
+          return `<div class="cr-linha"><span class="no">${numero}</span>${bolhasDe(item.tipo)}</div>`;
+        }).join('')}
+      </div>`).join('');
+
+    const bHtml = bsDaFolha.length ? bsDaFolha.map(({ numero }) => `
+      <div class="cr-bloco-b">
+        <h6>ITEM ${numero}</h6>
+        <div class="cr-bgrade">
+          <span></span><span class="cab">C</span><span class="cab">D</span><span class="cab">U</span>
+          ${Array.from({ length: 10 }, (_, d) => `
+            <span class="dig">${d}</span>
+            <span class="cel"><span class="bolha"></span></span>
+            <span class="cel"><span class="bolha"></span></span>
+            <span class="cel"><span class="bolha"></span></span>`).join('')}
+        </div>
+      </div>`).join('')
+      : `<div style="font-size:6.5pt;color:#777;text-align:center;padding:8pt 4pt">${
+          bs.length ? 'Os itens do tipo B estão nas outras folhas.' : 'Esta prova não tem itens do tipo B.'}</div>`;
+
+    const soB = daFolha.length === 0;
+    corpos.push({
+      faixa: soB ? 'Caderno de respostas — itens do tipo B (continuação)'
+        : `Caderno de respostas — itens dos tipos A, B e C${quantas > 1 ? ` (${f + 1}ª parte)` : ''}`,
+      html: `
+        <div class="cr-orient">
+          <div class="txt">
+            Marque com caneta esferográfica de tinta <b>preta</b>, preenchendo o círculo por inteiro.
+            Itens do <b>tipo A</b>: marque <b>C</b> se julgar o item certo ou <b>E</b> se julgar errado.
+            Itens do <b>tipo C</b>: marque uma única opção. Itens do <b>tipo B</b>: marque os três
+            algarismos na coluna à direita, inclusive os zeros. Itens do <b>tipo D</b> são respondidos
+            na folha indicada. Não rasure: marcação dupla é anulada.
+          </div>
+          <div class="cr-exemplo">
+            <h6>EXEMPLO DE PREENCHIMENTO</h6>
+            <div class="ex"><i>tipo A</i><span class="bolha m"></span><span>C</span><span class="bolha"></span><span>E</span></div>
+            <div class="ex"><i>tipo C</i><span class="bolha"></span><span>A</span><span class="bolha m"></span><span>B</span><span class="bolha"></span><span>C</span><span class="bolha"></span><span>D</span></div>
+            <div class="ex"><i>tipo B</i><span>resposta 025 → C=0, D=2, U=5</span></div>
+          </div>
+        </div>
+        <div class="cr-corpo">
+          ${soB ? '' : `<div class="cr-ac">${acHtml}</div>`}
+          <div class="cr-bcol${bsDaFolha.length > BLOCOS_B_POR_COLUNA ? ' duplo' : ''}" ${soB ? 'style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:6pt;align-content:start"' : ''}>
+            ${soB ? '' : '<div class="cr-tit">ITENS DO TIPO B</div>'}${bHtml}</div>
+        </div>`
+    });
+  }
+  return corpos;
+}
+
+// Folhas dos discursivos (tipo D): uma pauta por item e as bolhas de
+// percentual de acerto. Quebra em mais folhas quando a altura não dá.
+function corposDiscursivos(pv) {
+  const ds = pv.filter(e => e.item.tipo === 'D');
+  if (!ds.length) return [];
+  const altura = e => 40 + (e.item.dLinhas || 10) * 17;
+  const grupos = [];
+  let grupo = [], soma = 0;
+  for (const e of ds) {
+    const a = altura(e);
+    if (grupo.length && soma + a > ALTURA_UTIL_D) { grupos.push(grupo); grupo = []; soma = 0; }
+    grupo.push(e); soma += a;
+  }
+  if (grupo.length) grupos.push(grupo);
+
+  return grupos.map((g, i) => ({
+    faixa: `Caderno de respostas — itens do tipo D (resposta construída)${grupos.length > 1 ? ` (${i + 1}ª parte)` : ''}`,
+    html: `
+      <div class="cr-orient">
+        <div class="txt">
+          Responda com caneta esferográfica de tinta <b>preta</b>, dentro do espaço reservado a cada item.
+          Em caso de erro, risque a palavra com um traço simples e escreva o substitutivo — não use parênteses.
+          O quadro de <b>percentual de acerto</b> é de uso exclusivo de quem corrige.
+        </div>
+      </div>
+      <div style="flex:1;overflow:hidden">
+        ${g.map(({ item, numero }) => `
+          <div class="cr-d">
+            <div class="cr-d-cab">
+              <b>ITEM ${numero}</b>
+              <span>${esc(item.componente)} · resposta construída</span>
+            </div>
+            <div class="cr-pauta">${Array.from({ length: item.dLinhas || 10 }, () => '<i></i>').join('')}</div>
+            <div class="cr-nota">
+              <b>PERCENTUAL DE ACERTO (uso do corretor)</b>
+              ${PERCENTUAIS_D.map(p => `<span class="op"><span class="bolha"></span>${p}%</span>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>`
+  }));
+}
+
+// Folha da redação, com a pauta do rascunho oficial (30 linhas de 17pt).
+function corpoRedacao() {
+  return {
+    faixa: 'Caderno de respostas — redação em língua portuguesa',
+    html: `
+      <div class="cr-orient">
+        <div class="txt">
+          Escreva o texto definitivo com caneta esferográfica de tinta <b>preta</b>, respeitando o limite de
+          ${LINHAS_REDACAO} linhas. Texto escrito a lápis não é considerado. <b>Não identifique</b> sua folha:
+          qualquer marca de identificação anula a redação.
+        </div>
+      </div>
+      <div class="cr-red-pauta">${Array.from({ length: LINHAS_REDACAO }, () => '<i></i>').join('')}</div>
+      <div style="flex:1"></div>`
+  };
+}
+
+// Todas as folhas de um estudante, já numeradas “folha N de M”.
+function corposDoCartao(est) {
+  const pv = prova(est.versao);
+  const corpos = [...corposObjetivos(pv), ...corposDiscursivos(pv)];
+  if (S.config.imprimirRedacao !== false) corpos.push(corpoRedacao());
+  return corpos;
+}
+
+const totalFolhas = est => corposDoCartao(est).length;
+
+function folhasDoCartao(est) {
+  const corpos = corposDoCartao(est);
+  return corpos.map((c, i) => `
+    <div class="cr-folha">
+      ${cabecalhoCartao(est, c.faixa)}
+      ${c.html}
+      ${rodapeCartao(est, i + 1, corpos.length)}
+    </div>`).join('');
 }
 
 let cartTurma = 'todas';
@@ -1048,20 +1427,22 @@ function telaCartoes() {
   const linhas = filtrados.map(e => `
     <tr><td>${esc(e.nome)}</td><td style="font-family:var(--mono)">${esc(e.matricula)}</td>
       <td>${esc(e.turma)}</td><td style="text-transform:capitalize">${esc(e.versao)}</td>
+      <td>${totalFolhas(e)}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="est-editar" data-id="${e.id}">Editar</button>
         <button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>
       </td></tr>`).join('');
   const opsTurma = ['todas', ...turmas].map(t =>
     `<option value="${t}" ${cartTurma === t ? 'selected' : ''}>${t === 'todas' ? 'Todas as turmas' : t}</option>`).join('');
-  const previa = filtrados.slice(0, 1).map(htmlCartao).join('');
+  const previa = filtrados.slice(0, 1).map(folhasDoCartao).join('');
   const nRegItens = prova('regular').length, nAdaItens = prova('adaptada').length;
+  const folhasTotal = filtrados.reduce((s, e) => s + totalFolhas(e), 0);
 
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Estudantes e cartões-resposta</h2>
-        <span class="sub">${S.estudantes.length} estudantes · cartão nominal gerado por versão de prova</span></div>
+        <span class="sub">${S.estudantes.length} estudantes · ${folhasTotal} folha(s) a imprimir e digitalizar no filtro atual</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="caixa" style="width:auto" data-mud="cart-turma">${opsTurma}</select>
         <button class="btn fantasma" data-acao="est-importar">⬆ Importar lista (CSV)</button>
@@ -1069,16 +1450,16 @@ function telaCartoes() {
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
     </div>
-    ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th></th></tr></thead>
+    ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th>Folhas</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : '<div class="vazio">Nenhum estudante cadastrado. Importe a lista (CSV: nome;matrícula;turma;versão) ou cadastre um a um.</div>'}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn fantasma" data-acao="cart-template">⬇ Exportar gabarito p/ leitor local (JSON)</button>
     </div>
   </div>
-  ${previa && (nRegItens + nAdaItens) ? `<div class="papelaria"><div style="width:100%;text-align:center;font-size:12px;color:#6b5f52;margin-bottom:-10px">Prévia — 1º cartão do filtro atual</div>${previa}</div>` : ''}
+  ${previa && (nRegItens + nAdaItens) ? `<div class="cr-previa"><div style="width:100%;text-align:center;font-size:12px;color:#6b5f52;margin-bottom:10px">Prévia — folhas do 1º estudante do filtro</div>${previa}</div>` : ''}
   </div>
-  <p class="nota-tela"><strong>Integração com o app local (Windows):</strong> as âncoras pretas e o código de matrícula permitem identificar e ler cada folha digitalizada em lote no scanner. O botão “Exportar gabarito p/ leitor local” gera o arquivo JSON que o aplicativo de leitura óptica usa para saber quantos itens e de que tipo procurar — o resultado volta como CSV importado na tela de Correção.</p>`;
+  <p class="nota-tela"><strong>Cada estudante tem mais de uma folha</strong> — objetiva, discursiva (quando houver item tipo D) e redação, se a coordenação optar por imprimi-la. Todas trazem cabeçalho com nome, matrícula e turma, âncoras de leitura óptica nos cantos e a identificação “folha N de M”, para que a digitalização em lote saiba a qual estudante e a qual parte da prova cada imagem pertence. Os itens dos tipos B e D aparecem rotulados na grade principal e têm campos próprios: o tipo B na coluna à direita, com centena, dezena e unidade; o tipo D na folha seguinte, com a pauta de resposta e as bolhas de percentual de acerto (0, 25, 50, 75 e 100%) preenchidas por quem corrige.</p>`;
 }
 MUDS['cart-turma'] = (d, el) => { cartTurma = el.value; render(); };
 
@@ -1148,19 +1529,34 @@ ACOES['est-importar-ok'] = () => {
 ACOES['cart-imprimir'] = () => {
   const filtrados = S.estudantes.filter(e => cartTurma === 'todas' || e.turma === cartTurma)
     .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
-  $('#print-area').innerHTML = filtrados.map(htmlCartao).join('');
+  $('#print-area').innerHTML = filtrados.map(folhasDoCartao).join('');
   window.print();
 };
 ACOES['cart-template'] = () => {
+  // O leitor óptico precisa saber que cada estudante tem mais de uma folha e
+  // o que procurar em cada uma.
+  const daVersao = v => {
+    const pv = prova(v);
+    const folhas = [{
+      folha: 1, tipo: 'objetiva',
+      itens: pv.filter(({ item }) => item.tipo !== 'D')
+        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
+    }];
+    const ds = pv.filter(({ item }) => item.tipo === 'D');
+    if (ds.length) folhas.push({
+      folha: folhas.length + 1, tipo: 'discursiva', percentuais: PERCENTUAIS_D,
+      itens: ds.map(({ item, numero }) => ({ numero, tipo: 'D', linhas: item.dLinhas || 10 }))
+    });
+    if (S.config.imprimirRedacao !== false)
+      folhas.push({ folha: folhas.length + 1, tipo: 'redacao', linhas: LINHAS_REDACAO });
+    return { totalItens: pv.length, folhas };
+  };
   const tpl = {
-    formato: 'pas-marista/gabarito-v1',
+    formato: 'pas-marista/gabarito-v2',
     simulado: S.config.nome, etapa: S.config.etapa,
     geradoEm: new Date().toISOString(),
-    versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v,
-      // Discursivos (D) ficam fora: não têm bolhas no cartão.
-      prova(v).filter(({ item }) => item.tipo !== 'D')
-        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
-    ]))
+    identificacao: { chave: 'matricula', ancoras: 'quatro quadrados pretos, dois no topo e dois no rodapé de cada folha' },
+    versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)]))
   };
   baixar('pas-gabarito-leitor.json', JSON.stringify(tpl, null, 2));
   toast('Gabarito exportado para o leitor local.');
@@ -1213,8 +1609,12 @@ function tabelaDiscursivos() {
       const aplicavel = i.versao === 'ambas' || i.versao === e.versao;
       if (!aplicavel) return '<td style="color:var(--ink-2)">—</td>';
       const v = S.respostas[e.id]?.discursivas?.[i.id];
-      return `<td><input class="caixa" style="width:78px" type="number" step="0.5" min="0" max="10" placeholder="—"
-        value="${v ?? ''}" data-mud="dnota" data-est="${e.id}" data-item="${i.id}"></td>`;
+      // Os mesmos cinco níveis do cartão-resposta (0, 25, 50, 75 e 100%),
+      // guardados como nota de 0 a 10.
+      const ops = ['<option value="">—</option>', ...PERCENTUAIS_D.map(p =>
+        `<option value="${p / 10}" ${Number(v) === p / 10 ? 'selected' : ''}>${p}%</option>`)].join('');
+      return `<td><select class="caixa" style="width:82px"
+        data-mud="dnota" data-est="${e.id}" data-item="${i.id}">${ops}</select></td>`;
     }).join('');
     return `<tr><td>${esc(e.nome)}</td><td>${esc(e.turma)}</td>${cels}</tr>`;
   }).join('');
@@ -1248,7 +1648,7 @@ function telaCorrecaoDiscursivos() {
 
 function telaCorrecao() {
   if (ehRedacao()) { telaCorrecaoRedacao(); return; }
-  if (S.perfil.papel === 'docente') { telaCorrecaoDiscursivos(); return; }
+  if (!ehCoord()) { telaCorrecaoDiscursivos(); return; }
   const comResp = S.estudantes.filter(e => corrigir(e).temResp);
   const est = S.estudantes.find(e => e.id === corrEstId) || null;
   const turmas = [...new Set(S.estudantes.map(e => e.turma))].sort();
@@ -1499,7 +1899,8 @@ ACOES['bol-imprimir'] = () => {
 // não do que a pessoa declara ao entrar. A coordenação cria as contas aqui
 // (a Edge Function `equipe` é a única que conhece a chave de serviço).
 const PAPEIS = {
-  coordenacao: 'Coordenação',
+  coordenacao: 'Coordenação pedagógica',
+  coordenacao_area: 'Coordenação de área',
   docente: 'Docente',
   redacao: 'Professora de redação'
 };
@@ -1529,8 +1930,9 @@ function telaEquipe() {
     <tr>
       <td>${esc(m.nome || '—')}${m.email === meuEmail ? ' <span class="chip info">você</span>' : ''}</td>
       <td style="font-family:var(--mono);font-size:12.5px">${esc(m.email)}</td>
-      <td>${esc(PAPEIS[m.papel] || m.papel)}</td>
+      <td>${esc(PAPEIS[m.papel] || m.papel)}${m.area ? `<br><span style="font-size:11px;color:var(--ink-2)">${esc(m.area)}</span>` : ''}</td>
       <td>${m.componente ? discChip(m.componente) : '—'}</td>
+      <td>${m.trocar_senha ? '<span class="chip pend">senha provisória</span>' : '<span class="chip ok">ativo</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="equipe-editar" data-email="${esc(m.email)}">Editar</button>
         <button class="btn mini fantasma" data-acao="equipe-senha" data-email="${esc(m.email)}">Nova senha</button>
@@ -1547,7 +1949,7 @@ function telaEquipe() {
       <button class="btn" data-acao="equipe-nova">+ Adicionar pessoa</button>
     </div>
     ${linhas ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Componente</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Componente</th><th>Acesso</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table></div>`
       : '<div class="vazio">Nenhuma pessoa cadastrada além de você.</div>'}
   </div></div>
@@ -1558,8 +1960,10 @@ function dlgMembro(m) {
   const novo = !m;
   const opsPapel = Object.entries(PAPEIS).map(([k, v]) =>
     `<option value="${k}" ${m?.papel === k ? 'selected' : ''}>${v}</option>`).join('');
-  const opsComp = Object.keys(COMPONENTES).map(c =>
-    `<option ${m?.componente === c ? 'selected' : ''}>${c}</option>`).join('');
+  const opsComp = ['<option value="">— nenhum —</option>', ...Object.keys(COMPONENTES).map(c =>
+    `<option ${m?.componente === c ? 'selected' : ''}>${c}</option>`)].join('');
+  const opsArea = Object.keys(AREAS).map(a =>
+    `<option ${m?.area === a ? 'selected' : ''}>${a}</option>`).join('');
   abrirDlg(`
     <div class="dlg-cab"><h2>${novo ? 'Adicionar pessoa à equipe' : 'Editar ' + esc(m.nome || m.email)}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
@@ -1574,14 +1978,17 @@ function dlgMembro(m) {
       <div class="form-linha">
         <div class="campo"><label>Papel</label>
           <select class="caixa" id="eq-papel" data-mud="eq-papel">${opsPapel}</select></div>
-        <div class="campo" id="eq-comp-wrap" style="${(m?.papel || 'coordenacao') === 'docente' ? '' : 'display:none'}">
-          <label>Componente</label><select class="caixa" id="eq-comp">${opsComp}</select></div>
+        <div class="campo" id="eq-area-wrap" style="${m?.papel === 'coordenacao_area' ? '' : 'display:none'}">
+          <label>Área que coordena</label><select class="caixa" id="eq-area">${opsArea}</select></div>
+        <div class="campo" id="eq-comp-wrap" style="${['docente', 'coordenacao_area'].includes(m?.papel || 'coordenacao') ? '' : 'display:none'}">
+          <label>Componente que leciona</label><select class="caixa" id="eq-comp">${opsComp}</select></div>
       </div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 10px">A coordenação de área também escreve itens: ela revisa a primeira etapa dos itens da sua área e produz os seus próprios.</p>
       ${novo ? `
         <div class="campo" style="margin-bottom:10px"><label>Senha provisória</label>
-          <input class="caixa" id="eq-senha" value="${senhaProvisoria()}" style="font-family:var(--mono)"></div>
+          <input class="caixa" id="eq-senha" value="${SENHA_PROVISORIA}" style="font-family:var(--mono)"></div>
         <p style="font-size:12.5px;color:var(--ink-2);margin:0">A conta é criada já liberada — nenhum e-mail de confirmação é enviado.
-          Entregue esta senha à pessoa; ela poderá trocá-la depois de entrar.</p>`
+          Entregue esta senha à pessoa; <b>o sistema exige que ela crie a própria senha no primeiro acesso</b>.</p>`
         : '<p style="font-size:12.5px;color:var(--ink-2);margin:0">Para trocar a senha desta pessoa, use “Nova senha” na lista.</p>'}
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
@@ -1589,7 +1996,9 @@ function dlgMembro(m) {
         ${novo ? 'Criar conta' : 'Salvar'}</button></div>`);
 }
 MUDS['eq-papel'] = () => {
-  $('#eq-comp-wrap').style.display = $('#eq-papel').value === 'docente' ? '' : 'none';
+  const papel = $('#eq-papel').value;
+  $('#eq-area-wrap').style.display = papel === 'coordenacao_area' ? '' : 'none';
+  $('#eq-comp-wrap').style.display = ['docente', 'coordenacao_area'].includes(papel) ? '' : 'none';
 };
 
 ACOES['equipe-nova'] = () => dlgMembro(null);
@@ -1600,7 +2009,8 @@ function dadosDoFormulario() {
   return {
     nome: $('#eq-nome').value.trim(),
     papel,
-    componente: papel === 'docente' ? $('#eq-comp').value : null
+    area: papel === 'coordenacao_area' ? $('#eq-area').value : null,
+    componente: ['docente', 'coordenacao_area'].includes(papel) ? ($('#eq-comp').value || null) : null
   };
 }
 
@@ -1713,7 +2123,9 @@ ACOES['minha-conta'] = () => {
           <input class="caixa" id="mc-senha2" type="password" autocomplete="new-password"></div>
       </div>
     </div>
-    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="rever-tutorial">Rever o tutorial</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="minha-senha-ok">Trocar senha</button></div>`);
 };
 ACOES['minha-senha-ok'] = async (d, botao) => {
@@ -1730,6 +2142,191 @@ ACOES['minha-senha-ok'] = async (d, botao) => {
     toast('Não foi possível trocar a senha: ' + (e.message || e));
   }
 };
+
+/* ================= PRIMEIRO ACESSO ================= */
+// Duas etapas obrigatórias na estreia de cada pessoa: trocar a senha
+// provisória e ver o tutorial do próprio papel. Os dois marcadores ficam na
+// tabela `equipe` (funções `marcar_senha_trocada` e `marcar_tutorial_visto`),
+// então valem em qualquer navegador.
+
+function telaTrocarSenha() {
+  $('#app').innerHTML = `
+  <div class="quadro" style="max-width:520px;margin:36px auto"><div class="miolo">
+    <h2 style="font-size:19px;margin-bottom:4px">Crie a sua senha</h2>
+    <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 16px">
+      Você entrou com a senha provisória da escola. Antes de continuar, defina uma senha sua —
+      ela vale para <b>${esc(nuvem.usuario()?.email || '')}</b>.</p>
+    <div class="form-linha">
+      <div class="campo"><label>Nova senha</label>
+        <input class="caixa" id="ps-1" type="password" autocomplete="new-password"></div>
+      <div class="campo"><label>Repita a nova senha</label>
+        <input class="caixa" id="ps-2" type="password" autocomplete="new-password"></div>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:2px 0 16px">
+      Ao menos 8 caracteres. Não use a senha provisória de novo.</p>
+    <button class="btn" data-acao="ps-salvar">Salvar e entrar</button>
+  </div></div>
+  <p class="nota-tela" style="text-align:center">Esqueceu de anotar? Peça à coordenação para gerar outra senha provisória.</p>`;
+  $('#ps-1').focus();
+  $('#ps-2').addEventListener('keydown', ev => { if (ev.key === 'Enter') ACOES['ps-salvar'](); });
+}
+
+ACOES['ps-salvar'] = async (d, botao) => {
+  const a = $('#ps-1').value, b = $('#ps-2').value;
+  if (a.length < 8) { toast('A senha precisa de ao menos 8 caracteres.'); return; }
+  if (a !== b) { toast('As duas senhas não conferem.'); return; }
+  if (a === SENHA_PROVISORIA) { toast('Escolha uma senha diferente da provisória.'); return; }
+  if (botao) botao.disabled = true;
+  try {
+    await nuvem.trocarSenha(a);
+    await nuvem.marcarSenhaTrocada();
+    S.perfil.trocarSenha = false;
+    toast('Senha criada. Bem-vindo!');
+    render();
+  } catch (e) {
+    if (botao) botao.disabled = false;
+    toast('Não foi possível salvar a senha: ' + (e.message || e));
+  }
+};
+
+/* ---------------- tutorial de boas-vindas ---------------- */
+// Um passo por tela, com uma miniatura animada do sistema. O roteiro muda
+// conforme o papel: cada pessoa vê só o que ela mesma faz.
+const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Equipe'];
+
+const TUTORIAL = {
+  coordenacao: [
+    { cena: 'ola', titulo: 'Você coordena o simulado inteiro',
+      texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as sete telas.' },
+    { cena: 'painel', aba: 0, titulo: 'Painel',
+      texto: 'A visão geral: quantos itens já foram aprovados, o que está parado em revisão e o que cada componente curricular entregou. É por aqui que você configura o simulado — nome, etapa, série, data e duração.' },
+    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+      texto: 'Você cadastra os textos-base e diz quantos itens cada um comporta. Os docentes ocupam esses espaços livres. As sugestões de texto que eles enviarem aparecem aqui para você aprovar.' },
+    { cena: 'revisao', aba: 2, titulo: 'Itens e revisão',
+      texto: 'O item nasce como rascunho, passa pela coordenação de área e chega a você. Só o que você aprovar entra no caderno, no cartão e na correção. Tudo é conversado dentro do próprio item.' },
+    { cena: 'caderno', aba: 3, titulo: 'Caderno',
+      texto: 'O caderno se monta sozinho com os itens aprovados, na diagramação do PAS: duas colunas, numeração contínua e o comando de cada bloco escrito automaticamente. Imprima ou salve em PDF.' },
+    { cena: 'cartoes', aba: 4, titulo: 'Cartões-resposta',
+      texto: 'Cada estudante recebe as folhas nominais: objetiva, discursiva e — se você quiser — redação. As âncoras nos cantos permitem ler tudo digitalizado em lote.' },
+    { cena: 'correcao', aba: 5, titulo: 'Correção e boletins',
+      texto: 'Lance as marcações à mão ou importe o arquivo do leitor óptico. Daí saem os boletins individuais, os relatórios por turma e a planilha de notas.' },
+    { cena: 'equipe', aba: 6, titulo: 'Equipe',
+      texto: 'Aqui você cria os acessos. Cada pessoa recebe uma senha provisória e troca no primeiro login, como você acabou de fazer. Quem não está nesta lista não entra no sistema.' }
+  ],
+  coordenacao_area: [
+    { cena: 'ola', titulo: 'Você escreve itens e revisa a sua área',
+      texto: 'Neste sistema você tem dois papéis: produz itens como docente e é a primeira revisão dos itens da sua área. Veja onde cada coisa acontece.' },
+    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+      texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Se quiser propor um texto novo, use “Sugerir novo texto” — a coordenação aprova.' },
+    { cena: 'itens', aba: 2, titulo: 'Escrever um item',
+      texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo (A, B, C ou D), a habilidade e o gabarito. Ao terminar, envie para revisão.' },
+    { cena: 'revisao', aba: 2, titulo: 'Revisar a sua área',
+      texto: 'Os itens da sua área chegam a você antes da coordenação geral. Comente dentro do item, devolva com ajustes ou aprove — o que você aprovar segue para a etapa final. Use o filtro “só a minha área” para ver o que está na sua mão.' },
+    { cena: 'correcao', aba: 5, titulo: 'Correção',
+      texto: 'Depois da aplicação, você lança aqui a nota dos seus itens discursivos, nos mesmos percentuais do cartão: 0, 25, 50, 75 ou 100%.' }
+  ],
+  docente: [
+    { cena: 'ola', titulo: 'Bem-vindo ao Sistema PAS',
+      texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. São três telas que interessam a você.' },
+    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+      texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Também dá para sugerir um texto novo à coordenação.' },
+    { cena: 'itens', aba: 2, titulo: 'Meus itens',
+      texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo, a habilidade e o gabarito, e envie para revisão. Se voltar com ajustes, a conversa fica registrada dentro do item.' },
+    { cena: 'correcao', aba: 5, titulo: 'Correção',
+      texto: 'Se você tiver itens discursivos aprovados, é aqui que lança a nota de cada estudante — nos mesmos percentuais do cartão-resposta.' }
+  ],
+  redacao: [
+    { cena: 'ola', titulo: 'Bem-vinda ao Sistema PAS',
+      texto: 'Seu acesso é focado: você lança as informações da redação de cada estudante.' },
+    { cena: 'redacao', aba: 5, titulo: 'Correção da redação',
+      texto: 'A tela de correção mostra a tabela de lançamento: nota de conteúdo (NC), número de erros (NE) e total de linhas (TL) de cada estudante.' },
+    { cena: 'formula', aba: 5, titulo: 'A nota sai sozinha',
+      texto: 'O sistema calcula NR = NC − 2·NE/TL, pela planilha oficial, e leva o resultado para o boletim. Cada campo é salvo assim que você digita.' }
+  ]
+};
+
+const passosTutorial = () => TUTORIAL[S.perfil.papel] || TUTORIAL.docente;
+
+// Miniatura animada: a casca do sistema com a aba do passo em destaque.
+function cenaTutorial(passo) {
+  const abas = ABAS_TUTORIAL
+    .slice(0, S.perfil.papel === 'coordenacao' ? 7 : 6)
+    .map((a, i) => `<i class="${i === passo.aba ? 'on' : ''}">${a}</i>`).join('');
+  const cenas = {
+    ola: `<div class="tut-ola"><span>PAS</span><b>Marista</b></div>`,
+    painel: `<div class="tut-cartoes">
+        <u style="--d:0s"><s style="width:78%"></s></u>
+        <u style="--d:.12s"><s style="width:45%"></s></u>
+        <u style="--d:.24s"><s style="width:62%"></s></u>
+      </div><div class="tut-tabela">${'<b></b>'.repeat(4)}</div>`,
+    textos: `<div class="tut-texto"></div>
+      <div class="tut-slots">${['', '', 'livre', 'livre'].map((c, i) =>
+        `<i class="${c}" style="--d:${i * .1}s"></i>`).join('')}</div>`,
+    itens: `<div class="tut-editor"><div class="tut-fonte"></div><div class="tut-form">
+        ${'<i style="--d:0s"></i><i style="--d:.1s"></i><i style="--d:.2s"></i>'}</div></div>`,
+    revisao: `<div class="tut-fluxo">
+        <i style="--d:0s">rascunho</i><b></b><i style="--d:.5s">área</i><b></b><i style="--d:1s">geral</i>
+        <b></b><i class="ok" style="--d:1.5s">aprovado</i></div>`,
+    caderno: `<div class="tut-caderno"><div>${'<s></s>'.repeat(9)}</div><div>${'<s></s>'.repeat(9)}</div></div>`,
+    cartoes: `<div class="tut-cartao">${Array.from({ length: 5 }, (_, i) =>
+        `<u style="--d:${i * .14}s"><o></o><o class="m"></o></u>`).join('')}</div>`,
+    correcao: `<div class="tut-barras">${[72, 55, 64, 47].map((h, i) =>
+        `<i style="--h:${h}%;--d:${i * .12}s"></i>`).join('')}</div>`,
+    equipe: `<div class="tut-equipe">${Array.from({ length: 4 }, (_, i) =>
+        `<u style="--d:${i * .13}s"><o></o><s></s></u>`).join('')}</div>`,
+    redacao: `<div class="tut-pauta">${Array.from({ length: 7 }, (_, i) =>
+        `<s style="--d:${i * .08}s"></s>`).join('')}</div>`,
+    formula: `<div class="tut-formula">NR = NC − 2·NE/TL</div>`
+  };
+  return `
+  <div class="tut-mock">
+    <div class="tut-topo"><span></span><em></em></div>
+    <div class="tut-abas">${abas}</div>
+    <div class="tut-palco">${cenas[passo.cena] || ''}</div>
+  </div>`;
+}
+
+let passoTutorial = 0;
+let tutorialAberto = false;
+
+function abrirTutorial(i = 0) {
+  const passos = passosTutorial();
+  passoTutorial = Math.max(0, Math.min(i, passos.length - 1));
+  const p = passos[passoTutorial];
+  const ultimo = passoTutorial === passos.length - 1;
+  tutorialAberto = true;
+  abrirDlg(`
+    <div class="dlg-cab">
+      <h2>Tutorial · ${esc(nomePerfil().split(' · ')[0])}</h2>
+      <button class="fechar-x" data-acao="tut-fechar" title="Fechar">✕</button>
+    </div>
+    <div class="dlg-corpo tut-corpo">
+      ${cenaTutorial(p)}
+      <div class="tut-texto-passo" key="${passoTutorial}">
+        <h3>${esc(p.titulo)}</h3>
+        <p>${esc(p.texto)}</p>
+      </div>
+      <div class="tut-pontos">${passos.map((_, k) =>
+        `<i class="${k === passoTutorial ? 'on' : ''}" data-acao="tut-ir" data-i="${k}"></i>`).join('')}</div>
+    </div>
+    <div class="dlg-pe">
+      <span style="margin-right:auto;font-size:12.5px;color:var(--ink-2)">${passoTutorial + 1} de ${passos.length}</span>
+      ${passoTutorial > 0 ? '<button class="btn fantasma" data-acao="tut-voltar">Voltar</button>' : ''}
+      <button class="btn" data-acao="${ultimo ? 'tut-fechar' : 'tut-avancar'}">${ultimo ? 'Começar a usar' : 'Avançar'}</button>
+    </div>`, true);
+}
+ACOES['tut-avancar'] = () => abrirTutorial(passoTutorial + 1);
+ACOES['tut-voltar'] = () => abrirTutorial(passoTutorial - 1);
+ACOES['tut-ir'] = d => abrirTutorial(parseInt(d.i, 10));
+ACOES['tut-fechar'] = async () => {
+  $('#dlg').close();
+  tutorialAberto = false;
+  if (modoNuvem && S.perfil.tutorialVisto === false) {
+    S.perfil.tutorialVisto = true;
+    try { await nuvem.marcarTutorialVisto(); } catch { /* segue sem marcar */ }
+  }
+};
+ACOES['rever-tutorial'] = () => { $('#dlg').close(); abrirTutorial(0); };
 
 /* ================= LOGIN (modo nuvem) ================= */
 function telaLogin() {
@@ -1770,7 +2367,7 @@ ACOES['nuvem-entrar'] = async () => {
 };
 ACOES['nuvem-sair'] = async () => {
   await nuvem.sair();
-  equipeCache = []; equipeCarregada = false;
+  equipeCache = []; equipeCarregada = false; tutorialAberto = false;
   toast('Você saiu da conta.');
   render();
 };
@@ -1793,12 +2390,17 @@ async function aposLogin() {
     S.perfil = {
       papel: eu?.papel || 'docente',
       nome: eu?.nome || u.email,
-      componente: eu?.componente || null
+      componente: eu?.componente || null,
+      area: eu?.area || null,
+      trocarSenha: !!eu?.trocar_senha,
+      tutorialVisto: eu ? !!eu.tutorial_visto : true
     };
   } catch {
     // Sem a lista da equipe, entra com o perfil mais restrito.
-    S.perfil = { papel: 'docente', nome: u.email, componente: null };
+    S.perfil = { papel: 'docente', nome: u.email, componente: null, area: null,
+                 trocarSenha: false, tutorialVisto: true };
   }
+  tutorialAberto = false;
   try {
     const dados = await nuvem.carregarTudo();
     if (!dados.config) {
