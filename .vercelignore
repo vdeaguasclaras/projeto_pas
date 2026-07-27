@@ -1,0 +1,4 @@
+# O que não faz parte do site publicado (fica só no repositório).
+supabase/
+docs/
+.github/

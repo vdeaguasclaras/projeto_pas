@@ -1,7 +1,63 @@
-# Projeto PAS — Sistema PAS Marista
+# Sistema PAS Marista
 
-Protótipo navegável do Sistema PAS Marista (simulados no formato PAS/UnB): painel de coordenação, textos-base com alocação de itens por slots, editor de itens com revisão comentada, caderno de provas, cartão-resposta e correção/boletins.
+Sistema de elaboração, revisão, aplicação e correção dos simulados no formato
+PAS/UnB do Colégio Marista Águas Claras.
 
-- `prototipo-pas-marista.html` — protótipo v2, arquivo único (HTML/CSS/JS inline). Abra direto no navegador.
+Sete telas: painel de coordenação, textos-base com alocação de itens por vagas,
+editor de itens com revisão comentada em dois níveis, caderno de provas, cartões-resposta
+nominais, correção com boletins, e administração da equipe.
 
-Fonte: recuperado do artifact "Protótipo — Sistema PAS Marista" publicado no claude.ai (atualizado em 17/07/2026).
+- **Manual da equipe:** [`docs/manual-da-equipe.md`](docs/manual-da-equipe.md)
+- **Plano de implantação e arquitetura:** [`docs/plano-implantacao.md`](docs/plano-implantacao.md)
+
+## Como funciona
+
+Site estático — HTML, CSS e JavaScript de módulos nativos, sem etapa de build.
+Os dados ficam num banco Postgres no Supabase, com login por conta e acesso
+restrito à equipe cadastrada. O mesmo simulado é compartilhado por todo mundo, e
+cada alteração é gravada linha a linha.
+
+```
+index.html              casca da página
+css/estilo.css          identidade visual
+js/config-supabase.js   endereço e chave publicável do banco
+js/dados.js             modelo de dados e dados de exemplo
+js/nuvem.js             driver do Supabase
+js/app.js               telas, montagem da prova e correção
+js/vendor/supabase.js   biblioteca supabase-js (cópia local, sem CDN)
+supabase/migrations/    esquema e regras de acesso
+supabase/functions/     Edge Function `equipe` (administra as contas)
+docs/                   manual e plano de implantação
+prototipo-pas-marista.html   protótipo v2 (referência visual, não é o sistema)
+```
+
+## Rodar localmente
+
+Precisa ser servido por HTTP (módulos ES não funcionam abrindo o arquivo direto):
+
+```bash
+python3 -m http.server 8000
+# abra http://127.0.0.1:8000
+```
+
+Para trabalhar sem banco, clique em **usar sem conexão** na tela de entrada: o
+sistema roda inteiro no navegador, com dados de exemplo.
+
+## Publicação
+
+O site está na Vercel, conectada a este repositório: cada push na branch de
+produção republica sozinho, sem etapa de build (`vercel.json` só acrescenta
+cabeçalhos de segurança e cache). Qualquer hospedagem de arquivos estáticos
+serve — não há servidor próprio.
+
+## Segurança
+
+- Só entra quem a coordenação cadastrou: um gatilho no banco recusa a criação de
+  conta de e-mail fora da lista da equipe.
+- Todas as tabelas exigem, via RLS, que o e-mail da sessão esteja na equipe.
+- O papel (coordenação / docente / redação) vem do banco, não do que a conta diz
+  sobre si mesma.
+- A chave em `js/config-supabase.js` é a chave **publicável** do Supabase, feita
+  para ficar no navegador: sozinha ela não dá acesso a nada.
+- A chave de serviço existe apenas dentro da Edge Function `equipe`, que só
+  atende chamadas da coordenação.
