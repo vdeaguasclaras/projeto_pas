@@ -105,13 +105,21 @@ const textosAprovados = () => S.textos.filter(t => t.status === 'aprovado').sort
 
 /* ---------------- montagem da prova ---------------- */
 // Numeração contínua: itens aprovados da versão, na ordem dos textos aprovados.
+// Dentro de cada texto os itens saem agrupados por tipo (A, B, C, D), como no
+// PAS — é isso que faz o comando ficar contínuo (“julgue os itens de 11 a 19 e
+// assinale a opção correta no item 20”). A ordem definida pela coordenação é
+// preservada dentro de cada tipo.
+const ORDEM_TIPO = { A: 0, B: 1, C: 2, D: 3 };
+
 function prova(versao) {
   const lista = [];
   for (const t of textosAprovados()) {
-    for (const it of S.itens.filter(i => i.textoId === t.id && i.status === 'aprovado' &&
-      (i.versao === versao || i.versao === 'ambas'))) {
-      lista.push({ item: it, texto: t });
-    }
+    const doTexto = S.itens.filter(i => i.textoId === t.id && i.status === 'aprovado' &&
+      (i.versao === versao || i.versao === 'ambas'));
+    doTexto
+      .map((item, ordem) => ({ item, ordem }))
+      .sort((a, b) => (ORDEM_TIPO[a.item.tipo] ?? 9) - (ORDEM_TIPO[b.item.tipo] ?? 9) || a.ordem - b.ordem)
+      .forEach(({ item }) => lista.push({ item, texto: t }));
   }
   return lista.map((e, i) => ({ ...e, numero: i + 1 }));
 }
@@ -525,7 +533,20 @@ function dlgTexto(t) {
           <input class="caixa" type="number" min="1" max="40" id="tx-slots" value="${t?.slots ?? 6}"></div>
         <div class="campo" style="min-width:260px"><label>Regra do coordenador (opcional)</label>
           <input class="caixa" id="tx-regra" value="${esc(t?.regra || '')}" placeholder="ex.: sem itens tipo D neste texto"></div>
-      </div>` : ''}
+      </div>
+      <div class="campo" style="margin-bottom:12px"><label>Abertura do comando no caderno</label>
+        <input class="caixa" id="tx-comando" value="${esc(t?.comando || '')}"
+          placeholder="Considerando o texto precedente e os múltiplos aspectos a ele relacionados">
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">O resto da frase o sistema monta sozinho pelos tipos dos itens alocados —
+          “<em>, julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C.</em>”</p></div>
+      <div class="campo"><label>Formato no caderno</label>
+        <select class="caixa" id="tx-formato">
+          <option value="prosa" ${(t?.formato || 'prosa') === 'prosa' ? 'selected' : ''}>Prosa — o texto reflui e é justificado</option>
+          <option value="verso" ${t?.formato === 'verso' ? 'selected' : ''}>Verso — mantém as quebras de linha (canções, poemas)</option>
+          <option value="numerado" ${t?.formato === 'numerado' ? 'selected' : ''}>Linhas numeradas — só se algum item citar linhas</option>
+        </select>
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Em prosa, uma linha em branco separa parágrafos.
+          O PAS não numera linhas dos textos-base.</p></div>` : ''}
       ${!ehCoord() && novo ? '<p style="font-size:12.5px;color:var(--ink-2)">Sua sugestão ficará visível a todos após aprovação da coordenação, que define a quantidade de itens do texto.</p>' : ''}
     </div>
     <div class="dlg-pe">
@@ -542,9 +563,13 @@ ACOES['salvar-texto'] = d => {
   const dados = {
     titulo: $('#tx-titulo').value.trim(),
     fonte: $('#tx-fonte').value.trim(),
-    linhas: $('#tx-corpo').value.split('\n').map(l => l.trim()).filter(Boolean),
+    // linhas em branco no meio são separadores de parágrafo — só as das pontas caem
+    linhas: $('#tx-corpo').value.split('\n').map(l => l.trim())
+      .join('\n').replace(/^\n+|\n+$/g, '').split('\n'),
     slots: ehCoord() ? Math.max(1, parseInt($('#tx-slots').value, 10) || 6) : (anterior?.slots ?? 6),
-    regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || '')
+    regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || ''),
+    comando: ehCoord() && $('#tx-comando') ? $('#tx-comando').value.trim() : (anterior?.comando || ''),
+    formato: ehCoord() && $('#tx-formato') ? $('#tx-formato').value : (anterior?.formato || 'prosa')
   };
   if (!dados.titulo || !dados.fonte || !dados.linhas.length) {
     toast('Título, fonte e corpo do texto são obrigatórios.'); return;
@@ -885,110 +910,264 @@ ACOES['it-excluir'] = () => {
 };
 
 /* ================= TELA 4 · CADERNO ================= */
+// Diagramação calibrada contra os cadernos reais do PAS/CEBRASPE (edital 2025):
+// A4, duas colunas de 266pt com fio central, corpo 10pt/13,3pt, número do item
+// em 9pt recuado 18pt para fora da coluna e crédito da fonte em 6pt à direita.
+// As medidas vivem em css/estilo.css, bloco “caderno de provas”.
 let cadVersao = 'regular';
+
+const INSTRUCOES_PADRAO = [
+  'Ao receber este caderno de provas, confira se os seus dados pessoais, transcritos acima, estão corretos e coincidem com o que está registrado no seu caderno de respostas.',
+  'Verifique se este caderno contém a quantidade de itens indicada na capa. Caso o caderno esteja incompleto ou tenha qualquer defeito, solicite ao(à) aplicador(a) de provas que tome as providências necessárias.',
+  'Nos itens do <b>tipo A</b>, marque, para cada item, o campo designado com o código <b>C</b>, caso julgue o item <b>CERTO</b>, ou o campo designado com o código <b>E</b>, caso julgue o item <b>ERRADO</b>.',
+  'Nos itens do <b>tipo B</b>, marque, de acordo com o comando, o algarismo das <b>CENTENAS</b>, o das <b>DEZENAS</b> e o das <b>UNIDADES</b>. Todos esses campos devem ser obrigatoriamente marcados, mesmo que sejam iguais a zero.',
+  'Nos itens do <b>tipo C</b>, marque a única opção correta de acordo com o respectivo comando.',
+  'No item do <b>tipo D</b>, que é de resposta construída, faça o que se pede usando o espaço reservado no próprio caderno. Em caso de erro, risque com um traço simples a palavra, a frase ou o símbolo e escreva o respectivo substitutivo — parênteses não podem ser usados para essa finalidade.',
+  'Nos itens do <b>tipo A</b> e do <b>tipo C</b>, siga a recomendação de não marcar ao acaso: para cada item cuja resposta divirja do gabarito oficial, será atribuída pontuação negativa.',
+  'Não deixe de registrar suas respostas no <b>caderno de respostas</b>, único documento válido para a correção das suas provas.',
+  'Não utilize material de consulta que não seja fornecido pela escola e não se comunique com outros(as) estudantes durante a prova.',
+  'Fique atento(a) à duração da prova, já incluído o tempo destinado à transcrição das respostas para o caderno de respostas.'
+];
+
+function instrucoes() {
+  const c = S.config.instrucoes;
+  if (Array.isArray(c) && c.length) return c;
+  if (typeof c === 'string' && c.trim())
+    return c.split('\n').map(l => l.trim()).filter(Boolean);
+  return INSTRUCOES_PADRAO;
+}
 
 function htmlCapa(versao, totalItens) {
   const c = S.config;
+  const arte = c.capaImagem
+    ? `<img src="${esc(c.capaImagem)}" alt="">`
+    : '';
   return `
-  <div class="folha">
-    <div class="cab">
-      <div class="inst">COLÉGIO MARISTA<br>ÁGUAS CLARAS</div>
-      <div style="font-size:9px;color:#666;text-align:center">Aplicação: ${dataBR(c.dataAplicacao)}<br>Duração: ${esc(c.duracao)}</div>
-      <div class="sala"><small>SALA</small><span style="display:inline-block;min-width:34px">&nbsp;</span></div>
+  <div class="pas-capa">
+    <div class="pas-capa-arte">
+      ${arte}
+      <div class="pas-capa-marca">PAS<small>Simulado — Programa de Avaliação Seriada</small></div>
+      <div class="pas-capa-faixa">
+        <span>SUBPROGRAMA</span>
+        <b>${esc(String(c.dataAplicacao || '').slice(0, 4) || '—')}</b>
+        <span>${esc(c.etapa).toUpperCase()}</span>
+      </div>
     </div>
-    <div class="faixa">${esc(c.nome)} · ${esc(c.etapa)} · Caderno de Provas${versao === 'adaptada' ? ' · Versão Adaptada' : ''}</div>
-    <div class="corpo" style="text-align:center;padding:28px 24px">
-      <div style="font-size:22px;font-weight:800;color:#0d2f8a;letter-spacing:.5px">PROVA DE<br>CONHECIMENTOS</div>
-      <div style="width:56px;height:3px;background:#e5007e;margin:12px auto"></div>
-      <div style="font-size:10px;color:#333;line-height:1.6">Parte 1 — Língua Estrangeira<br>Parte 2 — Conhecimentos + Redação em Língua Portuguesa</div>
-      <div style="border:1.5px solid #0d2f8a;margin:18px 8px 0;padding:10px;text-align:left;font-size:8.5px;line-height:1.6;color:#222">
-        <b style="color:#e5007e">LEIA COM ATENÇÃO AS INSTRUÇÕES</b><br>
-        1&nbsp; Confira se este caderno contém ${totalItens} itens e uma prova de redação.<br>
-        2&nbsp; Não folheie antes de autorizado pelo chefe de sala.<br>
-        3&nbsp; A marcação do caderno de respostas é de sua responsabilidade.<br>
-        4&nbsp; Ao terminar, entregue o caderno de respostas ao aplicador.
+    <div class="pas-capa-texto">
+      <h2>LEIA COM ATENÇÃO AS INSTRUÇÕES ABAIXO.</h2>
+      <ol>${instrucoes().map(i => `<li>${i}</li>`).join('')}</ol>
+      <div class="pas-capa-obs">
+        <span class="rot">OBSERVAÇÕES</span>
+        • Este caderno contém <b>${totalItens} ${totalItens === 1 ? 'item' : 'itens'}</b>${versao === 'adaptada' ? ' (versão adaptada)' : ''}.<br>
+        • ${esc(c.nome)} · ${esc(c.etapa)} · ${esc(c.serie)}.<br>
+        • Aplicação: ${dataBR(c.dataAplicacao)} · Duração: ${esc(c.duracao)}.<br>
+        • Colégio Marista Águas Claras.
       </div>
     </div>
   </div>`;
 }
 
-function htmlFolhasTexto(versao) {
+// Frase de comando montada pela composição do bloco, como no PAS:
+// “…, julgue os itens de 11 a 19 e assinale a opção correta no item 20,
+//  que é do tipo C.”
+// `artigo` = 'o'  → “o item 5” / “os itens de 11 a 19” (objeto direto)
+// `artigo` = 'no' → “no item 5” / “nos itens de 49 a 51” (regido por “em”)
+function listaDeNumeros(ns, artigo = 'o') {
+  const um = artigo === 'no' ? 'no item' : 'o item';
+  const varios = artigo === 'no' ? 'nos itens' : 'os itens';
+  if (ns.length === 1) return `${um} ${ns[0]}`;
+  if (ns.length === 2) return `${varios} ${ns[0]} e ${ns[1]}`;
+  const seguidos = ns.every((n, i) => i === 0 || n === ns[i - 1] + 1);
+  return seguidos ? `${varios} de ${ns[0]} a ${ns[ns.length - 1]}`
+                  : `${varios} ${ns.slice(0, -1).join(', ')} e ${ns[ns.length - 1]}`;
+}
+
+function comandoDoBloco(itens, texto) {
+  const nsDe = tipo => itens.filter(e => e.item.tipo === tipo).map(e => e.numero);
+  const partes = [];
+  const a = nsDe('A'), b = nsDe('B'), cc = nsDe('C'), dd = nsDe('D');
+  if (a.length) partes.push(`julgue ${listaDeNumeros(a)}`);
+  for (const [ns, tipo] of [[b, 'B'], [dd, 'D']]) {
+    if (!ns.length) continue;
+    partes.push(`faça o que se pede ${listaDeNumeros(ns, 'no')}, que ${ns.length > 1 ? 'são' : 'é'} do tipo ${tipo}`);
+  }
+  if (cc.length)
+    partes.push(`assinale a opção correta ${listaDeNumeros(cc, 'no')}, que ${cc.length > 1 ? 'são' : 'é'} do tipo C`);
+  if (!partes.length) return '';
+  const acoes = partes.length === 1 ? partes[0]
+    : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+  const abertura = (texto.comando || '').trim() ||
+    'Considerando o texto precedente e os múltiplos aspectos a ele relacionados';
+  return `${abertura}, ${acoes}.`;
+}
+
+function htmlItem({ item, numero }) {
+  const enun = esc(item.enunciado);
+  if (item.tipo === 'C') {
+    const ops = (item.opcoes || []).map((o, i) =>
+      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${esc(o)}</p>`).join('');
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${ops}</div>`;
+  }
+  if (item.tipo === 'D') {
+    const n = Math.max(1, item.dLinhas || 10);
+    const pauta = item.dPauta !== false;
+    const linhas = Array.from({ length: n }, () => '<i></i>').join('');
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}
+      <div class="pas-pauta${pauta ? ' numerada' : ' sem-linhas'}">${pauta ? linhas : '<i style="height:' + (n * 17) + 'pt"></i>'}</div></div>`;
+  }
+  return `<div class="pas-item"><span class="n">${numero}</span> ${enun}</div>`;
+}
+
+// Peças que fluem pelas colunas. Cada peça é indivisível — itens e parágrafos
+// não se partem entre colunas, como nos cadernos impressos.
+// Prosa reflui e é justificada, como no caderno impresso; verso mantém as
+// quebras do autor; “numerado” só quando algum item precisa citar linhas.
+function htmlCorpoTexto(texto) {
+  const linhas = texto.linhas || [];
+  if (texto.formato === 'numerado')
+    return `<div class="pas-linhas">${linhas.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
+  if (texto.formato === 'verso')
+    return `<div class="pas-texto">${linhas.map(l =>
+      l.trim() ? `<p class="pas-verso">${esc(l)}</p>` : '<p>&nbsp;</p>').join('')}</div>`;
+  // prosa: linhas em branco separam parágrafos
+  const paragrafos = [];
+  let atual = [];
+  for (const l of linhas) {
+    if (l.trim()) atual.push(l.trim());
+    else if (atual.length) { paragrafos.push(atual.join(' ')); atual = []; }
+  }
+  if (atual.length) paragrafos.push(atual.join(' '));
+  return `<div class="pas-texto">${paragrafos.map(p => `<p>${esc(p)}</p>`).join('')}</div>`;
+}
+
+function pecasDoBloco(texto, itens) {
+  const pecas = [htmlCorpoTexto(texto)];
+  pecas.push(`<p class="pas-fonte">${esc(texto.fonte)}</p>`);
+  pecas.push(`<p class="pas-comando">${comandoDoBloco(itens, texto)}</p>`);
+  itens.forEach(e => pecas.push(htmlItem(e)));
+  pecas.push('<div style="height:13.3pt"></div>');   // respiro entre blocos
+  return pecas;
+}
+
+const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
+const PX_POR_PT = 4 / 3;
+
+// Mede cada peça numa régua com a largura exata da coluna.
+function medirPecas(pecas) {
+  const regua = document.createElement('div');
+  regua.className = 'pas pas-regua';
+  document.body.appendChild(regua);
+  const alturas = pecas.map(html => {
+    regua.innerHTML = html;
+    return regua.getBoundingClientRect().height / PX_POR_PT;
+  });
+  regua.remove();
+  return alturas;
+}
+
+// Distribui as peças em colunas de altura fixa, duas por página.
+function distribuir(pecas, alturas) {
+  const paginas = [];
+  let colunas = [[], []], ci = 0, altura = 0;
+  const proximaColuna = () => {
+    ci++; altura = 0;
+    if (ci > 1) { paginas.push(colunas); colunas = [[], []]; ci = 0; }
+  };
+  pecas.forEach((html, i) => {
+    const alt = alturas[i];
+    if (altura > 0 && altura + alt > ALTURA_COLUNA) proximaColuna();
+    colunas[ci].push(html);
+    altura += alt;
+  });
+  if (colunas[0].length || colunas[1].length) paginas.push(colunas);
+  return paginas;
+}
+
+function htmlPagina(colunas, ident, numero, total) {
+  return `
+  <div class="pas-pagina">
+    <div class="pas-ident">${ident}</div>
+    <div class="pas-fio-topo"></div>
+    <div class="pas-parte">-- PARTE 2 --</div>
+    <div class="pas-fio-vert"></div>
+    <div class="pas-corpo">
+      <div class="pas-col">${colunas[0].join('')}</div>
+      <div class="pas-col">${colunas[1].join('')}</div>
+    </div>
+    <div class="pas-fio-base"></div>
+    <div class="pas-fol">${numero} / ${total}</div>
+  </div>`;
+}
+
+// Monta o caderno inteiro já paginado. Precisa do DOM para medir as peças.
+function htmlCaderno(versao, comCapa = true) {
   const pv = prova(versao);
+  if (!pv.length) return '';
   const porTexto = new Map();
   for (const e of pv) {
     if (!porTexto.has(e.texto.id)) porTexto.set(e.texto.id, { texto: e.texto, itens: [] });
     porTexto.get(e.texto.id).itens.push(e);
   }
-  return [...porTexto.values()].map(({ texto, itens }) => {
-    const ns = itens.map(e => e.numero);
-    const corpoTx = texto.linhas.map((l, i) =>
-      `<div class="tx-num"><span class="n">${i + 1}</span><span>${esc(l)}</span></div>`).join('');
-    const tiposA = itens.filter(e => e.item.tipo === 'A');
-    const comando = tiposA.length
-      ? `<div style="break-inside:avoid;font-size:8.5px;margin:6px 0 4px"><b>Com base no texto ${texto.numero}, julgue os itens ${tiposA.length > 1 ? 'de ' + tiposA[0].numero + ' a ' + tiposA[tiposA.length - 1].numero : tiposA[0].numero}.</b></div>` : '';
-    const corpoItens = itens.map(({ item, numero }) => {
-      if (item.tipo === 'C') {
-        const ops = item.opcoes.map((o, i) => `<li><b>${'ABCD'[i]}</b> ${esc(o)}</li>`).join('');
-        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}<ul class="opcoes">${ops}</ul></div>`;
-      }
-      if (item.tipo === 'B') {
-        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)} <span style="color:#555">Marque o resultado no caderno de respostas (000 a 999).</span></div>`;
-      }
-      if (item.tipo === 'D') {
-        const n = Math.max(1, item.dLinhas || 10);
-        const pauta = item.dPauta !== false;
-        const espaco = pauta
-          ? Array.from({ length: n }, () => '<div style="height:13px;border-bottom:0.7px solid #999"></div>').join('')
-          : `<div style="height:${n * 13}px;border:0.7px solid #bbb"></div>`;
-        return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}
-          <span style="color:#555">Responda no espaço abaixo${pauta ? '' : ' (sem linhas)'}.</span>
-          <div style="margin-top:6px">${espaco}</div></div>`;
-      }
-      return `<div class="item-prova"><span class="rot">${numero}</span> &nbsp;${esc(item.enunciado)}</div>`;
-    }).join('');
-    return `
-    <div class="folha">
-      <div class="faixa">Texto ${texto.numero} · ${ns.length > 1 ? 'itens de ' + ns[0] + ' a ' + ns[ns.length - 1] : 'item ' + ns[0]}</div>
-      <div class="corpo"><div class="colunas">
-        <div style="break-inside:avoid;margin-bottom:8px">
-          <b style="font-size:9.5px;color:#0d2f8a">Texto ${texto.numero} — ${esc(texto.titulo)}</b>
-          <div style="margin-top:6px">${corpoTx}</div>
-          <div style="font-size:7px;color:#777;margin-top:4px">${esc(texto.fonte)}.</div>
-        </div>
-        ${comando}${corpoItens}
-      </div></div>
-    </div>`;
-  }).join('');
+  const pecas = [...porTexto.values()].flatMap(({ texto, itens }) => pecasDoBloco(texto, itens));
+  const paginas = distribuir(pecas, medirPecas(pecas));
+  const ident = `${esc(S.config.nome)} — ${esc(S.config.etapa)}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
+  const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(versao, pv.length)}</div>` : '';
+  const total = paginas.length + (comCapa ? 1 : 0);
+  return `<div class="pas">${capa}${paginas
+    .map((c, i) => htmlPagina(c, ident, i + 1 + (comCapa ? 1 : 0), total)).join('')}</div>`;
 }
 
 function telaCaderno() {
   const pv = prova(cadVersao);
-  const html = pv.length ? htmlCapa(cadVersao, pv.length) + htmlFolhasTexto(cadVersao) : '';
   $('#app').innerHTML = `
   <div class="quadro">
     <div class="miolo" style="padding-bottom:0">
       <div class="cab-tela">
         <div><h2>Caderno de provas</h2>
-          <span class="sub">${pv.length} itens aprovados nesta versão · numeração contínua por texto</span></div>
+          <span class="sub">${pv.length} itens aprovados nesta versão · numeração contínua · diagramação no padrão PAS</span></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="seg">
             <button class="${cadVersao === 'regular' ? 'sel' : ''}" data-acao="cad-versao" data-v="regular">Regular</button>
             <button class="${cadVersao === 'adaptada' ? 'sel' : ''}" data-acao="cad-versao" data-v="adaptada">Adaptada</button>
           </div>
-          <button class="btn rosa" data-acao="cad-imprimir" ${pv.length ? '' : 'disabled'}>🖨 Imprimir caderno</button>
+          ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-capa">⚙ Capa e instruções</button>' : ''}
+          <button class="btn rosa" data-acao="cad-imprimir" ${pv.length ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
         </div>
       </div>
     </div>
-    ${pv.length ? `<div class="papelaria">${html}</div>`
+    ${pv.length ? `<div class="pas-previa">${htmlCaderno(cadVersao)}</div>`
       : '<div class="miolo"><div class="vazio">Nenhum item aprovado para esta versão ainda. Aprove itens na tela “Itens e revisão”.</div></div>'}
   </div>
-  <p class="nota-tela"><strong>Compromisso de fidelidade (fase de calibração):</strong> esta é a diagramação do MVP — a versão final será calibrada página a página contra os PDFs reais do PAS (tipografia, comandos, numeração de linhas de 3 em 3, quebra de páginas). Use “Imprimir” e escolha “Salvar como PDF” no navegador para gerar o arquivo.</p>`;
+  <p class="nota-tela"><strong>Diagramação calibrada</strong> contra os cadernos do PAS/CEBRASPE de 2025: A4 com duas colunas de 266pt e fio central, corpo de 10pt, número do item recuado para fora da coluna e crédito da fonte em 6pt. O <strong>comando de cada bloco é montado automaticamente</strong> a partir dos tipos de item — “julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C” —, e o texto de abertura é editável em cada texto-base. A quebra de páginas acontece na impressão: use “Imprimir” e escolha “Salvar como PDF”.</p>`;
 }
 ACOES['cad-versao'] = d => { cadVersao = d.v; render(); };
 ACOES['cad-imprimir'] = () => {
-  const pv = prova(cadVersao);
-  $('#print-area').innerHTML = htmlCapa(cadVersao, pv.length) + htmlFolhasTexto(cadVersao);
+  $('#print-area').innerHTML = htmlCaderno(cadVersao);
   window.print();
+};
+
+ACOES['cad-capa'] = () => {
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Capa e instruções do caderno</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <div class="campo" style="margin-bottom:12px"><label>Imagem da capa (endereço)</label>
+        <input class="caixa" id="cp-img" value="${esc(S.config.capaImagem || '')}"
+          placeholder="https://… — imagem inspirada nos textos ou no tema da redação"></div>
+      <div class="campo"><label>Instruções (uma por linha, numeradas automaticamente)</label>
+        <textarea class="caixa" id="cp-instr" rows="10">${esc(instrucoes().join('\n'))}</textarea></div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Aceita <code>&lt;b&gt;</code> para destacar termos, como no caderno original.</p>
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="cad-capa-padrao">Restaurar padrão</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="cad-capa-salvar">Salvar</button></div>`);
+};
+ACOES['cad-capa-padrao'] = () => { $('#cp-instr').value = INSTRUCOES_PADRAO.join('\n'); };
+ACOES['cad-capa-salvar'] = () => {
+  S.config.capaImagem = $('#cp-img').value.trim();
+  S.config.instrucoes = $('#cp-instr').value.split('\n').map(l => l.trim()).filter(Boolean);
+  $('#dlg').close(); commit(); PERS.config(); toast('Capa atualizada.');
 };
 
 /* ================= TELA 5 · CARTÕES ================= */

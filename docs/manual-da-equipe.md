@@ -30,8 +30,23 @@ Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múlt
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
 **4 · Caderno** — o caderno montado com os itens aprovados, em numeração
-contínua, nas versões regular e adaptada. Use “Imprimir caderno” e escolha
-“Salvar como PDF”.
+contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
+PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
+e escolha “Salvar como PDF”.
+
+O **comando de cada bloco é escrito pelo sistema** a partir dos tipos dos itens
+alocados — “julgue os itens de 11 a 19 e assinale a opção correta no item 20,
+que é do tipo C”. Você só escreve a abertura da frase, no cadastro do texto-base
+(campo “Abertura do comando no caderno”). Os itens saem agrupados por tipo
+dentro de cada texto, como no PAS.
+
+Ainda no cadastro do texto-base, o campo **“Formato no caderno”** define como o
+texto é impresso: *prosa* (reflui e é justificado — o padrão), *verso* (mantém
+as quebras, para canções e poemas) ou *linhas numeradas* (só quando algum item
+precisa citar linhas; o PAS não numera).
+
+A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
+uma imagem temática e o texto das instruções ao estudante.
 
 **5 · Cartões-resposta** — cadastro de estudantes (um a um ou colando a lista no
 formato `nome;matrícula;turma;versão`) e impressão dos cartões nominais.

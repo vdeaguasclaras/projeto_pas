@@ -8,7 +8,7 @@ Estado em 27/07/2026.
 |---|---|---|
 | 1 · MVP navegável | Todas as telas funcionando com dados no navegador (localStorage) | **concluída** |
 | 2 · Multiusuário | Banco on-line, login por conta, papéis e mesmo simulado para toda a equipe | **concluída** |
-| 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | a fazer |
+| 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | **caderno concluído**; cartão pendente |
 | 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões digitalizados em lote | a fazer |
 | 5 · Calibração da pontuação | Parâmetro *x*, pesos oficiais por tipo de item e escore padronizado | a fazer |
 
@@ -55,18 +55,63 @@ A chave que aparece em `js/config-supabase.js` é a chave **publicável**: ela �
 feita para ficar no navegador e não dá acesso a nada sozinha — quem manda é o
 login mais as regras de RLS.
 
-## Fase 3 — fidelidade dos documentos (próximo passo)
+## Fase 3 — fidelidade dos documentos
 
-O que precisa ser calibrado contra os PDFs reais do PAS/Cebraspe:
+### Caderno — concluído
 
-- tipografia e medidas de coluna do caderno;
-- numeração das linhas do texto-base de 3 em 3;
-- quebras de página (nenhum item partido entre páginas);
-- posição das âncoras de leitura óptica no cartão-resposta;
-- folha de rosto e instruções ao estudante.
+Medidas extraídas dos cadernos CEBRASPE/UnB — PAS 1, 2 e 3, edital 2025 — e
+reproduzidas em `css/estilo.css` (bloco “caderno de provas”):
 
-Método: colocar o PDF real ao lado da impressão do sistema, página a página, e
-ajustar `css/estilo.css` (blocos `.folha`, `.colunas`, `.item-prova`, `.cr-*`).
+| Elemento | Medida |
+|---|---|
+| Página | A4, 595×842pt |
+| Fio do cabeçalho | y 41,3 · x 27→568,4 · cinza 50%, 1,4pt |
+| Fio do rodapé | y 805,7 |
+| Identificação | 9pt, alinhada à direita, y 31,9 |
+| “-- PARTE 2 --” | 12pt, centralizado, y 49,7 |
+| Colunas | 266,05pt cada, vão de 9pt, fio preto de 0,7pt em x 297,4 |
+| Área de texto | y 69,8 → 802,3 (730pt por coluna) |
+| Corpo | 10pt, entrelinha 13,3pt, justificado |
+| Recuo de parágrafo | 28,4pt na primeira linha |
+| Nº do item | 9pt em negrito, recuado 18pt para fora da coluna |
+| Opções (tipo C) | letra em negrito, texto recuado 14,3pt |
+| Crédito da fonte | 6pt, alinhado à direita |
+| Pauta de resposta | linhas de 17pt, como no rascunho da redação |
+
+A conferência é automatizável: gera-se o PDF pelo Chromium e comparam-se as
+coordenadas com as dos PDFs de referência (PyMuPDF). Na última medição, **13 de
+13 elementos ficaram dentro de 2pt** do original.
+
+**Dois achados que corrigiram suposições do protótipo:**
+
+1. **O PAS não numera as linhas dos textos-base.** O que parecia numeração nos
+   PDFs é o número do item, recuado para fora da coluna. A numeração continua
+   disponível por texto (formato “linhas numeradas”), mas desligada por padrão.
+2. **Dentro de cada bloco, os itens vêm agrupados por tipo** (A, depois B, C e
+   D). É isso que permite o comando contínuo do original — “julgue os itens de
+   11 a 19 e assinale a opção correta no item 20, que é do tipo C”. O sistema
+   agora ordena assim ao montar a prova e **redige o comando sozinho** a partir
+   da composição do bloco; só a abertura da frase é escrita pela coordenação.
+
+A paginação é feita em JavaScript (`medirPecas` e `distribuir` em `js/app.js`),
+não pelo CSS de impressão: o Chrome posiciona cabeçalhos `position:fixed` de
+forma errática entre páginas. Cada página é uma folha A4 completa, o que faz a
+prévia na tela mostrar exatamente o que sai impresso.
+
+### Cartão-resposta — pendente
+
+Falta o modelo de referência. Para calibrar, é preciso um PDF do caderno de
+respostas do PAS (não veio no lote de 2025): posição e diâmetro das bolhas,
+âncoras de leitura óptica, área de identificação do estudante e o campo da
+redação. Sem esse arquivo, o cartão segue no desenho do MVP.
+
+### Capa
+
+A capa reproduz a estrutura do caderno original: arte temática à esquerda com a
+faixa de subprograma e etapa, instruções numeradas à direita e as observações no
+rodapé. Tanto a imagem quanto o texto das instruções são editáveis na tela do
+caderno (“Capa e instruções”), já que a arte muda a cada edição e costuma
+remeter aos textos da prova ou ao tema da redação.
 
 ## Fase 5 — pontuação
 

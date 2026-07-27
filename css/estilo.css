@@ -235,13 +235,115 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .bol-nota b{display:block;font-size:16px;color:#0d2f8a;font-variant-numeric:tabular-nums}
 .bol-nota span{font-size:8px;color:#777;text-transform:uppercase;letter-spacing:.4px}
 
+/* ---------- caderno de provas: medidas tiradas dos PDFs reais do PAS ----------
+   Referência: cadernos CEBRASPE/UnB — PAS 1, 2 e 3, edital 2025 (A4 595×842pt).
+   Coluna 266,05pt · vão 9pt · fio central 0,7pt · corpo 10pt/13,3pt ·
+   nº do item 9pt recuado 18pt para fora · crédito da fonte 6pt à direita.
+   Área útil: x 28,4→569,5 · y 69,8→802,3 · fios do cabeçalho/rodapé em x 27→568,4. */
+.pas{
+  --col: 266.05pt; --vao: 9pt;
+  --marg-esq: 28.4pt; --topo: 69.8pt; --alt-col: 732.5pt;
+  background:#fff; color:#000;
+  font-family:Arial,Helvetica,sans-serif; font-size:10pt; line-height:1.33;
+}
+.pas *{box-sizing:border-box}
+.pas p{margin:0}
+
+/* Cada página é uma folha A4 de verdade — a paginação é feita em js/app.js,
+   medindo os blocos, porque o Chrome posiciona cabeçalhos fixos de forma
+   errática na impressão. */
+.pas-pagina{
+  position:relative; width:595pt; height:842pt; overflow:hidden;
+  background:#fff; page-break-after:always; break-after:page; margin:0 auto;
+}
+.pas-pagina:last-child{page-break-after:auto;break-after:auto}
+.pas-ident{position:absolute;top:31.9pt;left:27pt;right:26.6pt;font-size:9pt;text-align:right;line-height:1}
+.pas-fio-topo,.pas-fio-base{position:absolute;left:27pt;right:26.6pt;height:1.4pt;background:#808080}
+.pas-fio-topo{top:41.3pt}
+.pas-fio-base{top:805.7pt}
+.pas-parte{position:absolute;top:50.6pt;left:0;right:0;text-align:center;font-size:12pt;line-height:1}
+.pas-fol{position:absolute;bottom:19pt;left:0;right:0;text-align:center;font-size:8pt;color:#444}
+.pas-corpo{
+  position:absolute; top:var(--topo); left:var(--marg-esq);
+  width:541.1pt; height:var(--alt-col); display:flex; gap:var(--vao);
+}
+.pas-col{width:var(--col);padding-top:2.5pt;text-align:justify;overflow:hidden}
+.pas-fio-vert{position:absolute;top:var(--topo);left:297.4pt;width:.7pt;height:var(--alt-col);background:#000}
+
+/* régua invisível usada para medir a altura de cada bloco antes de paginar */
+.pas-regua{
+  position:absolute;left:-10000pt;top:0;width:var(--col);visibility:hidden;
+  display:flow-root;   /* contém as margens dos filhos: sem isso a medida sai curta */
+  text-align:justify;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.33;
+}
+.pas-bloco{margin-bottom:13.3pt}
+.pas-texto-titulo{font-weight:700;margin-bottom:2pt}
+.pas-texto p{text-indent:28.4pt}
+.pas-texto p.solto{text-indent:0}
+.pas-verso{text-indent:0;padding-left:28.4pt}
+.pas-fonte{font-size:6pt;text-align:right;margin-top:4pt;line-height:1.3}
+.pas-figura{margin:6pt 0;text-align:center}
+.pas-figura img{max-width:100%}
+.pas-comando{margin:11pt 0 6pt;text-indent:0}
+.pas-linhas{counter-reset:pas-linha}
+.pas-linhas p{text-indent:0;padding-left:20pt;position:relative}
+.pas-linhas p::before{
+  counter-increment:pas-linha;content:counter(pas-linha);
+  position:absolute;left:0;width:15pt;text-align:right;font-size:7pt;color:#444}
+
+/* itens: número recuado para fora da coluna */
+.pas-item{padding-left:18pt;text-indent:-18pt;margin-bottom:2.2pt;break-inside:avoid}
+.pas-item .n{font-size:9pt;font-weight:700}
+.pas-op{margin-left:1.9pt;padding-left:14.3pt;text-indent:-14.3pt}
+.pas-op b{font-weight:700}
+.pas-pauta{margin-top:5pt;text-indent:0;counter-reset:pas-pauta}
+.pas-pauta i{display:block;height:17pt;border-bottom:.7px solid #999;position:relative}
+.pas-pauta.numerada i::before{
+  counter-increment:pas-pauta;content:counter(pas-pauta);
+  position:absolute;left:-16pt;bottom:1pt;font-size:7pt;color:#666}
+.pas-pauta.sem-linhas{border:.7px solid #999}
+.pas-pauta.sem-linhas i{border:none}
+
+/* capa: imagem temática à esquerda, instruções à direita */
+.pas-capa{display:flex;gap:0;height:842pt}
+.pas-capa-arte{
+  width:44%;position:relative;background:#0d2f8a;color:#fff;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:space-between}
+.pas-capa-arte img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.62}
+.pas-capa-marca{position:relative;padding:34pt 22pt 0;font-size:34pt;font-weight:800;letter-spacing:2pt;line-height:1}
+.pas-capa-marca small{display:block;font-size:8.5pt;font-weight:600;letter-spacing:.4pt;margin-top:3pt}
+.pas-capa-faixa{position:relative;background:rgba(0,0,0,.78);padding:14pt 22pt;margin-bottom:96pt}
+.pas-capa-faixa span{display:block;font-size:9pt;letter-spacing:1.6pt}
+.pas-capa-faixa b{display:block;font-size:30pt;line-height:1.05}
+.pas-capa-texto{width:56%;padding:34pt 27pt 20pt 20pt}
+.pas-capa-texto h2{font-size:11pt;text-align:center;margin-bottom:10pt;letter-spacing:.3pt}
+.pas-capa-texto ol{margin:0;padding-left:16pt;font-size:8.5pt;line-height:1.42;text-align:justify}
+.pas-capa-texto li{margin-bottom:6pt}
+.pas-capa-obs{margin-top:14pt;border-top:1pt solid #999;padding-top:8pt;font-size:7.5pt;line-height:1.4}
+.pas-capa-obs .rot{display:block;font-size:8pt;font-weight:700;margin-bottom:3pt}
+
+/* prévia na tela: folha real, apenas reduzida */
+.pas-previa{background:#e9e4de;padding:24px;overflow:auto}
+.pas-previa .pas{box-shadow:0 3px 14px rgba(0,0,0,.3)}
+.pas-previa .pas-miolo{padding-bottom:24pt}
+
 /* ---------- impressão ---------- */
 #print-area{display:none}
 @media print{
   body>*:not(#print-area){display:none!important}
   #print-area{display:block}
+
+  /* cartões-resposta e boletins seguem no formato antigo */
+  @page{size:A4;margin:12mm}
   #print-area .folha{width:100%;max-width:none;box-shadow:none;page-break-after:always;margin:0}
   #print-area .folha:last-child{page-break-after:auto}
-  @page{size:A4;margin:12mm}
+
+  /* O caderno já vem paginado em folhas A4 completas: a página não tem margem,
+     cada .pas-pagina ocupa exatamente uma folha. */
+  @page caderno{size:A4;margin:0}
+  #print-area .pas{page:caderno}
+  #print-area .pas-previa{background:none;padding:0;overflow:visible}
+  #print-area .pas-pagina{box-shadow:none;margin:0}
+  #print-area .pas-capa{min-height:842pt;height:842pt}
 }
 
