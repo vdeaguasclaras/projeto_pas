@@ -1,11 +1,28 @@
 # Manual rápido — Sistema PAS Marista
 
-## Entrar
+## Primeiro acesso
 
-Abra o endereço do sistema, informe o e-mail e a senha que a coordenação
-entregou e clique em **Entrar**. Troque a senha pelo botão 🔑 no topo.
+Abra o endereço do sistema e entre com o seu e-mail e a **senha provisória** que
+a coordenação entregou. O sistema pede, na hora, que você **crie a sua própria
+senha** — só depois disso o resto aparece. Em seguida, um **tutorial rápido**
+mostra as telas do seu perfil; ele abre uma vez só, e você pode revê-lo quando
+quiser no botão 🔑 → “Rever o tutorial”.
 
 Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
+
+## Quem é quem
+
+| Papel | O que faz |
+|---|---|
+| **Coordenação pedagógica** | Vê e faz tudo: configura o simulado, aprova a etapa final da revisão, gera caderno, cartões e boletins, e administra as contas da equipe. |
+| **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. |
+| **Docente** | Escreve itens, acompanha a revisão dos seus e lança as notas dos próprios itens discursivos. |
+| **Professora de redação** | Lança NC, NE e TL da redação de cada estudante. |
+
+As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
+Artes), **Humanas** (História, Geografia, Filosofia, Sociologia),
+**Matemática**, **Ciências da Natureza** (Biologia, Física, Química) e
+**Inglês**.
 
 ## As telas
 
@@ -22,6 +39,11 @@ texto comporta.
 rascunho → coordenação de área → coordenação geral → aprovado. Quem revisa
 comenta dentro do item; quem escreveu responde ali mesmo. **Só item aprovado
 entra no caderno, no cartão e na correção.**
+
+Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação da
+área daquele componente** decide a primeira etapa; a **coordenação geral** decide
+a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
+na sua mão.
 
 Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar em
 “linhas de referência” aparecem destacadas em amarelo.
@@ -87,13 +109,15 @@ atualiza sozinho quando você volta para a aba).
 ## Coordenação: criar o acesso de alguém
 
 1. Tela **7 · Equipe** → **+ Adicionar pessoa**.
-2. Preencha nome, e-mail, papel e (se for docente) o componente.
-3. O sistema sugere uma senha provisória — pode aceitar ou trocar.
-4. Clique em **Criar conta** e entregue à pessoa o endereço, o e-mail e a senha
-   que aparecem na tela. **A senha só aparece nesse momento**; se perder, use
-   “Nova senha”.
+2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
+   que a pessoa coordena e, se quiser, o componente que ela leciona.
+3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar
+   ou trocar.
+4. Clique em **Criar conta** e entregue à pessoa o endereço, o e-mail e a senha.
 
-Nenhum e-mail é enviado: a conta já nasce liberada.
+Nenhum e-mail é enviado: a conta já nasce liberada, e **o sistema obriga a
+pessoa a criar a própria senha no primeiro acesso**. A coluna “Acesso” da tabela
+mostra quem ainda está com senha provisória. “Nova senha” volta a exigir a troca.
 
 ## Cuidados
 

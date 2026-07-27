@@ -90,11 +90,28 @@ const PERS = {
   tudo() { if (modoNuvem) nuvem.substituirTudo(S).catch(PERS.falha); }
 };
 
+// Áreas do conhecimento — é por elas que a coordenação de área revisa.
+const AREAS = {
+  'Linguagens': ['Português', 'Literatura', 'Artes'],
+  'Humanas': ['História', 'Geografia', 'Filosofia', 'Sociologia'],
+  'Matemática': ['Matemática'],
+  'Ciências da Natureza': ['Biologia', 'Física', 'Química'],
+  'Inglês': ['Inglês']
+};
+const areaDoComponente = c => Object.keys(AREAS).find(a => AREAS[a].includes(c)) || null;
+
 const ehCoord = () => S.perfil.papel === 'coordenacao';
+const ehCoordArea = () => S.perfil.papel === 'coordenacao_area';
 const ehRedacao = () => S.perfil.papel === 'redacao';
+// Quem pode decidir a etapa “coord. de área” de um item: a coordenação geral
+// ou quem coordena justamente a área do componente daquele item.
+const revisaArea = item => ehCoord() ||
+  (ehCoordArea() && !!S.perfil.area && areaDoComponente(item.componente) === S.perfil.area);
 const nomePerfil = () => {
   if (S.perfil.papel === 'docente')
     return `Docente · ${S.perfil.nome}${S.perfil.componente ? ' (' + S.perfil.componente + ')' : ''}`;
+  if (S.perfil.papel === 'coordenacao_area')
+    return `Coord. de área · ${S.perfil.nome}${S.perfil.area ? ' (' + S.perfil.area + ')' : ''}`;
   if (S.perfil.papel === 'redacao') return `Redação · ${S.perfil.nome}`;
   return `Coordenação · ${S.perfil.nome}`;
 };
@@ -206,6 +223,14 @@ function render() {
     return;
   }
 
+  // Senha provisória: nada mais aparece até a pessoa criar a sua.
+  if (modoNuvem && S.perfil.trocarSenha) {
+    $('#quem').innerHTML = `${botaoTema()}<button class="sair-btn" data-acao="nuvem-sair">Sair</button>`;
+    $('#nav').innerHTML = '';
+    telaTrocarSenha();
+    return;
+  }
+
   const ini = (S.perfil.nome || '?').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
   const identidade = modoNuvem
     ? `<span style="font-weight:700;font-size:13px">${esc(nomePerfil())}</span>
@@ -228,6 +253,10 @@ function render() {
     painel: telaPainel, textos: telaTextos, itens: telaItens, caderno: telaCaderno,
     cartoes: telaCartoes, correcao: telaCorrecao, equipe: telaEquipe
   }[atual])();
+
+  // Estreia: o tutorial do papel abre sozinho, uma única vez.
+  if (modoNuvem && S.perfil.tutorialVisto === false && !tutorialAberto && !$('#dlg').open)
+    abrirTutorial(0);
 }
 window.addEventListener('hashchange', render);
 
@@ -624,19 +653,24 @@ ACOES['item-mover'] = d => {
 };
 
 /* ================= TELA 3 · ITENS ================= */
-let filtroStatus = 'todos', soMeus = false;
+let filtroStatus = 'todos', soMeus = false, soMinhaArea = false;
 function telaItens() {
-  if (S.perfil.papel === 'docente' && telaItens._primeiraVez === undefined) { soMeus = true; telaItens._primeiraVez = false; }
+  if (telaItens._primeiraVez === undefined) {
+    telaItens._primeiraVez = false;
+    if (S.perfil.papel === 'docente') soMeus = true;
+    if (ehCoordArea()) soMinhaArea = true;
+  }
   const lista = S.itens.filter(i =>
     (filtroStatus === 'todos' || i.status === filtroStatus) &&
-    (!soMeus || i.autor === S.perfil.nome));
+    (!soMeus || i.autor === S.perfil.nome) &&
+    (!soMinhaArea || areaDoComponente(i.componente) === S.perfil.area));
   const linhas = lista.map(i => {
     const t = textoDe(i);
     const st = STATUS_ITEM[i.status];
     return `<tr class="clic" data-acao="abrir-item" data-id="${i.id}">
       <td>Texto ${t?.numero ?? '—'}</td>
       <td><span class="t t${i.tipo}" style="display:inline-grid;width:22px;height:22px;place-items:center;border-radius:6px;color:#fff;font-size:11px;font-weight:800">${i.tipo}</span></td>
-      <td>${discChip(i.componente)}</td>
+      <td>${discChip(i.componente)}<br><span style="font-size:11px;color:var(--ink-2)">${esc(areaDoComponente(i.componente) || '—')}</span></td>
       <td>${esc(i.autor)}</td>
       <td style="text-transform:capitalize">${esc(i.versao)}</td>
       <td><span class="chip ${st.cls}">${st.rot}</span></td>
@@ -654,6 +688,8 @@ function telaItens() {
         <select class="caixa" style="width:auto" data-mud="filtro-status">${ops}</select>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
           <input type="checkbox" data-mud="so-meus" ${soMeus ? 'checked' : ''}> só meus itens</label>
+        ${ehCoordArea() ? `<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
+          <input type="checkbox" data-mud="so-area" ${soMinhaArea ? 'checked' : ''}> só a minha área</label>` : ''}
         <button class="btn" data-acao="novo-item">+ Novo item</button>
       </div>
     </div>
@@ -665,6 +701,7 @@ function telaItens() {
 }
 MUDS['filtro-status'] = (d, el) => { filtroStatus = el.value; render(); };
 MUDS['so-meus'] = (d, el) => { soMeus = el.checked; render(); };
+MUDS['so-area'] = (d, el) => { soMinhaArea = el.checked; render(); };
 
 /* ----- editor de item (diálogo) ----- */
 let rasc = null; // cópia de trabalho do item aberto
@@ -760,22 +797,21 @@ function dlgItem() {
         <p>${esc(c.texto)}</p></div>
     </div>`).join('');
 
+  // Quem faz o quê no fluxo: quem escreveu envia; a coordenação da área do
+  // item decide a 1ª etapa; a coordenação geral decide a última.
   const botoes = [];
   botoes.push('<button class="btn" data-acao="it-salvar">Salvar</button>');
-  if (S.perfil.papel === 'docente' && ['rascunho', 'devolvido'].includes(rasc.status) )
+  const meuItem = rasc.autor === S.perfil.nome;
+  if ((meuItem || ehCoord()) && ['rascunho', 'devolvido'].includes(rasc.status))
     botoes.push('<button class="btn rosa" data-acao="it-enviar">Enviar para revisão</button>');
-  if (ehCoord()) {
-    if (rasc.status === 'rascunho' || rasc.status === 'devolvido')
-      botoes.push('<button class="btn rosa" data-acao="it-enviar">Enviar para revisão</button>');
-    if (rasc.status === 'area')
-      botoes.push('<button class="btn verde" data-acao="it-aprovar-area">Aprovar → coordenação geral</button>',
-                  '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
-    if (rasc.status === 'geral')
-      botoes.push('<button class="btn verde" data-acao="it-aprovar">Aprovar item</button>',
-                  '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
-    if (rasc.status === 'aprovado')
-      botoes.push('<button class="btn fantasma" data-acao="it-reabrir">Reabrir revisão</button>');
-  }
+  if (rasc.status === 'area' && revisaArea(rasc))
+    botoes.push('<button class="btn verde" data-acao="it-aprovar-area">Aprovar → coordenação geral</button>',
+                '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
+  if (rasc.status === 'geral' && ehCoord())
+    botoes.push('<button class="btn verde" data-acao="it-aprovar">Aprovar item</button>',
+                '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
+  if (rasc.status === 'aprovado' && ehCoord())
+    botoes.push('<button class="btn fantasma" data-acao="it-reabrir">Reabrir revisão</button>');
 
   abrirDlg(`
     <div class="dlg-cab">
@@ -900,7 +936,10 @@ ACOES['it-comentar'] = () => {
   rasc.comentarios = rasc.comentarios || [];
   rasc.comentarios.push({
     autor: S.perfil.nome,
-    papel: ehCoord() ? 'coordenação' : `docente (${S.perfil.componente || ''})`,
+    papel: ehCoord() ? 'coordenação geral'
+      : ehCoordArea() ? `coord. de área (${S.perfil.area || ''})`
+      : ehRedacao() ? 'redação'
+      : `docente (${S.perfil.componente || ''})`,
     quando: agora(), texto: txt
   });
   if (rasc.id) { persistirRascunho(); save(S); }
@@ -1182,6 +1221,7 @@ ACOES['cad-capa-salvar'] = () => {
 //             de acerto (0, 25, 50, 75, 100%), marcadas por quem corrige;
 //   folha 3 — redação: pauta de 30 linhas de 17pt. Opcional, definido pela
 //             coordenação em “Configurar simulado”.
+const SENHA_PROVISORIA = 'Marista@2026';
 const PERCENTUAIS_D = [0, 25, 50, 75, 100];
 const COLUNAS_CARTAO = 4;
 const LINHAS_REDACAO = 30;
@@ -1608,7 +1648,7 @@ function telaCorrecaoDiscursivos() {
 
 function telaCorrecao() {
   if (ehRedacao()) { telaCorrecaoRedacao(); return; }
-  if (S.perfil.papel === 'docente') { telaCorrecaoDiscursivos(); return; }
+  if (!ehCoord()) { telaCorrecaoDiscursivos(); return; }
   const comResp = S.estudantes.filter(e => corrigir(e).temResp);
   const est = S.estudantes.find(e => e.id === corrEstId) || null;
   const turmas = [...new Set(S.estudantes.map(e => e.turma))].sort();
@@ -1859,7 +1899,8 @@ ACOES['bol-imprimir'] = () => {
 // não do que a pessoa declara ao entrar. A coordenação cria as contas aqui
 // (a Edge Function `equipe` é a única que conhece a chave de serviço).
 const PAPEIS = {
-  coordenacao: 'Coordenação',
+  coordenacao: 'Coordenação pedagógica',
+  coordenacao_area: 'Coordenação de área',
   docente: 'Docente',
   redacao: 'Professora de redação'
 };
@@ -1889,8 +1930,9 @@ function telaEquipe() {
     <tr>
       <td>${esc(m.nome || '—')}${m.email === meuEmail ? ' <span class="chip info">você</span>' : ''}</td>
       <td style="font-family:var(--mono);font-size:12.5px">${esc(m.email)}</td>
-      <td>${esc(PAPEIS[m.papel] || m.papel)}</td>
+      <td>${esc(PAPEIS[m.papel] || m.papel)}${m.area ? `<br><span style="font-size:11px;color:var(--ink-2)">${esc(m.area)}</span>` : ''}</td>
       <td>${m.componente ? discChip(m.componente) : '—'}</td>
+      <td>${m.trocar_senha ? '<span class="chip pend">senha provisória</span>' : '<span class="chip ok">ativo</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="equipe-editar" data-email="${esc(m.email)}">Editar</button>
         <button class="btn mini fantasma" data-acao="equipe-senha" data-email="${esc(m.email)}">Nova senha</button>
@@ -1907,7 +1949,7 @@ function telaEquipe() {
       <button class="btn" data-acao="equipe-nova">+ Adicionar pessoa</button>
     </div>
     ${linhas ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Componente</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Componente</th><th>Acesso</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table></div>`
       : '<div class="vazio">Nenhuma pessoa cadastrada além de você.</div>'}
   </div></div>
@@ -1918,8 +1960,10 @@ function dlgMembro(m) {
   const novo = !m;
   const opsPapel = Object.entries(PAPEIS).map(([k, v]) =>
     `<option value="${k}" ${m?.papel === k ? 'selected' : ''}>${v}</option>`).join('');
-  const opsComp = Object.keys(COMPONENTES).map(c =>
-    `<option ${m?.componente === c ? 'selected' : ''}>${c}</option>`).join('');
+  const opsComp = ['<option value="">— nenhum —</option>', ...Object.keys(COMPONENTES).map(c =>
+    `<option ${m?.componente === c ? 'selected' : ''}>${c}</option>`)].join('');
+  const opsArea = Object.keys(AREAS).map(a =>
+    `<option ${m?.area === a ? 'selected' : ''}>${a}</option>`).join('');
   abrirDlg(`
     <div class="dlg-cab"><h2>${novo ? 'Adicionar pessoa à equipe' : 'Editar ' + esc(m.nome || m.email)}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
@@ -1934,14 +1978,17 @@ function dlgMembro(m) {
       <div class="form-linha">
         <div class="campo"><label>Papel</label>
           <select class="caixa" id="eq-papel" data-mud="eq-papel">${opsPapel}</select></div>
-        <div class="campo" id="eq-comp-wrap" style="${(m?.papel || 'coordenacao') === 'docente' ? '' : 'display:none'}">
-          <label>Componente</label><select class="caixa" id="eq-comp">${opsComp}</select></div>
+        <div class="campo" id="eq-area-wrap" style="${m?.papel === 'coordenacao_area' ? '' : 'display:none'}">
+          <label>Área que coordena</label><select class="caixa" id="eq-area">${opsArea}</select></div>
+        <div class="campo" id="eq-comp-wrap" style="${['docente', 'coordenacao_area'].includes(m?.papel || 'coordenacao') ? '' : 'display:none'}">
+          <label>Componente que leciona</label><select class="caixa" id="eq-comp">${opsComp}</select></div>
       </div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 10px">A coordenação de área também escreve itens: ela revisa a primeira etapa dos itens da sua área e produz os seus próprios.</p>
       ${novo ? `
         <div class="campo" style="margin-bottom:10px"><label>Senha provisória</label>
-          <input class="caixa" id="eq-senha" value="${senhaProvisoria()}" style="font-family:var(--mono)"></div>
+          <input class="caixa" id="eq-senha" value="${SENHA_PROVISORIA}" style="font-family:var(--mono)"></div>
         <p style="font-size:12.5px;color:var(--ink-2);margin:0">A conta é criada já liberada — nenhum e-mail de confirmação é enviado.
-          Entregue esta senha à pessoa; ela poderá trocá-la depois de entrar.</p>`
+          Entregue esta senha à pessoa; <b>o sistema exige que ela crie a própria senha no primeiro acesso</b>.</p>`
         : '<p style="font-size:12.5px;color:var(--ink-2);margin:0">Para trocar a senha desta pessoa, use “Nova senha” na lista.</p>'}
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
@@ -1949,7 +1996,9 @@ function dlgMembro(m) {
         ${novo ? 'Criar conta' : 'Salvar'}</button></div>`);
 }
 MUDS['eq-papel'] = () => {
-  $('#eq-comp-wrap').style.display = $('#eq-papel').value === 'docente' ? '' : 'none';
+  const papel = $('#eq-papel').value;
+  $('#eq-area-wrap').style.display = papel === 'coordenacao_area' ? '' : 'none';
+  $('#eq-comp-wrap').style.display = ['docente', 'coordenacao_area'].includes(papel) ? '' : 'none';
 };
 
 ACOES['equipe-nova'] = () => dlgMembro(null);
@@ -1960,7 +2009,8 @@ function dadosDoFormulario() {
   return {
     nome: $('#eq-nome').value.trim(),
     papel,
-    componente: papel === 'docente' ? $('#eq-comp').value : null
+    area: papel === 'coordenacao_area' ? $('#eq-area').value : null,
+    componente: ['docente', 'coordenacao_area'].includes(papel) ? ($('#eq-comp').value || null) : null
   };
 }
 
@@ -2073,7 +2123,9 @@ ACOES['minha-conta'] = () => {
           <input class="caixa" id="mc-senha2" type="password" autocomplete="new-password"></div>
       </div>
     </div>
-    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="rever-tutorial">Rever o tutorial</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="minha-senha-ok">Trocar senha</button></div>`);
 };
 ACOES['minha-senha-ok'] = async (d, botao) => {
@@ -2090,6 +2142,191 @@ ACOES['minha-senha-ok'] = async (d, botao) => {
     toast('Não foi possível trocar a senha: ' + (e.message || e));
   }
 };
+
+/* ================= PRIMEIRO ACESSO ================= */
+// Duas etapas obrigatórias na estreia de cada pessoa: trocar a senha
+// provisória e ver o tutorial do próprio papel. Os dois marcadores ficam na
+// tabela `equipe` (funções `marcar_senha_trocada` e `marcar_tutorial_visto`),
+// então valem em qualquer navegador.
+
+function telaTrocarSenha() {
+  $('#app').innerHTML = `
+  <div class="quadro" style="max-width:520px;margin:36px auto"><div class="miolo">
+    <h2 style="font-size:19px;margin-bottom:4px">Crie a sua senha</h2>
+    <p style="color:var(--ink-2);font-size:13.5px;margin:0 0 16px">
+      Você entrou com a senha provisória da escola. Antes de continuar, defina uma senha sua —
+      ela vale para <b>${esc(nuvem.usuario()?.email || '')}</b>.</p>
+    <div class="form-linha">
+      <div class="campo"><label>Nova senha</label>
+        <input class="caixa" id="ps-1" type="password" autocomplete="new-password"></div>
+      <div class="campo"><label>Repita a nova senha</label>
+        <input class="caixa" id="ps-2" type="password" autocomplete="new-password"></div>
+    </div>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:2px 0 16px">
+      Ao menos 8 caracteres. Não use a senha provisória de novo.</p>
+    <button class="btn" data-acao="ps-salvar">Salvar e entrar</button>
+  </div></div>
+  <p class="nota-tela" style="text-align:center">Esqueceu de anotar? Peça à coordenação para gerar outra senha provisória.</p>`;
+  $('#ps-1').focus();
+  $('#ps-2').addEventListener('keydown', ev => { if (ev.key === 'Enter') ACOES['ps-salvar'](); });
+}
+
+ACOES['ps-salvar'] = async (d, botao) => {
+  const a = $('#ps-1').value, b = $('#ps-2').value;
+  if (a.length < 8) { toast('A senha precisa de ao menos 8 caracteres.'); return; }
+  if (a !== b) { toast('As duas senhas não conferem.'); return; }
+  if (a === SENHA_PROVISORIA) { toast('Escolha uma senha diferente da provisória.'); return; }
+  if (botao) botao.disabled = true;
+  try {
+    await nuvem.trocarSenha(a);
+    await nuvem.marcarSenhaTrocada();
+    S.perfil.trocarSenha = false;
+    toast('Senha criada. Bem-vindo!');
+    render();
+  } catch (e) {
+    if (botao) botao.disabled = false;
+    toast('Não foi possível salvar a senha: ' + (e.message || e));
+  }
+};
+
+/* ---------------- tutorial de boas-vindas ---------------- */
+// Um passo por tela, com uma miniatura animada do sistema. O roteiro muda
+// conforme o papel: cada pessoa vê só o que ela mesma faz.
+const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Equipe'];
+
+const TUTORIAL = {
+  coordenacao: [
+    { cena: 'ola', titulo: 'Você coordena o simulado inteiro',
+      texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as sete telas.' },
+    { cena: 'painel', aba: 0, titulo: 'Painel',
+      texto: 'A visão geral: quantos itens já foram aprovados, o que está parado em revisão e o que cada componente curricular entregou. É por aqui que você configura o simulado — nome, etapa, série, data e duração.' },
+    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+      texto: 'Você cadastra os textos-base e diz quantos itens cada um comporta. Os docentes ocupam esses espaços livres. As sugestões de texto que eles enviarem aparecem aqui para você aprovar.' },
+    { cena: 'revisao', aba: 2, titulo: 'Itens e revisão',
+      texto: 'O item nasce como rascunho, passa pela coordenação de área e chega a você. Só o que você aprovar entra no caderno, no cartão e na correção. Tudo é conversado dentro do próprio item.' },
+    { cena: 'caderno', aba: 3, titulo: 'Caderno',
+      texto: 'O caderno se monta sozinho com os itens aprovados, na diagramação do PAS: duas colunas, numeração contínua e o comando de cada bloco escrito automaticamente. Imprima ou salve em PDF.' },
+    { cena: 'cartoes', aba: 4, titulo: 'Cartões-resposta',
+      texto: 'Cada estudante recebe as folhas nominais: objetiva, discursiva e — se você quiser — redação. As âncoras nos cantos permitem ler tudo digitalizado em lote.' },
+    { cena: 'correcao', aba: 5, titulo: 'Correção e boletins',
+      texto: 'Lance as marcações à mão ou importe o arquivo do leitor óptico. Daí saem os boletins individuais, os relatórios por turma e a planilha de notas.' },
+    { cena: 'equipe', aba: 6, titulo: 'Equipe',
+      texto: 'Aqui você cria os acessos. Cada pessoa recebe uma senha provisória e troca no primeiro login, como você acabou de fazer. Quem não está nesta lista não entra no sistema.' }
+  ],
+  coordenacao_area: [
+    { cena: 'ola', titulo: 'Você escreve itens e revisa a sua área',
+      texto: 'Neste sistema você tem dois papéis: produz itens como docente e é a primeira revisão dos itens da sua área. Veja onde cada coisa acontece.' },
+    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+      texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Se quiser propor um texto novo, use “Sugerir novo texto” — a coordenação aprova.' },
+    { cena: 'itens', aba: 2, titulo: 'Escrever um item',
+      texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo (A, B, C ou D), a habilidade e o gabarito. Ao terminar, envie para revisão.' },
+    { cena: 'revisao', aba: 2, titulo: 'Revisar a sua área',
+      texto: 'Os itens da sua área chegam a você antes da coordenação geral. Comente dentro do item, devolva com ajustes ou aprove — o que você aprovar segue para a etapa final. Use o filtro “só a minha área” para ver o que está na sua mão.' },
+    { cena: 'correcao', aba: 5, titulo: 'Correção',
+      texto: 'Depois da aplicação, você lança aqui a nota dos seus itens discursivos, nos mesmos percentuais do cartão: 0, 25, 50, 75 ou 100%.' }
+  ],
+  docente: [
+    { cena: 'ola', titulo: 'Bem-vindo ao Sistema PAS',
+      texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. São três telas que interessam a você.' },
+    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+      texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Também dá para sugerir um texto novo à coordenação.' },
+    { cena: 'itens', aba: 2, titulo: 'Meus itens',
+      texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo, a habilidade e o gabarito, e envie para revisão. Se voltar com ajustes, a conversa fica registrada dentro do item.' },
+    { cena: 'correcao', aba: 5, titulo: 'Correção',
+      texto: 'Se você tiver itens discursivos aprovados, é aqui que lança a nota de cada estudante — nos mesmos percentuais do cartão-resposta.' }
+  ],
+  redacao: [
+    { cena: 'ola', titulo: 'Bem-vinda ao Sistema PAS',
+      texto: 'Seu acesso é focado: você lança as informações da redação de cada estudante.' },
+    { cena: 'redacao', aba: 5, titulo: 'Correção da redação',
+      texto: 'A tela de correção mostra a tabela de lançamento: nota de conteúdo (NC), número de erros (NE) e total de linhas (TL) de cada estudante.' },
+    { cena: 'formula', aba: 5, titulo: 'A nota sai sozinha',
+      texto: 'O sistema calcula NR = NC − 2·NE/TL, pela planilha oficial, e leva o resultado para o boletim. Cada campo é salvo assim que você digita.' }
+  ]
+};
+
+const passosTutorial = () => TUTORIAL[S.perfil.papel] || TUTORIAL.docente;
+
+// Miniatura animada: a casca do sistema com a aba do passo em destaque.
+function cenaTutorial(passo) {
+  const abas = ABAS_TUTORIAL
+    .slice(0, S.perfil.papel === 'coordenacao' ? 7 : 6)
+    .map((a, i) => `<i class="${i === passo.aba ? 'on' : ''}">${a}</i>`).join('');
+  const cenas = {
+    ola: `<div class="tut-ola"><span>PAS</span><b>Marista</b></div>`,
+    painel: `<div class="tut-cartoes">
+        <u style="--d:0s"><s style="width:78%"></s></u>
+        <u style="--d:.12s"><s style="width:45%"></s></u>
+        <u style="--d:.24s"><s style="width:62%"></s></u>
+      </div><div class="tut-tabela">${'<b></b>'.repeat(4)}</div>`,
+    textos: `<div class="tut-texto"></div>
+      <div class="tut-slots">${['', '', 'livre', 'livre'].map((c, i) =>
+        `<i class="${c}" style="--d:${i * .1}s"></i>`).join('')}</div>`,
+    itens: `<div class="tut-editor"><div class="tut-fonte"></div><div class="tut-form">
+        ${'<i style="--d:0s"></i><i style="--d:.1s"></i><i style="--d:.2s"></i>'}</div></div>`,
+    revisao: `<div class="tut-fluxo">
+        <i style="--d:0s">rascunho</i><b></b><i style="--d:.5s">área</i><b></b><i style="--d:1s">geral</i>
+        <b></b><i class="ok" style="--d:1.5s">aprovado</i></div>`,
+    caderno: `<div class="tut-caderno"><div>${'<s></s>'.repeat(9)}</div><div>${'<s></s>'.repeat(9)}</div></div>`,
+    cartoes: `<div class="tut-cartao">${Array.from({ length: 5 }, (_, i) =>
+        `<u style="--d:${i * .14}s"><o></o><o class="m"></o></u>`).join('')}</div>`,
+    correcao: `<div class="tut-barras">${[72, 55, 64, 47].map((h, i) =>
+        `<i style="--h:${h}%;--d:${i * .12}s"></i>`).join('')}</div>`,
+    equipe: `<div class="tut-equipe">${Array.from({ length: 4 }, (_, i) =>
+        `<u style="--d:${i * .13}s"><o></o><s></s></u>`).join('')}</div>`,
+    redacao: `<div class="tut-pauta">${Array.from({ length: 7 }, (_, i) =>
+        `<s style="--d:${i * .08}s"></s>`).join('')}</div>`,
+    formula: `<div class="tut-formula">NR = NC − 2·NE/TL</div>`
+  };
+  return `
+  <div class="tut-mock">
+    <div class="tut-topo"><span></span><em></em></div>
+    <div class="tut-abas">${abas}</div>
+    <div class="tut-palco">${cenas[passo.cena] || ''}</div>
+  </div>`;
+}
+
+let passoTutorial = 0;
+let tutorialAberto = false;
+
+function abrirTutorial(i = 0) {
+  const passos = passosTutorial();
+  passoTutorial = Math.max(0, Math.min(i, passos.length - 1));
+  const p = passos[passoTutorial];
+  const ultimo = passoTutorial === passos.length - 1;
+  tutorialAberto = true;
+  abrirDlg(`
+    <div class="dlg-cab">
+      <h2>Tutorial · ${esc(nomePerfil().split(' · ')[0])}</h2>
+      <button class="fechar-x" data-acao="tut-fechar" title="Fechar">✕</button>
+    </div>
+    <div class="dlg-corpo tut-corpo">
+      ${cenaTutorial(p)}
+      <div class="tut-texto-passo" key="${passoTutorial}">
+        <h3>${esc(p.titulo)}</h3>
+        <p>${esc(p.texto)}</p>
+      </div>
+      <div class="tut-pontos">${passos.map((_, k) =>
+        `<i class="${k === passoTutorial ? 'on' : ''}" data-acao="tut-ir" data-i="${k}"></i>`).join('')}</div>
+    </div>
+    <div class="dlg-pe">
+      <span style="margin-right:auto;font-size:12.5px;color:var(--ink-2)">${passoTutorial + 1} de ${passos.length}</span>
+      ${passoTutorial > 0 ? '<button class="btn fantasma" data-acao="tut-voltar">Voltar</button>' : ''}
+      <button class="btn" data-acao="${ultimo ? 'tut-fechar' : 'tut-avancar'}">${ultimo ? 'Começar a usar' : 'Avançar'}</button>
+    </div>`, true);
+}
+ACOES['tut-avancar'] = () => abrirTutorial(passoTutorial + 1);
+ACOES['tut-voltar'] = () => abrirTutorial(passoTutorial - 1);
+ACOES['tut-ir'] = d => abrirTutorial(parseInt(d.i, 10));
+ACOES['tut-fechar'] = async () => {
+  $('#dlg').close();
+  tutorialAberto = false;
+  if (modoNuvem && S.perfil.tutorialVisto === false) {
+    S.perfil.tutorialVisto = true;
+    try { await nuvem.marcarTutorialVisto(); } catch { /* segue sem marcar */ }
+  }
+};
+ACOES['rever-tutorial'] = () => { $('#dlg').close(); abrirTutorial(0); };
 
 /* ================= LOGIN (modo nuvem) ================= */
 function telaLogin() {
@@ -2130,7 +2367,7 @@ ACOES['nuvem-entrar'] = async () => {
 };
 ACOES['nuvem-sair'] = async () => {
   await nuvem.sair();
-  equipeCache = []; equipeCarregada = false;
+  equipeCache = []; equipeCarregada = false; tutorialAberto = false;
   toast('Você saiu da conta.');
   render();
 };
@@ -2153,12 +2390,17 @@ async function aposLogin() {
     S.perfil = {
       papel: eu?.papel || 'docente',
       nome: eu?.nome || u.email,
-      componente: eu?.componente || null
+      componente: eu?.componente || null,
+      area: eu?.area || null,
+      trocarSenha: !!eu?.trocar_senha,
+      tutorialVisto: eu ? !!eu.tutorial_visto : true
     };
   } catch {
     // Sem a lista da equipe, entra com o perfil mais restrito.
-    S.perfil = { papel: 'docente', nome: u.email, componente: null };
+    S.perfil = { papel: 'docente', nome: u.email, componente: null, area: null,
+                 trocarSenha: false, tutorialVisto: true };
   }
+  tutorialAberto = false;
   try {
     const dados = await nuvem.carregarTudo();
     if (!dados.config) {

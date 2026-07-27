@@ -11,7 +11,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 const URL_SB = Deno.env.get('SUPABASE_URL')!;
 const CHAVE_SERVICO = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const PAPEIS = ['coordenacao', 'docente', 'redacao'];
+const PAPEIS = ['coordenacao', 'coordenacao_area', 'docente', 'redacao'];
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -67,13 +67,16 @@ Deno.serve(async (req) => {
     if (acao === 'criar') {
       const papel = PAPEIS.includes(String(corpo.papel)) ? String(corpo.papel) : 'docente';
       const nome = String(corpo.nome || '').trim() || email.split('@')[0];
-      const componente = papel === 'docente' ? (String(corpo.componente || '').trim() || null) : null;
+      const ehDocente = papel === 'docente' || papel === 'coordenacao_area';
+      const componente = ehDocente ? (String(corpo.componente || '').trim() || null) : null;
+      const area = papel === 'coordenacao_area' ? (String(corpo.area || '').trim() || null) : null;
       const senha = String(corpo.senha || '');
       if (senha.length < 8) return responder({ erro: 'A senha provisória precisa de ao menos 8 caracteres.' }, 400);
 
       // A allowlist precisa existir antes: o gatilho em auth.users a exige.
+      // trocar_senha: a pessoa cria a própria senha no primeiro acesso.
       const { error: erroEquipe } = await admin.from('equipe')
-        .upsert({ email, nome, papel, componente });
+        .upsert({ email, nome, papel, area, componente, trocar_senha: true });
       if (erroEquipe) throw erroEquipe;
 
       const jaExiste = await acharConta();
@@ -82,7 +85,7 @@ Deno.serve(async (req) => {
         return responder({ ok: true, criada: false, mensagem: 'Conta já existia — senha redefinida.' });
       }
       const { error } = await admin.auth.admin.createUser({
-        email, password: senha, email_confirm: true, user_metadata: { nome, papel, componente }
+        email, password: senha, email_confirm: true, user_metadata: { nome }
       });
       if (error) throw error;
       return responder({ ok: true, criada: true });
@@ -95,6 +98,8 @@ Deno.serve(async (req) => {
       if (!conta) return responder({ erro: 'Esta pessoa ainda não tem conta criada.' }, 404);
       const { error } = await admin.auth.admin.updateUserById(conta.id, { password: senha, email_confirm: true });
       if (error) throw error;
+      // Senha redefinida é provisória de novo: volta a exigir a troca.
+      await admin.from('equipe').update({ trocar_senha: true }).eq('email', email);
       return responder({ ok: true });
     }
 

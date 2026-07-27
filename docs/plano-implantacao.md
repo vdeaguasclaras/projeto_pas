@@ -8,7 +8,7 @@ Estado em 27/07/2026.
 |---|---|---|
 | 1 · MVP navegável | Todas as telas funcionando com dados no navegador (localStorage) | **concluída** |
 | 2 · Multiusuário | Banco on-line, login por conta, papéis e mesmo simulado para toda a equipe | **concluída** |
-| 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | **caderno concluído**; cartão pendente |
+| 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | **concluída** |
 | 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões digitalizados em lote | a fazer |
 | 5 · Calibração da pontuação | Parâmetro *x*, pesos oficiais por tipo de item e escore padronizado | a fazer |
 
@@ -37,10 +37,40 @@ O `localStorage` continua como cache e como modo de contingência: se o banco
 estiver fora do ar, dá para trabalhar off-line em “usar sem conexão” e exportar
 o backup em JSON.
 
+## Papéis
+
+| Papel | Alcance |
+|---|---|
+| `coordenacao` | Tudo, inclusive administrar contas e decidir a etapa final da revisão. |
+| `coordenacao_area` | Docente + primeira etapa da revisão dos itens da sua área (`equipe.area`). |
+| `docente` | Escreve itens e lança as notas dos próprios discursivos. |
+| `redacao` | Só o lançamento da redação. |
+
+Áreas em `AREAS` (js/app.js): Linguagens (Português, Literatura, Artes),
+Humanas (História, Geografia, Filosofia, Sociologia), Matemática, Ciências da
+Natureza (Biologia, Física, Química) e Inglês. `revisaArea(item)` compara a área
+do componente do item com a área de quem está logado.
+
+## Primeiro acesso
+
+Duas etapas obrigatórias, marcadas em `public.equipe`:
+
+- `trocar_senha` — a conta nasce com a senha provisória da escola
+  (`Marista@2026`) e o `render()` trava na tela de criação de senha até a pessoa
+  definir a sua. Redefinir a senha pela tela de Equipe volta a exigir a troca.
+- `tutorial_visto` — na estreia abre um tutorial curto e animado, com roteiro
+  próprio para cada papel (`TUTORIAL` em js/app.js). Dá para revê-lo em
+  “Minha conta”.
+
+Como a pessoa não pode editar a própria linha da equipe — isso permitiria mudar
+o próprio papel —, os dois campos são marcados por funções `SECURITY DEFINER`
+(`marcar_senha_trocada` e `marcar_tutorial_visto`), restritas à conta que chama.
+
 ## Como o acesso funciona
 
 1. A tabela `public.equipe` é a lista de quem pode entrar, com o **papel** de
-   cada pessoa (coordenação, docente, professora de redação).
+   cada pessoa (coordenação, coordenação de área, docente, professora de
+   redação) e, para a coordenação de área, a **área** que ela revisa.
 2. Um gatilho em `auth.users` recusa a criação de conta de e-mail fora dessa
    lista — mesmo que alguém chame a API do Supabase por fora do sistema.
 3. O RLS de **todas** as tabelas exige `eh_equipe()`: sair da lista é perder o

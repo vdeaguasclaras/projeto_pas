@@ -412,6 +412,105 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .pas-previa .pas{box-shadow:0 3px 14px rgba(0,0,0,.3)}
 .pas-previa .pas-miolo{padding-bottom:24pt}
 
+
+/* ---------- tutorial de boas-vindas ----------
+   Uma miniatura animada do próprio sistema: a casca, as abas com a do passo
+   em destaque e uma cena curta ilustrando o que se faz naquela tela.        */
+.tut-corpo{display:flex;flex-direction:column;gap:14px}
+.tut-mock{border:1px solid var(--borda);border-radius:14px;overflow:hidden;background:var(--fundo)}
+.tut-topo{background:linear-gradient(120deg,var(--azul-esc),var(--azul) 55%,var(--rosa));
+  padding:10px 12px;display:flex;align-items:center;gap:8px}
+.tut-topo span{width:22px;height:22px;border-radius:6px;background:#fff;flex:none}
+.tut-topo em{height:8px;width:120px;border-radius:99px;background:rgba(255,255,255,.55)}
+.tut-abas{display:flex;gap:5px;padding:8px 12px;background:linear-gradient(180deg,var(--rosa),transparent 260%);
+  flex-wrap:wrap}
+.tut-abas i{font-style:normal;font-size:10.5px;font-weight:700;color:#fff;padding:4px 9px;border-radius:8px;
+  background:rgba(255,255,255,.22);transition:all .3s}
+.tut-abas i.on{background:#fff;color:var(--azul-esc);animation:tut-pulsa 1.6s ease-in-out infinite}
+@keyframes tut-pulsa{0%,100%{transform:translateY(0);box-shadow:0 0 0 0 rgba(255,255,255,.5)}
+  50%{transform:translateY(-2px);box-shadow:0 0 0 5px rgba(255,255,255,0)}}
+.tut-palco{height:150px;padding:14px;display:flex;align-items:center;justify-content:center;gap:10px;
+  background:var(--papel);overflow:hidden}
+
+@keyframes tut-sobe{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes tut-cresce{from{transform:scaleY(.05)}to{transform:scaleY(1)}}
+@keyframes tut-entra{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes tut-preenche{0%,40%{background:transparent}100%{background:var(--ink)}}
+@keyframes tut-anda{0%{opacity:.25}60%,100%{opacity:1}}
+
+.tut-ola{display:flex;align-items:center;gap:10px;animation:tut-sobe .5s ease both}
+.tut-ola span{width:52px;height:52px;border-radius:14px;background:var(--azul-esc);color:#fff;
+  display:grid;place-items:center;font-weight:800;font-size:16px}
+.tut-ola b{font-size:22px;color:var(--rosa)}
+
+.tut-cartoes{display:flex;gap:8px;flex:1}
+.tut-cartoes u{flex:1;text-decoration:none;border:1px solid var(--borda);border-radius:10px;padding:10px;
+  background:var(--papel);animation:tut-sobe .5s var(--d) ease both}
+.tut-cartoes s{display:block;height:8px;border-radius:99px;text-decoration:none;
+  background:linear-gradient(90deg,var(--azul),var(--ciano));animation:tut-entra .6s var(--d) ease both}
+.tut-tabela{display:flex;flex-direction:column;gap:5px;flex:1}
+.tut-tabela b{height:10px;border-radius:4px;background:var(--azul-claro);animation:tut-entra .5s ease both}
+.tut-tabela b:nth-child(2){animation-delay:.1s}.tut-tabela b:nth-child(3){animation-delay:.2s}
+.tut-tabela b:nth-child(4){animation-delay:.3s}
+
+.tut-texto{width:110px;height:96px;border-radius:8px;background:var(--rosa-fundo);
+  border:1px solid var(--rosa-claro);animation:tut-sobe .5s ease both}
+.tut-slots{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1;max-width:200px}
+.tut-slots i{height:26px;border-radius:8px;background:var(--azul-claro);animation:tut-sobe .5s var(--d) ease both}
+.tut-slots i.livre{background:transparent;border:2px dashed var(--verde);animation:tut-anda 1.5s var(--d) ease-in-out infinite}
+
+.tut-editor{display:flex;gap:10px;flex:1;align-items:stretch}
+.tut-fonte{width:104px;border-radius:8px;background:var(--rosa-fundo);border:1px solid var(--rosa-claro)}
+.tut-form{flex:1;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.tut-form i{height:14px;border-radius:6px;background:var(--azul-claro);animation:tut-entra .5s var(--d) ease both}
+.tut-form i:nth-child(2){width:75%}.tut-form i:nth-child(3){width:52%}
+
+.tut-fluxo{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:center}
+.tut-fluxo i{font-style:normal;font-size:11px;font-weight:700;padding:6px 10px;border-radius:99px;
+  background:var(--azul-claro);color:var(--azul-esc);animation:tut-sobe .45s var(--d) ease both}
+.tut-fluxo i.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.tut-fluxo b{width:14px;height:2px;background:var(--borda);border-radius:99px}
+
+.tut-caderno{display:flex;gap:9px;flex:1;max-width:230px}
+.tut-caderno div{flex:1;display:flex;flex-direction:column;gap:5px;border-right:1px solid var(--borda);padding-right:9px}
+.tut-caderno div:last-child{border-right:none;padding-right:0}
+.tut-caderno s{height:5px;border-radius:2px;background:var(--borda);text-decoration:none;
+  animation:tut-entra .4s ease both}
+.tut-caderno s:nth-child(2n){width:88%}.tut-caderno s:nth-child(3n){width:72%}
+.tut-caderno s:nth-child(1){animation-delay:0s}.tut-caderno s:nth-child(2){animation-delay:.05s}
+.tut-caderno s:nth-child(3){animation-delay:.1s}.tut-caderno s:nth-child(4){animation-delay:.15s}
+.tut-caderno s:nth-child(5){animation-delay:.2s}.tut-caderno s:nth-child(6){animation-delay:.25s}
+.tut-caderno s:nth-child(7){animation-delay:.3s}.tut-caderno s:nth-child(8){animation-delay:.35s}
+.tut-caderno s:nth-child(9){animation-delay:.4s}
+
+.tut-cartao{display:flex;flex-direction:column;gap:7px}
+.tut-cartao u{display:flex;gap:7px;align-items:center;text-decoration:none;animation:tut-entra .4s var(--d) ease both}
+.tut-cartao o{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--rosa);display:block}
+.tut-cartao o.m{animation:tut-preenche 1.8s var(--d) ease-in-out infinite}
+
+.tut-barras{display:flex;align-items:flex-end;gap:10px;height:100%}
+.tut-barras i{width:24px;height:var(--h);border-radius:6px 6px 0 0;transform-origin:bottom;
+  background:linear-gradient(180deg,var(--azul),var(--ciano));animation:tut-cresce .6s var(--d) ease both}
+
+.tut-equipe{display:flex;flex-direction:column;gap:8px;width:210px}
+.tut-equipe u{display:flex;gap:8px;align-items:center;text-decoration:none;animation:tut-entra .45s var(--d) ease both}
+.tut-equipe o{width:18px;height:18px;border-radius:50%;background:var(--rosa);display:block;flex:none}
+.tut-equipe s{flex:1;height:8px;border-radius:99px;background:var(--azul-claro);text-decoration:none}
+
+.tut-pauta{display:flex;flex-direction:column;gap:9px;width:220px}
+.tut-pauta s{height:1.5px;background:var(--ink-2);opacity:.5;text-decoration:none;
+  animation:tut-entra .4s var(--d) ease both}
+.tut-formula{font-size:19px;font-weight:800;color:var(--azul-esc);letter-spacing:.5px;
+  animation:tut-sobe .5s ease both}
+:root[data-theme="dark"] .tut-formula{color:#9db8ff}
+
+.tut-texto-passo{animation:tut-sobe .35s ease both}
+.tut-texto-passo h3{font-size:17px;margin-bottom:6px}
+.tut-texto-passo p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.55;max-width:64ch}
+.tut-pontos{display:flex;gap:6px;justify-content:center}
+.tut-pontos i{width:8px;height:8px;border-radius:50%;background:var(--borda);cursor:pointer;transition:all .2s}
+.tut-pontos i.on{background:var(--rosa);width:22px;border-radius:99px}
+
 /* ---------- impressão ---------- */
 #print-area{display:none}
 @media print{

@@ -59,7 +59,7 @@ function checar(r) { if (r.error) throw r.error; return r; }
 // A tabela public.equipe define quem entra e com qual papel. Todo mundo
 // autenticado lê; só a coordenação escreve (regra de RLS no banco).
 async function carregarEquipe() {
-  const { data } = checar(await sb.from('equipe').select('email,nome,papel,componente').order('nome'));
+  const { data } = checar(await sb.from('equipe').select('email,nome,papel,area,componente,trocar_senha,tutorial_visto').order('nome'));
   return data || [];
 }
 
@@ -68,6 +68,12 @@ async function carregarEquipe() {
 async function gravarMembro(m) {
   checar(await sb.from('equipe').upsert(m));
 }
+
+// Primeiro acesso: a pessoa não pode editar a própria linha da equipe (mudaria
+// o próprio papel), então estes dois campos são marcados por funções do banco
+// restritas à conta que chama.
+async function marcarSenhaTrocada() { checar(await sb.rpc('marcar_senha_trocada')); }
+async function marcarTutorialVisto() { checar(await sb.rpc('marcar_tutorial_visto')); }
 
 // Criação/edição de contas passa pela Edge Function `equipe`, única a
 // conhecer a chave de serviço. O navegador só envia o próprio JWT.
@@ -144,5 +150,6 @@ export const nuvem = {
   conectado, usuario, iniciar, entrar, sair, trocarSenha,
   carregarTudo, gravarConfig, gravarLinha, gravarLinhas, removerLinha,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
-  carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro
+  carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
+  marcarSenhaTrocada, marcarTutorialVisto
 };
