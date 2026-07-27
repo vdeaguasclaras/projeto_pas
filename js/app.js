@@ -353,6 +353,9 @@ ACOES['cfg'] = () => {
         <div class="campo"><label>Data de aplicação</label><input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
         <div class="campo"><label>Duração</label><input class="caixa" id="cfg-dur" value="${esc(c.duracao)}"></div>
       </div>
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+        <input type="checkbox" id="cfg-red" ${c.imprimirRedacao !== false ? 'checked' : ''}> imprimir o cartão de redação
+        <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="cfg-salvar">Salvar</button></div>`);
@@ -361,7 +364,7 @@ ACOES['cfg-salvar'] = () => {
   Object.assign(S.config, {
     nome: $('#cfg-nome').value.trim(), etapa: $('#cfg-etapa').value.trim(),
     serie: $('#cfg-serie').value.trim(), dataAplicacao: $('#cfg-data').value,
-    duracao: $('#cfg-dur').value.trim()
+    duracao: $('#cfg-dur').value.trim(), imprimirRedacao: $('#cfg-red').checked
   });
   $('#dlg').close(); commit(); PERS.config(); toast('Configurações salvas.');
 };
@@ -1171,52 +1174,209 @@ ACOES['cad-capa-salvar'] = () => {
 };
 
 /* ================= TELA 5 · CARTÕES ================= */
-function htmlCartao(est) {
-  const pv = prova(est.versao);
-  // Discursivos (tipo D) são respondidos no próprio caderno — fora do cartão.
-  const ac = pv.filter(e => e.item.tipo === 'A' || e.item.tipo === 'C');
-  const bs = pv.filter(e => e.item.tipo === 'B');
-  const cols = [];
-  for (let i = 0; i < ac.length; i += 5) cols.push(ac.slice(i, i + 5));
-  const colsHtml = cols.map(col => `
-    <div class="cr-col">
-      <h5>ITENS ${col[0].numero}–${col[col.length - 1].numero}</h5>
-      ${col.map(({ item, numero }) => {
-        const resp = TIPOS[item.tipo].respostas;
-        return `<div class="cr-linha"><span class="no">${numero}</span>${resp.map(r => `<span class="bolha"></span>${r}`).join(' ')}</div>`;
-      }).join('')}
-    </div>`).join('');
-  const bsHtml = bs.map(({ numero }) => `
-    <div class="cr-b"><h5>ITEM ${numero} — TIPO B (resposta de 000 a 999)</h5>
-      ${['Centena', 'Dezena', 'Unidade'].map(casa => `
-        <div class="dig"><span>${casa}</span>${Array.from({ length: 10 }, (_, i) => `<span class="bolha"></span>${i}`).join(' ')}</div>`).join('')}
-    </div>`).join('');
+// Conjunto de folhas por estudante, no desenho do caderno de respostas do PAS:
+//   folha 1 — objetiva: todos os itens em ordem numérica ocupando 4/5 da folha
+//             (só A e C recebem bolhas; B e D ficam rotulados) e uma coluna à
+//             direita só para os tipo B, com centena, dezena e unidade;
+//   folha 2 — discursiva: uma pauta por item tipo D e as bolhas de percentual
+//             de acerto (0, 25, 50, 75, 100%), marcadas por quem corrige;
+//   folha 3 — redação: pauta de 30 linhas de 17pt. Opcional, definido pela
+//             coordenação em “Configurar simulado”.
+const PERCENTUAIS_D = [0, 25, 50, 75, 100];
+const COLUNAS_CARTAO = 4;
+const LINHAS_REDACAO = 30;
+// Capacidade de uma folha A4 neste desenho — o que não couber vai para uma
+// folha de continuação, em vez de ser cortado em silêncio.
+const LINHAS_POR_COLUNA = 42;
+const BLOCOS_B_POR_COLUNA = 5;
+const BLOCOS_B_POR_FOLHA = 10;   // a coluna se desdobra em duas antes de virar folha nova
+const ALTURA_UTIL_D = 650;
+
+function cabecalhoCartao(est, faixa) {
   const c = S.config;
   return `
-  <div class="folha" style="width:520px">
-    <div class="cab">
-      <div class="inst">COLÉGIO MARISTA ÁGUAS CLARAS<br><span style="color:#e5007e">${esc(c.nome).toUpperCase()} · ${esc(c.etapa).toUpperCase()}</span></div>
-      <div style="font-size:8px;color:#333;line-height:1.5">Estudante: <b>${esc(est.nome).toUpperCase()}</b><br>
-        Matrícula: <b style="font-family:var(--mono)">${esc(est.matricula)}</b> · ${esc(est.turma)} · ${est.versao === 'adaptada' ? 'Adaptada' : 'Regular'}</div>
-      <div class="sala"><small>SALA</small><span style="display:inline-block;min-width:34px">&nbsp;</span></div>
+  <div class="cr-cab">
+    <div class="cr-cab-prova">
+      <b>${esc(c.nome)}</b>
+      <span>${esc(c.etapa)} · ${esc(c.serie)}</span>
+      <span>Colégio Marista Águas Claras</span>
+      <span>Aplicação: ${dataBR(c.dataAplicacao)}</span>
     </div>
-    <div class="faixa">Caderno de Respostas — uso exclusivo do estudante</div>
-    <div class="corpo">
-      <div class="ancoras"><i></i><i></i></div>
-      <div style="font-size:7.5px;color:#555;border:1px solid #efc3da;border-radius:4px;padding:6px;margin-bottom:8px">
-        As marcações devem ser feitas com caneta esferográfica de tinta <b>preta</b>, preenchendo totalmente o círculo.
-        Itens tipo A: marque C ou E. Tipo C: apenas uma opção. Tipo B: marque os três algarismos.
-        Itens discursivos (tipo D) são respondidos no próprio caderno de provas.
-      </div>
-      ${ac.length ? '<b style="font-size:8.5px;color:#e5007e">RESPOSTAS AOS ITENS DOS TIPOS A e C</b>' : ''}
-      <div class="cr-grid">${colsHtml}</div>
-      ${bsHtml}
-      <div style="margin-top:10px;font-size:7.5px;color:#999;display:flex;justify-content:space-between;font-family:var(--mono)">
-        <span>▮▯▮▮▯▮▮▯ ${esc(est.matricula)}</span><span>${esc(est.turma)}</span>
-      </div>
-      <div class="ancoras"><i></i><i></i></div>
+    <div class="cr-cab-est">
+      <div><span>ESTUDANTE</span><b>${esc(est.nome).toUpperCase()}</b></div>
+      <div><span>MATRÍCULA</span><b>${esc(est.matricula)}</b></div>
+      <div><span>TURMA</span><b>${esc(est.turma)}</b></div>
+      <div><span>PROVA</span><b>${est.versao === 'adaptada' ? 'ADAPTADA' : 'REGULAR'}</b></div>
     </div>
+    <div class="cr-sala"><small>SALA</small><i></i></div>
+  </div>
+  <div class="cr-faixa">${faixa}</div>
+  <div class="cr-ancoras"><i></i><i></i></div>`;
+}
+
+function rodapeCartao(est, folha, total) {
+  return `
+  <div class="cr-ancoras"><i></i><i></i></div>
+  <div class="cr-rodape">
+    <span>▮▯▮▮▯▮▮▯ ${esc(est.matricula)}</span>
+    <span>folha ${folha} de ${total}</span>
   </div>`;
+}
+
+function bolhasDe(tipo) {
+  return TIPOS[tipo].respostas.map(r =>
+    `<span class="bolha"></span><span>${r}</span>`).join('');
+}
+
+// Folhas objetivas — todos os itens em ordem numérica; só A e C recebem
+// bolhas aqui. Quando não cabem numa folha, seguem em folhas de continuação.
+function corposObjetivos(pv) {
+  const bs = pv.filter(e => e.item.tipo === 'B');
+  const porFolha = COLUNAS_CARTAO * LINHAS_POR_COLUNA;
+  const quantas = Math.max(Math.ceil(pv.length / porFolha),
+                           Math.ceil(bs.length / BLOCOS_B_POR_FOLHA), 1);
+  const corpos = [];
+  for (let f = 0; f < quantas; f++) {
+    const daFolha = pv.slice(f * porFolha, (f + 1) * porFolha);
+    const bsDaFolha = bs.slice(f * BLOCOS_B_POR_FOLHA, (f + 1) * BLOCOS_B_POR_FOLHA);
+    const porColuna = Math.ceil(daFolha.length / COLUNAS_CARTAO) || 1;
+    const colunas = [];
+    for (let i = 0; i < daFolha.length; i += porColuna) colunas.push(daFolha.slice(i, i + porColuna));
+
+    const acHtml = colunas.map(col => `
+      <div class="cr-ac-col">
+        <div class="cr-tit">ITENS ${col[0].numero}–${col[col.length - 1].numero}</div>
+        ${col.map(({ item, numero }) => {
+          if (item.tipo === 'B')
+            return `<div class="cr-linha outro"><span class="no">${numero}</span><span class="rot">TIPO B →</span></div>`;
+          if (item.tipo === 'D')
+            return `<div class="cr-linha outro"><span class="no">${numero}</span><span class="rot">TIPO D ↗</span></div>`;
+          return `<div class="cr-linha"><span class="no">${numero}</span>${bolhasDe(item.tipo)}</div>`;
+        }).join('')}
+      </div>`).join('');
+
+    const bHtml = bsDaFolha.length ? bsDaFolha.map(({ numero }) => `
+      <div class="cr-bloco-b">
+        <h6>ITEM ${numero}</h6>
+        <div class="cr-bgrade">
+          <span></span><span class="cab">C</span><span class="cab">D</span><span class="cab">U</span>
+          ${Array.from({ length: 10 }, (_, d) => `
+            <span class="dig">${d}</span>
+            <span class="cel"><span class="bolha"></span></span>
+            <span class="cel"><span class="bolha"></span></span>
+            <span class="cel"><span class="bolha"></span></span>`).join('')}
+        </div>
+      </div>`).join('')
+      : `<div style="font-size:6.5pt;color:#777;text-align:center;padding:8pt 4pt">${
+          bs.length ? 'Os itens do tipo B estão nas outras folhas.' : 'Esta prova não tem itens do tipo B.'}</div>`;
+
+    const soB = daFolha.length === 0;
+    corpos.push({
+      faixa: soB ? 'Caderno de respostas — itens do tipo B (continuação)'
+        : `Caderno de respostas — itens dos tipos A, B e C${quantas > 1 ? ` (${f + 1}ª parte)` : ''}`,
+      html: `
+        <div class="cr-orient">
+          <div class="txt">
+            Marque com caneta esferográfica de tinta <b>preta</b>, preenchendo o círculo por inteiro.
+            Itens do <b>tipo A</b>: marque <b>C</b> se julgar o item certo ou <b>E</b> se julgar errado.
+            Itens do <b>tipo C</b>: marque uma única opção. Itens do <b>tipo B</b>: marque os três
+            algarismos na coluna à direita, inclusive os zeros. Itens do <b>tipo D</b> são respondidos
+            na folha indicada. Não rasure: marcação dupla é anulada.
+          </div>
+          <div class="cr-exemplo">
+            <h6>EXEMPLO DE PREENCHIMENTO</h6>
+            <div class="ex"><i>tipo A</i><span class="bolha m"></span><span>C</span><span class="bolha"></span><span>E</span></div>
+            <div class="ex"><i>tipo C</i><span class="bolha"></span><span>A</span><span class="bolha m"></span><span>B</span><span class="bolha"></span><span>C</span><span class="bolha"></span><span>D</span></div>
+            <div class="ex"><i>tipo B</i><span>resposta 025 → C=0, D=2, U=5</span></div>
+          </div>
+        </div>
+        <div class="cr-corpo">
+          ${soB ? '' : `<div class="cr-ac">${acHtml}</div>`}
+          <div class="cr-bcol${bsDaFolha.length > BLOCOS_B_POR_COLUNA ? ' duplo' : ''}" ${soB ? 'style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:6pt;align-content:start"' : ''}>
+            ${soB ? '' : '<div class="cr-tit">ITENS DO TIPO B</div>'}${bHtml}</div>
+        </div>`
+    });
+  }
+  return corpos;
+}
+
+// Folhas dos discursivos (tipo D): uma pauta por item e as bolhas de
+// percentual de acerto. Quebra em mais folhas quando a altura não dá.
+function corposDiscursivos(pv) {
+  const ds = pv.filter(e => e.item.tipo === 'D');
+  if (!ds.length) return [];
+  const altura = e => 40 + (e.item.dLinhas || 10) * 17;
+  const grupos = [];
+  let grupo = [], soma = 0;
+  for (const e of ds) {
+    const a = altura(e);
+    if (grupo.length && soma + a > ALTURA_UTIL_D) { grupos.push(grupo); grupo = []; soma = 0; }
+    grupo.push(e); soma += a;
+  }
+  if (grupo.length) grupos.push(grupo);
+
+  return grupos.map((g, i) => ({
+    faixa: `Caderno de respostas — itens do tipo D (resposta construída)${grupos.length > 1 ? ` (${i + 1}ª parte)` : ''}`,
+    html: `
+      <div class="cr-orient">
+        <div class="txt">
+          Responda com caneta esferográfica de tinta <b>preta</b>, dentro do espaço reservado a cada item.
+          Em caso de erro, risque a palavra com um traço simples e escreva o substitutivo — não use parênteses.
+          O quadro de <b>percentual de acerto</b> é de uso exclusivo de quem corrige.
+        </div>
+      </div>
+      <div style="flex:1;overflow:hidden">
+        ${g.map(({ item, numero }) => `
+          <div class="cr-d">
+            <div class="cr-d-cab">
+              <b>ITEM ${numero}</b>
+              <span>${esc(item.componente)} · resposta construída</span>
+            </div>
+            <div class="cr-pauta">${Array.from({ length: item.dLinhas || 10 }, () => '<i></i>').join('')}</div>
+            <div class="cr-nota">
+              <b>PERCENTUAL DE ACERTO (uso do corretor)</b>
+              ${PERCENTUAIS_D.map(p => `<span class="op"><span class="bolha"></span>${p}%</span>`).join('')}
+            </div>
+          </div>`).join('')}
+      </div>`
+  }));
+}
+
+// Folha da redação, com a pauta do rascunho oficial (30 linhas de 17pt).
+function corpoRedacao() {
+  return {
+    faixa: 'Caderno de respostas — redação em língua portuguesa',
+    html: `
+      <div class="cr-orient">
+        <div class="txt">
+          Escreva o texto definitivo com caneta esferográfica de tinta <b>preta</b>, respeitando o limite de
+          ${LINHAS_REDACAO} linhas. Texto escrito a lápis não é considerado. <b>Não identifique</b> sua folha:
+          qualquer marca de identificação anula a redação.
+        </div>
+      </div>
+      <div class="cr-red-pauta">${Array.from({ length: LINHAS_REDACAO }, () => '<i></i>').join('')}</div>
+      <div style="flex:1"></div>`
+  };
+}
+
+// Todas as folhas de um estudante, já numeradas “folha N de M”.
+function corposDoCartao(est) {
+  const pv = prova(est.versao);
+  const corpos = [...corposObjetivos(pv), ...corposDiscursivos(pv)];
+  if (S.config.imprimirRedacao !== false) corpos.push(corpoRedacao());
+  return corpos;
+}
+
+const totalFolhas = est => corposDoCartao(est).length;
+
+function folhasDoCartao(est) {
+  const corpos = corposDoCartao(est);
+  return corpos.map((c, i) => `
+    <div class="cr-folha">
+      ${cabecalhoCartao(est, c.faixa)}
+      ${c.html}
+      ${rodapeCartao(est, i + 1, corpos.length)}
+    </div>`).join('');
 }
 
 let cartTurma = 'todas';
@@ -1227,20 +1387,22 @@ function telaCartoes() {
   const linhas = filtrados.map(e => `
     <tr><td>${esc(e.nome)}</td><td style="font-family:var(--mono)">${esc(e.matricula)}</td>
       <td>${esc(e.turma)}</td><td style="text-transform:capitalize">${esc(e.versao)}</td>
+      <td>${totalFolhas(e)}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="est-editar" data-id="${e.id}">Editar</button>
         <button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>
       </td></tr>`).join('');
   const opsTurma = ['todas', ...turmas].map(t =>
     `<option value="${t}" ${cartTurma === t ? 'selected' : ''}>${t === 'todas' ? 'Todas as turmas' : t}</option>`).join('');
-  const previa = filtrados.slice(0, 1).map(htmlCartao).join('');
+  const previa = filtrados.slice(0, 1).map(folhasDoCartao).join('');
   const nRegItens = prova('regular').length, nAdaItens = prova('adaptada').length;
+  const folhasTotal = filtrados.reduce((s, e) => s + totalFolhas(e), 0);
 
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Estudantes e cartões-resposta</h2>
-        <span class="sub">${S.estudantes.length} estudantes · cartão nominal gerado por versão de prova</span></div>
+        <span class="sub">${S.estudantes.length} estudantes · ${folhasTotal} folha(s) a imprimir e digitalizar no filtro atual</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="caixa" style="width:auto" data-mud="cart-turma">${opsTurma}</select>
         <button class="btn fantasma" data-acao="est-importar">⬆ Importar lista (CSV)</button>
@@ -1248,16 +1410,16 @@ function telaCartoes() {
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
     </div>
-    ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th></th></tr></thead>
+    ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th>Folhas</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : '<div class="vazio">Nenhum estudante cadastrado. Importe a lista (CSV: nome;matrícula;turma;versão) ou cadastre um a um.</div>'}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn fantasma" data-acao="cart-template">⬇ Exportar gabarito p/ leitor local (JSON)</button>
     </div>
   </div>
-  ${previa && (nRegItens + nAdaItens) ? `<div class="papelaria"><div style="width:100%;text-align:center;font-size:12px;color:#6b5f52;margin-bottom:-10px">Prévia — 1º cartão do filtro atual</div>${previa}</div>` : ''}
+  ${previa && (nRegItens + nAdaItens) ? `<div class="cr-previa"><div style="width:100%;text-align:center;font-size:12px;color:#6b5f52;margin-bottom:10px">Prévia — folhas do 1º estudante do filtro</div>${previa}</div>` : ''}
   </div>
-  <p class="nota-tela"><strong>Integração com o app local (Windows):</strong> as âncoras pretas e o código de matrícula permitem identificar e ler cada folha digitalizada em lote no scanner. O botão “Exportar gabarito p/ leitor local” gera o arquivo JSON que o aplicativo de leitura óptica usa para saber quantos itens e de que tipo procurar — o resultado volta como CSV importado na tela de Correção.</p>`;
+  <p class="nota-tela"><strong>Cada estudante tem mais de uma folha</strong> — objetiva, discursiva (quando houver item tipo D) e redação, se a coordenação optar por imprimi-la. Todas trazem cabeçalho com nome, matrícula e turma, âncoras de leitura óptica nos cantos e a identificação “folha N de M”, para que a digitalização em lote saiba a qual estudante e a qual parte da prova cada imagem pertence. Os itens dos tipos B e D aparecem rotulados na grade principal e têm campos próprios: o tipo B na coluna à direita, com centena, dezena e unidade; o tipo D na folha seguinte, com a pauta de resposta e as bolhas de percentual de acerto (0, 25, 50, 75 e 100%) preenchidas por quem corrige.</p>`;
 }
 MUDS['cart-turma'] = (d, el) => { cartTurma = el.value; render(); };
 
@@ -1327,19 +1489,34 @@ ACOES['est-importar-ok'] = () => {
 ACOES['cart-imprimir'] = () => {
   const filtrados = S.estudantes.filter(e => cartTurma === 'todas' || e.turma === cartTurma)
     .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
-  $('#print-area').innerHTML = filtrados.map(htmlCartao).join('');
+  $('#print-area').innerHTML = filtrados.map(folhasDoCartao).join('');
   window.print();
 };
 ACOES['cart-template'] = () => {
+  // O leitor óptico precisa saber que cada estudante tem mais de uma folha e
+  // o que procurar em cada uma.
+  const daVersao = v => {
+    const pv = prova(v);
+    const folhas = [{
+      folha: 1, tipo: 'objetiva',
+      itens: pv.filter(({ item }) => item.tipo !== 'D')
+        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
+    }];
+    const ds = pv.filter(({ item }) => item.tipo === 'D');
+    if (ds.length) folhas.push({
+      folha: folhas.length + 1, tipo: 'discursiva', percentuais: PERCENTUAIS_D,
+      itens: ds.map(({ item, numero }) => ({ numero, tipo: 'D', linhas: item.dLinhas || 10 }))
+    });
+    if (S.config.imprimirRedacao !== false)
+      folhas.push({ folha: folhas.length + 1, tipo: 'redacao', linhas: LINHAS_REDACAO });
+    return { totalItens: pv.length, folhas };
+  };
   const tpl = {
-    formato: 'pas-marista/gabarito-v1',
+    formato: 'pas-marista/gabarito-v2',
     simulado: S.config.nome, etapa: S.config.etapa,
     geradoEm: new Date().toISOString(),
-    versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v,
-      // Discursivos (D) ficam fora: não têm bolhas no cartão.
-      prova(v).filter(({ item }) => item.tipo !== 'D')
-        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
-    ]))
+    identificacao: { chave: 'matricula', ancoras: 'quatro quadrados pretos, dois no topo e dois no rodapé de cada folha' },
+    versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)]))
   };
   baixar('pas-gabarito-leitor.json', JSON.stringify(tpl, null, 2));
   toast('Gabarito exportado para o leitor local.');
@@ -1392,8 +1569,12 @@ function tabelaDiscursivos() {
       const aplicavel = i.versao === 'ambas' || i.versao === e.versao;
       if (!aplicavel) return '<td style="color:var(--ink-2)">—</td>';
       const v = S.respostas[e.id]?.discursivas?.[i.id];
-      return `<td><input class="caixa" style="width:78px" type="number" step="0.5" min="0" max="10" placeholder="—"
-        value="${v ?? ''}" data-mud="dnota" data-est="${e.id}" data-item="${i.id}"></td>`;
+      // Os mesmos cinco níveis do cartão-resposta (0, 25, 50, 75 e 100%),
+      // guardados como nota de 0 a 10.
+      const ops = ['<option value="">—</option>', ...PERCENTUAIS_D.map(p =>
+        `<option value="${p / 10}" ${Number(v) === p / 10 ? 'selected' : ''}>${p}%</option>`)].join('');
+      return `<td><select class="caixa" style="width:82px"
+        data-mud="dnota" data-est="${e.id}" data-item="${i.id}">${ops}</select></td>`;
     }).join('');
     return `<tr><td>${esc(e.nome)}</td><td>${esc(e.turma)}</td>${cels}</tr>`;
   }).join('');

@@ -98,12 +98,32 @@ não pelo CSS de impressão: o Chrome posiciona cabeçalhos `position:fixed` de
 forma errática entre páginas. Cada página é uma folha A4 completa, o que faz a
 prévia na tela mostrar exatamente o que sai impresso.
 
-### Cartão-resposta — pendente
+### Cartão-resposta — concluído
 
-Falta o modelo de referência. Para calibrar, é preciso um PDF do caderno de
-respostas do PAS (não veio no lote de 2025): posição e diâmetro das bolhas,
-âncoras de leitura óptica, área de identificação do estudante e o campo da
-redação. Sem esse arquivo, o cartão segue no desenho do MVP.
+Calcado no caderno de respostas do PAS. Deixou de ser uma folha e passou a ser
+um **conjunto de folhas por estudante**, cada uma com cabeçalho completo,
+âncoras de leitura óptica no topo e no rodapé e a identificação “folha N de M”:
+
+| Folha | Conteúdo |
+|---|---|
+| Objetiva | Todos os itens em ordem numérica ocupando 4/5 da folha, em 4 colunas. Só os tipos **A** (C/E) e **C** (A–D) recebem bolhas; os tipos **B** e **D** aparecem rotulados, remetendo ao seu campo próprio. A coluna à direita traz os itens do **tipo B**, com centena, dezena e unidade. |
+| Discursiva | Uma pauta de resposta por item do **tipo D**, com as bolhas de **percentual de acerto** — 0, 25, 50, 75 e 100% —, preenchidas por quem corrige. |
+| Redação | Pauta de 30 linhas de 17pt, igual à do rascunho oficial. **Opcional**: a coordenação decide em “Configurar simulado” se imprime. |
+
+Quando o conteúdo não cabe, a folha se desdobra em vez de cortar: a coluna dos
+itens tipo B vira duas antes de gerar uma folha de continuação, e os discursivos
+quebram por altura acumulada.
+
+**Consequência para a leitura óptica**, apontada pela coordenação: cada
+estudante passa a ter mais de uma folha digitalizada. O gabarito exportado para
+o leitor local mudou para `pas-marista/gabarito-v2` e agora descreve as folhas —
+qual é objetiva, qual é discursiva (com os percentuais aceitos) e qual é a
+redação —, além da chave de identificação (matrícula) e das âncoras.
+
+O lançamento das notas dos discursivos, na tela de correção, passou a oferecer
+exatamente os mesmos cinco níveis do cartão, em vez de um número livre de 0 a
+10, para que o que se marca no papel e o que se digita no sistema sejam a mesma
+coisa.
 
 ### Capa
 

@@ -205,20 +205,105 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .opcoes{margin:4px 0 0 2px;padding:0;list-style:none}
 .opcoes li{margin:2px 0}
 .opcoes b{color:#0d2f8a}
-/* cartão-resposta */
-.cr-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
-.cr-col{border:1px solid #efc3da;border-radius:4px;padding:6px;background:#fff8fb;break-inside:avoid}
-.cr-col h5{margin:0 0 5px;font-size:7.5px;color:#e5007e;text-align:center;letter-spacing:.4px}
-.cr-linha{display:flex;align-items:center;gap:4px;margin:3px 0;font-size:7px;color:#333}
-.cr-linha .no{font-family:var(--mono);font-weight:700;min-width:14px;color:#0d2f8a}
-.bolha{width:9px;height:9px;border:1.2px solid #e5007e;border-radius:50%;display:inline-block;flex:none}
+/* ---------- cartão-resposta: calcado no caderno de respostas do PAS ----------
+   Conjunto de folhas A4 por estudante:
+   1. objetiva — todos os itens em ordem numérica ocupando 4/5 da folha (só os
+      tipos A e C recebem bolhas; B e D aparecem rotulados) e uma coluna à
+      direita só para os itens do tipo B, com centena, dezena e unidade;
+   2. discursiva — uma pauta por item do tipo D e as bolhas de percentual de
+      acerto (0, 25, 50, 75 e 100%), marcadas por quem corrige;
+   3. redação — pauta de 30 linhas de 17pt, como o rascunho oficial. Opcional.  */
+.cr-folha{
+  position:relative; width:595pt; height:842pt; background:#fff; color:#111;
+  font-family:Arial,Helvetica,sans-serif; font-size:8pt; line-height:1.3;
+  padding:22pt 25.4pt; page-break-after:always; break-after:page; margin:0 auto;
+  display:flex; flex-direction:column;
+}
+.cr-folha:last-child{page-break-after:auto;break-after:auto}
+.cr-folha *{box-sizing:border-box}
+
+/* cabeçalho de identificação */
+.cr-cab{display:flex;gap:8pt;align-items:stretch;border:1pt solid #111;padding:6pt 8pt}
+.cr-cab-prova{flex:0 0 30%;border-right:.7pt solid #bbb;padding-right:8pt}
+.cr-cab-prova b{display:block;font-size:9pt;color:#0d2f8a;line-height:1.2}
+.cr-cab-prova span{display:block;font-size:7pt;color:#555;margin-top:2pt}
+.cr-cab-est{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:2pt 10pt;align-content:center}
+.cr-cab-est div{display:flex;gap:5pt;align-items:baseline;border-bottom:.5pt dotted #bbb}
+.cr-cab-est span{font-size:6pt;letter-spacing:.4pt;color:#777;min-width:44pt}
+.cr-cab-est b{font-size:8.5pt}
+.cr-sala{flex:0 0 52pt;border:1.5pt solid #e5007e;color:#e5007e;text-align:center;
+  display:flex;flex-direction:column;justify-content:center;font-weight:800}
+.cr-sala small{display:block;font-size:6pt;letter-spacing:.6pt}
+.cr-sala i{display:block;height:16pt}
+.cr-faixa{background:#e5007e;color:#fff;font-size:7.5pt;font-weight:800;letter-spacing:.5pt;
+  padding:3pt 8pt;text-transform:uppercase;margin-top:4pt}
+
+/* orientação + exemplo */
+.cr-orient{display:flex;gap:8pt;margin-top:6pt;font-size:6.8pt;line-height:1.35}
+.cr-orient .txt{flex:1;border:.7pt solid #efc3da;background:#fff8fb;padding:5pt 7pt}
+.cr-orient .txt b{color:#e5007e}
+.cr-exemplo{flex:0 0 168pt;border:.7pt solid #efc3da;background:#fff8fb;padding:4pt 6pt}
+.cr-exemplo h6{margin:0 0 3pt;font-size:6.2pt;color:#e5007e;letter-spacing:.3pt}
+.cr-exemplo .ex{display:flex;align-items:center;gap:4pt;margin:1.5pt 0;font-size:6.2pt}
+.cr-exemplo .ex i{font-style:normal;color:#777;min-width:34pt}
+
+/* corpo: itens A/C à esquerda, tipo B à direita */
+.cr-corpo{flex:1;display:flex;gap:9pt;margin-top:6pt;min-height:0}
+.cr-ac{flex:1;display:flex;gap:7pt}
+.cr-ac-col{flex:1;border:.7pt solid #efc3da;border-radius:2pt;padding:3pt 4pt;background:#fff}
+.cr-tit{font-size:6.2pt;color:#e5007e;text-align:center;letter-spacing:.4pt;font-weight:800;
+  border-bottom:.5pt solid #efc3da;padding-bottom:2pt;margin-bottom:2pt}
+.cr-linha{display:flex;align-items:center;gap:2.5pt;height:15pt;font-size:6.5pt;color:#333}
+.cr-linha .no{font-family:var(--mono);font-weight:700;font-size:7pt;color:#0d2f8a;
+  min-width:15pt;text-align:right}
+.bolha{width:8.5pt;height:8.5pt;border:.9pt solid #e5007e;border-radius:50%;display:inline-block;flex:none}
 .bolha.m{background:#111;border-color:#111}
-.cr-b{border:1px solid #efc3da;border-radius:4px;padding:8px;margin-top:10px;background:#fff8fb;break-inside:avoid}
-.cr-b h5{margin:0 0 6px;font-size:8px;color:#e5007e;letter-spacing:.4px}
-.cr-b .dig{display:flex;gap:3px;align-items:center;font-size:6.5px;margin:2px 0}
-.cr-b .dig span{color:#666;min-width:34px}
-.ancoras{display:flex;justify-content:space-between;padding:0 2px;margin:4px 0}
-.ancoras i{width:9px;height:9px;background:#111;display:block}
+.cr-linha .rot{font-size:6pt;font-weight:800;color:#8b5cf6;letter-spacing:.3pt}
+.cr-linha.outro{background:color-mix(in srgb,#8b5cf6 8%,transparent);border-radius:2pt}
+
+/* coluna dos itens do tipo B */
+.cr-bcol{flex:0 0 118pt;border:.7pt solid #efc3da;border-radius:2pt;padding:3pt 4pt;background:#fff8fb;
+  display:flex;flex-direction:column;gap:4pt}
+.cr-bcol.duplo{flex:0 0 126pt;display:grid;grid-template-columns:1fr 1fr;gap:3pt;align-content:start}
+.cr-bcol.duplo>.cr-tit{grid-column:1/-1}
+.cr-bcol.duplo .cr-bloco-b{padding:2pt}
+.cr-bcol.duplo .bolha{width:7pt;height:7pt}
+.cr-bcol.duplo .cr-bgrade{grid-template-columns:7pt repeat(3,1fr);font-size:5pt}
+.cr-bloco-b{border:.6pt solid #efc3da;border-radius:2pt;padding:3pt;background:#fff}
+.cr-bloco-b h6{margin:0 0 2pt;font-size:6.5pt;color:#0d2f8a;text-align:center;font-family:var(--mono)}
+.cr-bgrade{display:grid;grid-template-columns:9pt repeat(3,1fr);gap:1pt;font-size:5.6pt;color:#666}
+.cr-bgrade .cab{text-align:center;font-weight:800;color:#e5007e;font-size:5.6pt}
+.cr-bgrade .dig{text-align:right;font-family:var(--mono);font-weight:700;color:#333}
+.cr-bgrade .cel{display:flex;justify-content:center}
+
+/* folha dos discursivos */
+.cr-d{border:.7pt solid #efc3da;border-radius:2pt;padding:5pt 7pt;margin-top:6pt;background:#fff}
+.cr-d-cab{display:flex;align-items:center;justify-content:space-between;gap:8pt;
+  border-bottom:.6pt solid #efc3da;padding-bottom:3pt;margin-bottom:4pt}
+.cr-d-cab b{font-size:8pt;color:#0d2f8a}
+.cr-d-cab span{font-size:6.5pt;color:#777}
+.cr-pauta i{display:block;height:17pt;border-bottom:.6pt solid #999}
+.cr-nota{display:flex;align-items:center;gap:7pt;margin-top:5pt;padding-top:4pt;
+  border-top:.6pt dashed #efc3da;font-size:6.5pt;color:#555}
+.cr-nota b{color:#e5007e;font-size:6.5pt;letter-spacing:.3pt}
+.cr-nota .op{display:flex;align-items:center;gap:2.5pt}
+
+/* folha da redação */
+.cr-red-pauta{margin-top:8pt;counter-reset:cr-red}
+.cr-red-pauta i{display:block;height:17pt;border-bottom:.6pt solid #999;position:relative}
+.cr-red-pauta i::before{counter-increment:cr-red;content:counter(cr-red);
+  position:absolute;left:-16pt;bottom:1.5pt;font-size:6.5pt;color:#777;font-family:var(--mono)}
+.cr-red-pauta{padding-left:18pt}
+
+/* rodapé de leitura óptica */
+.cr-ancoras{display:flex;justify-content:space-between;margin:4pt 0}
+.cr-ancoras i{width:9pt;height:9pt;background:#111;display:block}
+.cr-rodape{display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--mono);font-size:6.5pt;color:#666;margin-top:2pt}
+
+.cr-previa{background:#e9e4de;padding:24px;overflow:auto}
+.cr-previa .cr-folha{box-shadow:0 3px 14px rgba(0,0,0,.3);margin-bottom:18px}
+
 /* boletim */
 .bol-cab{background:linear-gradient(115deg,#0d2f8a,#1d5cff);color:#fff;padding:12px 16px}
 .bol-cab h4{margin:0;font-size:13px}
@@ -333,8 +418,11 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
   body>*:not(#print-area){display:none!important}
   #print-area{display:block}
 
-  /* cartões-resposta e boletins seguem no formato antigo */
+  /* boletins seguem no formato antigo; o cartão tem folha própria */
   @page{size:A4;margin:12mm}
+  @page cartao{size:A4;margin:0}
+  #print-area .cr-folha{page:cartao;box-shadow:none;margin:0}
+  #print-area .cr-previa{background:none;padding:0;overflow:visible}
   #print-area .folha{width:100%;max-width:none;box-shadow:none;page-break-after:always;margin:0}
   #print-area .folha:last-child{page-break-after:auto}
 

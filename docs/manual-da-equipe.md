@@ -51,6 +51,20 @@ uma imagem temática e o texto das instruções ao estudante.
 **5 · Cartões-resposta** — cadastro de estudantes (um a um ou colando a lista no
 formato `nome;matrícula;turma;versão`) e impressão dos cartões nominais.
 
+Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
+
+- **objetiva** — todos os itens em ordem numérica; os tipos A e C com bolhas, os
+  tipos B e D rotulados. Os itens tipo B têm campo próprio na coluna à direita,
+  com centena, dezena e unidade;
+- **discursiva** — uma pauta por item tipo D, com as bolhas de percentual de
+  acerto (0, 25, 50, 75 e 100%) que **quem corrige** preenche;
+- **redação** — pauta de 30 linhas. A coordenação decide se imprime, em
+  “Configurar simulado”.
+
+Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos e
+“folha N de M”, para a digitalização em lote saber a que estudante e a que parte
+da prova cada imagem pertence.
+
 **6 · Correção e boletins** — lançamento das marcações (à mão ou importando o
 CSV do leitor óptico), notas dos itens discursivos, redação (NC, NE e TL) e
 impressão dos boletins por turma.
