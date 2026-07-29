@@ -8,6 +8,7 @@ import {
   uid, blank, seed, load, save, substituir
 } from './dados.js';
 import { nuvem } from './nuvem.js';
+import { limpar } from './limpar.js';
 
 let S = load();
 let modoNuvem = false;
@@ -997,7 +998,7 @@ function htmlCapa(versao, totalItens) {
     </div>
     <div class="pas-capa-texto">
       <h2>LEIA COM ATENÇÃO AS INSTRUÇÕES ABAIXO.</h2>
-      <ol>${instrucoes().map(i => `<li>${i}</li>`).join('')}</ol>
+      <ol>${instrucoes().map(i => `<li>${limpar(i)}</li>`).join('')}</ol>
       <div class="pas-capa-obs">
         <span class="rot">OBSERVAÇÕES</span>
         • Este caderno contém <b>${totalItens} ${totalItens === 1 ? 'item' : 'itens'}</b>${versao === 'adaptada' ? ' (versão adaptada)' : ''}.<br>
@@ -1038,7 +1039,9 @@ function comandoDoBloco(itens, texto) {
   if (!partes.length) return '';
   const acoes = partes.length === 1 ? partes[0]
     : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
-  const abertura = (texto.comando || '').trim() ||
+  // A abertura é escrita pela coordenação no texto-base; o resto da frase o
+  // sistema monta com números que ele mesmo gerou.
+  const abertura = limpar((texto.comando || '').trim()) ||
     'Considerando o texto precedente e os múltiplos aspectos a ele relacionados';
   return `${abertura}, ${acoes}.`;
 }
@@ -1430,7 +1433,7 @@ function telaCartoes() {
       <td>${totalFolhas(e)}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="est-editar" data-id="${e.id}">Editar</button>
-        <button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>
+        ${ehCoord() ? `<button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>` : ''}
       </td></tr>`).join('');
   const opsTurma = ['todas', ...turmas].map(t =>
     `<option value="${t}" ${cartTurma === t ? 'selected' : ''}>${t === 'todas' ? 'Todas as turmas' : t}</option>`).join('');
