@@ -95,7 +95,55 @@ impressão dos boletins por turma.
 - Cada **docente** vê apenas as notas dos próprios itens discursivos.
 - A **coordenação** vê tudo.
 
-**7 · Equipe** (só coordenação) — criar, editar e remover os acessos.
+**7 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
+a **lista de estudantes**.
+
+## Trocar de prova
+
+O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no topo
+diz em qual você está trabalhando, e ele manda em todas as telas — os textos, os
+itens, o caderno, os cartões e a correção são sempre os daquela prova. A escolha
+fica guardada no seu navegador; a do colega é independente da sua.
+
+Não confunda com o campo **Versão** do item (regular / adaptada / ambas): esse
+diz para qual caderno da *mesma* prova o item vale — a versão adaptada é a de
+inclusão. São dois eixos diferentes.
+
+- **Coordenação**: o Painel traz a tabela “As provas do simulado”, com as quatro
+  lado a lado — textos, itens, aprovados e situação de cada uma. Clique numa
+  linha para ir trabalhar naquela prova.
+- **Docente**: o Painel abre com “O que você tem para entregar”, que mostra a
+  sua produção em *todas* as provas de uma vez. Na tela de itens, a caixa
+  **todas as provas** desliga o filtro quando você quer ver tudo junto.
+
+Cada prova tem nome, etapa, data, duração, **quantidade de questões** e a escolha
+de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa e as instruções
+do caderno também são de cada prova.
+
+## Coordenação: subir a lista de estudantes
+
+Tela **7 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
+estudante, colunas separadas por `;`, `,` ou tabulação (colar direto de uma
+planilha funciona):
+
+```
+nome completo;matrícula;turma;série;versão
+Antonia Silva de Oliveira;2026-0142;1ª B;1ª série EM;regular
+Elisa Fontes Marques;2026-0231;9º D;9º ano;adaptada
+```
+
+- A **série** aceita as grafias de sempre — “9º ano”, “1ª série”, “2a serie EM”,
+  “3”. O que não for reconhecido é recusado com o motivo, não adivinhado.
+- A **versão** é opcional (padrão: regular).
+- Uma primeira linha de cabeçalho é reconhecida e ignorada.
+- Quem já existe é encontrado pela **matrícula** e atualizado, não duplicado.
+
+Use **Conferir** antes de importar: ele mostra quantos estudantes entram em cada
+série e lista as linhas com problema, sem gravar nada.
+
+A **série é o que liga o estudante à prova**: quem está na 1ª série entra no
+elenco das provas da 1ª série, e é para esse elenco que saem os cartões-resposta
+e os boletins.
 
 ## Trabalhando em várias pessoas ao mesmo tempo
 
@@ -108,7 +156,7 @@ atualiza sozinho quando você volta para a aba).
 
 ## Coordenação: criar o acesso de alguém
 
-1. Tela **7 · Equipe** → **+ Adicionar pessoa**.
+1. Tela **7 · Administração** → **+ Adicionar pessoa**.
 2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
    que a pessoa coordena e, se quiser, o componente que ela leciona.
 3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar
@@ -122,5 +170,8 @@ mostra quem ainda está com senha provisória. “Nova senha” volta a exigir a
 ## Cuidados
 
 - “Zerar tudo”, “Importar backup” e “Recarregar dados de exemplo” (no Painel)
-  substituem os dados **de toda a equipe**. Exporte um backup antes.
+  substituem os dados **de toda a equipe, nas quatro provas**. Exporte um backup
+  antes. O banco só aceita essas operações da coordenação.
+- Aprovar item é decisão da coordenação e o **banco confere**: docente e
+  coordenação de área não conseguem marcar “aprovado” por fora do fluxo.
 - Exporte o backup JSON ao fim de cada etapa importante do trabalho.

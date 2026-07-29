@@ -4,11 +4,12 @@
 // mutação é sincronizada por linha através do facade PERS.
 import { NUVEM } from './config-supabase.js';
 import {
-  COMPONENTES, GRUPOS, TIPOS, STATUS_ITEM,
-  uid, blank, seed, load, save, substituir
+  COMPONENTES, GRUPOS, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
+  uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
 } from './dados.js';
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
+import { lerLinhasEstudantes } from './planilha.js';
 
 let S = load();
 let modoNuvem = false;
@@ -68,26 +69,39 @@ function botaoTema() {
 // Cada mutação local chama o método correspondente; em modo local tudo é no-op.
 const PERS = {
   falha: e => toast('⚠ Falha ao sincronizar com a nuvem: ' + (e?.message || e)),
-  config() { if (modoNuvem) nuvem.gravarConfig(S.config).catch(PERS.falha); },
+  prova(p) { if (modoNuvem) nuvem.gravarLinha('provas', p).catch(PERS.falha); },
+  provasTodas() { if (modoNuvem) nuvem.gravarLinhas('provas', S.provas).catch(PERS.falha); },
+  elenco(provaId) {
+    if (modoNuvem) nuvem.gravarElenco(provaId, S.elencos[provaId] || []).catch(PERS.falha);
+  },
   texto(t) { if (modoNuvem) nuvem.gravarLinha('textos', t).catch(PERS.falha); },
   textosTodos() { if (modoNuvem) nuvem.gravarLinhas('textos', S.textos).catch(PERS.falha); },
   removerTexto(id) { if (modoNuvem) nuvem.removerLinha('textos', id).catch(PERS.falha); },
+  // A ordem gravada é a posição dentro da própria prova: um índice global
+  // faria a numeração de uma prova depender de quantos itens as outras têm.
+  ordemNaProva(i) { return S.itens.filter(x => x.provaId === i.provaId).findIndex(x => x.id === i.id); },
   item(i) {
     if (modoNuvem) nuvem.gravarLinha('itens',
-      { ...i, ordem: S.itens.findIndex(x => x.id === i.id) }).catch(PERS.falha);
+      { ...i, ordem: PERS.ordemNaProva(i) }).catch(PERS.falha);
   },
   itens(ids) {
     if (!modoNuvem) return;
-    const lista = ids.map(id => ({ ...S.itens.find(x => x.id === id), ordem: S.itens.findIndex(x => x.id === id) }));
+    const lista = ids.map(id => S.itens.find(x => x.id === id)).filter(Boolean)
+      .map(i => ({ ...i, ordem: PERS.ordemNaProva(i) }));
     nuvem.gravarLinhas('itens', lista).catch(PERS.falha);
   },
   removerItem(id) { if (modoNuvem) nuvem.removerLinha('itens', id).catch(PERS.falha); },
   estudante(e) { if (modoNuvem) nuvem.gravarLinha('estudantes', e).catch(PERS.falha); },
   estudantesTodos() { if (modoNuvem) nuvem.gravarLinhas('estudantes', S.estudantes).catch(PERS.falha); },
   removerEstudante(id) { if (modoNuvem) nuvem.removerLinha('estudantes', id).catch(PERS.falha); },
-  resposta(estId) { if (modoNuvem && S.respostas[estId]) nuvem.gravarResposta(estId, S.respostas[estId]).catch(PERS.falha); },
-  respostas(ids) { if (modoNuvem) nuvem.gravarRespostas(S.respostas, ids).catch(PERS.falha); },
-  removerResposta(id) { if (modoNuvem) nuvem.removerResposta(id).catch(PERS.falha); },
+  resposta(provaId, estId) {
+    const r = S.respostas[provaId]?.[estId];
+    if (modoNuvem && r) nuvem.gravarResposta(provaId, estId, r).catch(PERS.falha);
+  },
+  respostas(provaId, ids) {
+    if (modoNuvem) nuvem.gravarRespostas(provaId, S.respostas[provaId] || {}, ids).catch(PERS.falha);
+  },
+  removerResposta(provaId, id) { if (modoNuvem) nuvem.removerResposta(provaId, id).catch(PERS.falha); },
   tudo() { if (modoNuvem) nuvem.substituirTudo(S).catch(PERS.falha); }
 };
 
@@ -118,8 +132,62 @@ const nomePerfil = () => {
 };
 
 const discChip = comp => `<span class="disc ${COMPONENTES[comp] || 'd-soc'}">${esc(comp)}</span>`;
+
+/* ---------------- prova ativa ---------------- */
+// Qual prova está na tela é preferência de quem está usando, não estado
+// compartilhado: guardar isso no banco faria a escolha de um coordenador mudar
+// a tela do outro, e “zerar tudo” apagaria a escolha de todo mundo.
+const CHAVE_PROVA = 'pas-prova-ativa';
+
+function lerProvaSalva() {
+  try { return localStorage.getItem(CHAVE_PROVA); } catch { return null; }
+}
+function salvarProvaAtiva(id) {
+  try { localStorage.setItem(CHAVE_PROVA, id); } catch { /* segue sem lembrar */ }
+}
+
+const provasOrdenadas = () => (S.provas || []).slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+
+// Sempre devolve uma prova de verdade: se a salva sumiu (foi apagada, ou o
+// banco mudou), cai na primeira em vez de deixar a tela sem chão.
+function provaAtual() {
+  const lista = provasOrdenadas();
+  if (!lista.length) return null;
+  return lista.find(p => p.id === S.provaAtiva) || lista[0];
+}
+const idProvaAtual = () => provaAtual()?.id || null;
+const provaPorId = id => (S.provas || []).find(p => p.id === id) || null;
+const rotuloProva = p => p ? `${p.serie} · ${p.etapa}` : '—';
+
+/* ---------------- escopo ---------------- */
+const textosDaProva = provaId => S.textos.filter(t => t.provaId === provaId);
+const itensDaProva  = provaId => S.itens.filter(i => i.provaId === provaId);
 const textoDe = item => S.textos.find(t => t.id === item.textoId);
-const textosAprovados = () => S.textos.filter(t => t.status === 'aprovado').sort((a, b) => a.numero - b.numero);
+const textosAprovados = (provaId = idProvaAtual()) =>
+  textosDaProva(provaId).filter(t => t.status === 'aprovado').sort((a, b) => a.numero - b.numero);
+
+// Elenco da prova. O vínculo é materializado (S.elencos); a série serve de
+// palpite quando a prova ainda não teve o elenco montado.
+function estudantesDaProva(provaId) {
+  const elenco = S.elencos?.[provaId];
+  if (elenco?.length) {
+    const porId = new Map(S.estudantes.map(e => [e.id, e]));
+    return elenco.map(id => porId.get(id)).filter(Boolean);
+  }
+  const p = provaPorId(provaId);
+  return p ? S.estudantes.filter(e => e.serie === p.serie) : [];
+}
+
+// Recalcula o elenco a partir da série — usado ao importar a lista e ao criar
+// uma prova. Não mexe em prova cuja data de aplicação já passou.
+function sincronizarElenco(provaId) {
+  const p = provaPorId(provaId);
+  if (!p) return 0;
+  const ids = S.estudantes.filter(e => e.serie === p.serie).map(e => e.id);
+  S.elencos = S.elencos || {};
+  S.elencos[provaId] = ids;
+  return ids.length;
+}
 
 /* ---------------- montagem da prova ---------------- */
 // Numeração contínua: itens aprovados da versão, na ordem dos textos aprovados.
@@ -129,9 +197,9 @@ const textosAprovados = () => S.textos.filter(t => t.status === 'aprovado').sort
 // preservada dentro de cada tipo.
 const ORDEM_TIPO = { A: 0, B: 1, C: 2, D: 3 };
 
-function prova(versao) {
+function prova(provaId, versao) {
   const lista = [];
-  for (const t of textosAprovados()) {
+  for (const t of textosAprovados(provaId)) {
     const doTexto = S.itens.filter(i => i.textoId === t.id && i.status === 'aprovado' &&
       (i.versao === versao || i.versao === 'ambas'));
     doTexto
@@ -145,9 +213,9 @@ function prova(versao) {
 /* ---------------- correção ---------------- */
 // Pontuação (simplificação documentada — calibrável na fase de fidelidade):
 // A: certo +1 / errado −1 · B: certo +1 / errado 0 · C e D: certo +1 / errado −1.
-function corrigir(est) {
-  const pv = prova(est.versao);
-  const resp = S.respostas[est.id] || { marcacoes: {}, redacao: null };
+function corrigir(est, provaId = idProvaAtual()) {
+  const pv = prova(provaId, est.versao);
+  const resp = S.respostas[provaId]?.[est.id] || { marcacoes: {}, redacao: null };
   let ac = 0, er = 0, br = 0, eb = 0, dLanc = 0, dTotal = 0;
   const porGrupo = {};
   GRUPOS.forEach(g => porGrupo[g] = { ac: 0, tot: 0 });
@@ -183,39 +251,57 @@ function corrigir(est) {
   return { ac, er, br, eb, porGrupo, nr, detalhes, temResp, total: pv.length, dLanc, dTotal };
 }
 
-function ranking(versao) {
-  return S.estudantes.filter(e => e.versao === versao)
-    .map(e => ({ e, r: corrigir(e) }))
+function ranking(provaId, versao) {
+  return estudantesDaProva(provaId).filter(e => e.versao === versao)
+    .map(e => ({ e, r: corrigir(e, provaId) }))
     .filter(x => x.r.temResp)
     .sort((a, b) => b.r.eb - a.r.eb);
 }
 
 /* ---------------- casca / navegação ---------------- */
 const TELAS = {
-  painel:   { rot: '1 · Painel' },
-  textos:   { rot: '2 · Textos e alocação' },
-  itens:    { rot: '3 · Itens e revisão' },
-  caderno:  { rot: '4 · Caderno' },
-  cartoes:  { rot: '5 · Cartões-resposta' },
-  correcao: { rot: '6 · Correção e boletins' },
-  equipe:   { rot: '7 · Equipe', soCoordenacaoNaNuvem: true }
+  painel:        { rot: '1 · Painel' },
+  textos:        { rot: '2 · Textos e alocação' },
+  itens:         { rot: '3 · Itens e revisão' },
+  caderno:       { rot: '4 · Caderno' },
+  cartoes:       { rot: '5 · Cartões-resposta' },
+  correcao:      { rot: '6 · Correção e boletins' },
+  administracao: { rot: '7 · Administração', soCoordenacaoNaNuvem: true }
 };
-// A tela de Equipe administra contas de verdade — só aparece para a
-// coordenação e só quando o sistema está ligado ao banco on-line.
+// A tela de Administração cuida de contas e da lista de estudantes — só
+// aparece para a coordenação e só com o sistema ligado ao banco on-line.
 function telasVisiveis() {
   return Object.entries(TELAS)
     .filter(([, v]) => !v.soCoordenacaoNaNuvem || (modoNuvem && ehCoord()));
 }
 function telaAtual() {
   const h = location.hash.replace('#/', '');
-  return telasVisiveis().some(([k]) => k === h) ? h : 'painel';
+  // A tela 7 já se chamou "equipe": quem tiver o endereço antigo salvo continua chegando.
+  const alvo = h === 'equipe' ? 'administracao' : h;
+  return telasVisiveis().some(([k]) => k === alvo) ? alvo : 'painel';
+}
+
+// Seletor de prova — a mesma peça no cabeçalho de todas as telas. O docente
+// também troca de prova: ele escreve item para mais de uma série.
+function seletorDeProva() {
+  const lista = provasOrdenadas();
+  if (!lista.length) return '';
+  const atual = idProvaAtual();
+  const ops = lista.map(p => {
+    const n = itensDaProva(p.id).length;
+    return `<option value="${esc(p.id)}" ${p.id === atual ? 'selected' : ''}>${esc(p.serie)} — ${esc(p.etapa)}${n ? ` (${n} ${n === 1 ? 'item' : 'itens'})` : ''}</option>`;
+  }).join('');
+  return `<label class="sel-prova" title="Prova em que você está trabalhando">
+    <span>Prova</span><select data-mud="prova-ativa" aria-label="Prova ativa">${ops}</select></label>`;
 }
 
 function render() {
-  const c = S.config;
+  const p = provaAtual();
   $('#h-titulo').textContent = 'Sistema PAS Marista';
-  $('#h-sub').textContent = `${c.nome} — ${c.etapa} · ${c.serie}` +
-    (c.dataAplicacao ? ` · Aplicação: ${dataBR(c.dataAplicacao)}` : '');
+  $('#h-sub').textContent = p
+    ? `${p.nome} — ${p.etapa} · ${p.serie}` +
+      (p.dataAplicacao ? ` · Aplicação: ${dataBR(p.dataAplicacao)}` : '')
+    : 'Nenhuma prova cadastrada ainda.';
 
   if (modoNuvem && !nuvem.usuario()) {
     $('#quem').innerHTML = botaoTema();
@@ -243,7 +329,7 @@ function render() {
         <option value="docente" ${S.perfil.papel === 'docente' ? 'selected' : ''}>${S.perfil.papel === 'docente' ? esc(nomePerfil()) : 'Docente · entrar'}</option>
         <option value="redacao" ${ehRedacao() ? 'selected' : ''}>${ehRedacao() ? esc(nomePerfil()) : 'Prof. de redação · entrar'}</option>
       </select>`;
-  $('#quem').innerHTML = `${botaoTema()}${identidade}<div class="avatar">${esc(ini)}</div>`;
+  $('#quem').innerHTML = `${seletorDeProva()}${botaoTema()}${identidade}<div class="avatar">${esc(ini)}</div>`;
   const sel = $('#sel-perfil');
   if (sel) sel.addEventListener('change', ev => dlgPerfil(ev.target.value));
 
@@ -252,7 +338,7 @@ function render() {
     .map(([k, v]) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>${v.rot}</a>`).join('');
   ({
     painel: telaPainel, textos: telaTextos, itens: telaItens, caderno: telaCaderno,
-    cartoes: telaCartoes, correcao: telaCorrecao, equipe: telaEquipe
+    cartoes: telaCartoes, correcao: telaCorrecao, administracao: telaAdministracao
   }[atual])();
 
   // Estreia: o tutorial do papel abre sozinho, uma única vez.
@@ -276,6 +362,12 @@ document.addEventListener('change', e => {
   if (fn) fn(el.dataset, el);
 });
 const MUDS = {};
+MUDS['prova-ativa'] = (d, el) => {
+  S.provaAtiva = el.value;
+  salvarProvaAtiva(el.value);
+  save(S);
+  render();
+};
 ACOES['fechar-dlg'] = () => $('#dlg').close();
 ACOES['tema'] = () => {
   const novo = temaAtual() === 'dark' ? 'light' : 'dark';
@@ -292,24 +384,138 @@ function abrirDlg(html, grande = false) {
 }
 
 /* ================= TELA 1 · PAINEL ================= */
+// Números de uma prova, num lugar só — o painel, a tela de textos e o resumo
+// do docente leem daqui, para não haver duas contas da mesma coisa.
+function balancoDaProva(provaId) {
+  const itens = itensDaProva(provaId);
+  const aprovados = itens.filter(i => i.status === 'aprovado').length;
+  const p = provaPorId(provaId);
+  return {
+    prova: p,
+    itens,
+    criados: itens.length,
+    aprovados,
+    emArea: itens.filter(i => i.status === 'area').length,
+    emGeral: itens.filter(i => i.status === 'geral').length,
+    // Três grandezas distintas, cada uma com a sua fonte: o tamanho que a
+    // prova deve ter, o espaço que os textos-base comportam, e o que já existe.
+    totalQuestoes: p?.totalQuestoes ?? null,
+    slots: textosAprovados(provaId).reduce((s, t) => s + (t.slots || 0), 0),
+    textos: textosAprovados(provaId).length,
+    sugestoes: textosDaProva(provaId).filter(t => t.status === 'sugestao').length,
+    nReg: prova(provaId, 'regular').length,
+    nAda: prova(provaId, 'adaptada').length
+  };
+}
+
+// O que a pessoa que está logada produziu numa prova.
+function minhaProducao(provaId) {
+  const meus = itensDaProva(provaId).filter(i => i.autor === S.perfil.nome);
+  return {
+    criados: meus.length,
+    aprovados: meus.filter(i => i.status === 'aprovado').length,
+    emRevisao: meus.filter(i => ['area', 'geral'].includes(i.status)).length,
+    devolvidos: meus.filter(i => i.status === 'devolvido').length,
+    rascunhos: meus.filter(i => i.status === 'rascunho').length
+  };
+}
+
+// Visão do docente: o que ele deve entregar em CADA prova, não só na ativa.
+// A meta por tipo de item entra aqui quando a tela de Administração passar a
+// alocá-la; por ora a linha mostra a produção e o estágio de cada item.
+function painelDoDocente() {
+  const linhas = provasOrdenadas().map(p => {
+    const m = minhaProducao(p.id);
+    const b = balancoDaProva(p.id);
+    const situacao = m.devolvidos ? '<span class="chip falta">Devolvido — ajustar</span>'
+      : m.emRevisao ? '<span class="chip pend">Em revisão</span>'
+      : m.rascunhos ? '<span class="chip info">Rascunho pendente</span>'
+      : m.criados ? '<span class="chip ok">Tudo aprovado</span>'
+      : '<span class="chip">Nada entregue</span>';
+    return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
+      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td>${m.criados}</td><td>${m.aprovados}</td><td>${m.emRevisao}</td>
+      <td>${situacao}</td>
+      <td style="font-size:11.5px;color:var(--ink-2)">${b.totalQuestoes
+        ? `${b.aprovados} de ${b.totalQuestoes} na prova`
+        : `${b.aprovados} aprovado${b.aprovados === 1 ? '' : 's'} na prova`}</td>
+    </tr>`;
+  }).join('');
+  const tot = provasOrdenadas().reduce((s, p) => {
+    const m = minhaProducao(p.id);
+    return { criados: s.criados + m.criados, aprovados: s.aprovados + m.aprovados };
+  }, { criados: 0, aprovados: 0 });
+
+  return `<div class="cartao" style="margin-bottom:16px">
+    <h3>O que você tem para entregar</h3>
+    <table><thead><tr><th>Prova</th><th>Criados</th><th>Aprovados</th><th>Em revisão</th><th>Situação</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody></table>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">
+      No total você tem <b>${tot.criados}</b> ${tot.criados === 1 ? 'item' : 'itens'} nas quatro provas,
+      ${tot.aprovados} já ${tot.aprovados === 1 ? 'aprovado' : 'aprovados'}.
+      Clique numa linha para trabalhar naquela prova.</p>
+  </div>`;
+}
+ACOES['ir-para-prova'] = d => {
+  S.provaAtiva = d.id;
+  salvarProvaAtiva(d.id);
+  save(S);
+  location.hash = '#/textos';
+  render();
+};
+
+// Visão da coordenação: as quatro provas lado a lado. É o que responde
+// “como está cada série?” sem obrigar a trocar de prova quatro vezes.
+function painelDasProvas() {
+  const linhas = provasOrdenadas().map(p => {
+    const b = balancoDaProva(p.id);
+    const falta = b.totalQuestoes ? Math.max(0, b.totalQuestoes - b.aprovados) : null;
+    const sit = !b.totalQuestoes ? '<span class="chip info">tamanho a definir</span>'
+      : falta === 0 ? '<span class="chip ok">Completa</span>'
+      : `<span class="chip pend">faltam ${falta}</span>`;
+    return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
+      <td><b>${esc(p.serie)}</b>${p.id === idProvaAtual() ? ' <span class="chip info">na tela</span>' : ''}</td>
+      <td>${esc(p.etapa)}</td>
+      <td>${dataBR(p.dataAplicacao)}</td>
+      <td>${b.textos}</td>
+      <td>${b.criados}</td>
+      <td>${b.aprovados}${b.totalQuestoes ? ` / ${b.totalQuestoes}` : ''}</td>
+      <td>${p.temRedacao === false ? '—' : '✓'}</td>
+      <td>${sit}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="cartao" style="margin-bottom:16px">
+    <h3>As provas do simulado</h3>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Série</th><th>Etapa</th><th>Aplicação</th><th>Textos</th><th>Itens</th><th>Aprovados</th><th>Redação</th><th>Situação</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Clique numa linha para trabalhar naquela prova.</p>
+  </div>`;
+}
+
 function telaPainel() {
-  const aprovados = S.itens.filter(i => i.status === 'aprovado').length;
-  const emArea = S.itens.filter(i => i.status === 'area').length;
-  const emGeral = S.itens.filter(i => i.status === 'geral').length;
-  const totalSlots = textosAprovados().reduce((s, t) => s + (t.slots || 0), 0);
-  const sugestoes = S.textos.filter(t => t.status === 'sugestao').length;
-  const nReg = prova('regular').length, nAda = prova('adaptada').length;
-  const estReg = S.estudantes.filter(e => e.versao === 'regular').length;
-  const estAda = S.estudantes.filter(e => e.versao === 'adaptada').length;
+  const p = provaAtual();
+  if (!p) {
+    $('#app').innerHTML = `<div class="quadro"><div class="miolo"><div class="vazio">
+      Nenhuma prova cadastrada.${ehCoord() ? ' Crie a primeira em “+ Nova prova”.' : ' Peça à coordenação para criar.'}</div>
+      ${ehCoord() ? '<div style="margin-top:12px"><button class="btn" data-acao="prova-nova">+ Nova prova</button></div>' : ''}
+    </div></div>`;
+    return;
+  }
+  const b = balancoDaProva(p.id);
+  const doPapel = ehCoord();
+  const elenco = estudantesDaProva(p.id);
+  const estReg = elenco.filter(e => e.versao === 'regular').length;
+  const estAda = elenco.filter(e => e.versao === 'adaptada').length;
 
   const comps = {};
-  for (const it of S.itens) {
+  for (const it of b.itens) {
     const c = comps[it.componente] || (comps[it.componente] = { criados: 0, aprovados: 0, rev: 0, autores: new Set() });
     c.criados++; if (it.status === 'aprovado') c.aprovados++;
     if (it.status === 'area' || it.status === 'geral') c.rev++;
     c.autores.add(it.autor);
   }
-  const linhas = Object.entries(comps).map(([comp, c]) => {
+  const linhas = Object.entries(comps).sort((a, b2) => a[0].localeCompare(b2[0])).map(([comp, c]) => {
     const sit = c.aprovados === c.criados ? '<span class="chip ok">Completo</span>'
       : c.rev > 0 ? '<span class="chip pend">Em revisão</span>'
       : '<span class="chip info">Em elaboração</span>';
@@ -317,42 +523,65 @@ function telaPainel() {
       <td>${c.criados}</td><td>${c.aprovados}</td><td>${sit}</td></tr>`;
   }).join('');
 
+  // Conferência entre as três grandezas. Mostrada, nunca corrigida em
+  // silêncio: se os textos comportam mais ou menos do que a prova pede, quem
+  // decide é a coordenação.
+  const conf = [];
+  if (b.totalQuestoes && b.slots && b.slots !== b.totalQuestoes)
+    conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, e a prova pede <b>${b.totalQuestoes}</b>`);
+  if (!b.totalQuestoes)
+    conf.push('a quantidade de questões desta prova ainda não foi definida' +
+      (doPapel ? ' — defina em “⚙ Configurar prova”' : ''));
+  if (b.criados > b.slots && b.slots)
+    conf.push(`há <b>${b.criados - b.slots}</b> ${b.criados - b.slots === 1 ? 'item' : 'itens'} além dos espaços dos textos-base`);
+
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div>
-        <h2>${esc(S.config.nome)} — ${esc(S.config.etapa)}</h2>
-        <span class="sub">Aplicação: ${dataBR(S.config.dataAplicacao)} · ${esc(S.config.serie)} · ${S.estudantes.length} estudantes</span>
+        <h2>${esc(p.serie)} — ${esc(p.nome)}</h2>
+        <span class="sub">${esc(p.etapa)} · Aplicação: ${dataBR(p.dataAplicacao)} · ${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'}${p.temRedacao === false ? ' · sem redação' : ' · com redação'}</span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${ehCoord() ? '<button class="btn fantasma" data-acao="cfg">⚙ Configurar simulado</button>' : ''}
+        ${doPapel ? '<button class="btn fantasma" data-acao="cfg">⚙ Configurar prova</button>' : ''}
+        ${doPapel ? '<button class="btn fantasma" data-acao="prova-nova">+ Nova prova</button>' : ''}
         <a class="btn rosa" href="#/caderno" style="text-decoration:none">Gerar cadernos</a>
       </div>
     </div>
 
+    ${doPapel ? '' : painelDoDocente()}
+
     <div class="versoes">
       <div class="versao sel"><div class="ic" style="background:var(--azul)">📘</div>
-        <div><b>Prova Regular</b><span>${nReg} itens aprovados + redação · ${estReg} estudantes</span></div></div>
+        <div><b>Prova Regular</b><span>${b.nReg} itens aprovados${p.temRedacao === false ? '' : ' + redação'} · ${estReg} estudantes</span></div></div>
       <div class="versao"><div class="ic" style="background:var(--verde)">📗</div>
-        <div><b>Prova Adaptada (inclusão)</b><span>${nAda} itens aprovados + redação · ${estAda} estudantes</span></div></div>
+        <div><b>Prova Adaptada (inclusão)</b><span>${b.nAda} itens aprovados${p.temRedacao === false ? '' : ' + redação'} · ${estAda} estudantes</span></div></div>
     </div>
 
     <div class="grade g3" style="margin-bottom:16px">
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Itens aprovados</h3>
-        <div class="num">${aprovados}<small> / ${totalSlots || '—'} planejados</small></div>
-        <div class="barra"><i style="width:${totalSlots ? Math.min(100, aprovados / totalSlots * 100) : 0}%"></i></div></div>
+        <div class="num">${b.aprovados}<small>${b.totalQuestoes ? ` / ${b.totalQuestoes} da prova` : ' — total a definir'}</small></div>
+        <div class="barra"><i style="width:${b.totalQuestoes ? Math.min(100, b.aprovados / b.totalQuestoes * 100) : 0}%"></i></div>
+        <span style="font-size:12px;color:var(--ink-2)">${b.criados} criados ao todo</span></div>
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Em revisão</h3>
-        <div class="num">${emArea + emGeral}</div>
-        <span style="font-size:12px;color:var(--ink-2)">${emArea} na coord. de área · ${emGeral} na coordenação geral</span></div>
+        <div class="num">${b.emArea + b.emGeral}</div>
+        <span style="font-size:12px;color:var(--ink-2)">${b.emArea} na coord. de área · ${b.emGeral} na coordenação geral</span></div>
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--amarelo)"></span>Textos-base</h3>
-        <div class="num">${textosAprovados().length}<small> ativos</small></div>
-        <span style="font-size:12px;color:var(--ink-2)">${sugestoes ? '+' + sugestoes + ' sugestão(ões) aguardando aprovação' : 'nenhuma sugestão pendente'}</span></div>
+        <div class="num">${b.textos}<small> ativos · ${b.slots} espaços</small></div>
+        <span style="font-size:12px;color:var(--ink-2)">${b.sugestoes ? '+' + b.sugestoes + ' sugestão(ões) aguardando aprovação' : 'nenhuma sugestão pendente'}</span></div>
     </div>
 
+    ${conf.length ? `<div class="cartao aviso" style="margin-bottom:16px">
+      <h3>Conferência da prova</h3>
+      <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7">${conf.map(c => `<li>${c}</li>`).join('')}</ul>
+    </div>` : ''}
+
+    ${doPapel ? painelDasProvas() : ''}
+
     <div class="cartao" style="margin-bottom:16px">
-      <h3>Entregas por componente curricular</h3>
+      <h3>Entregas por componente curricular — ${esc(p.serie)}</h3>
       ${linhas ? `<table><thead><tr><th>Componente</th><th>Docente(s)</th><th>Itens criados</th><th>Aprovados</th><th>Situação</th></tr></thead>
-        <tbody>${linhas}</tbody></table>` : '<div class="vazio">Nenhum item criado ainda — comece pela tela “Textos e alocação”.</div>'}
+        <tbody>${linhas}</tbody></table>` : '<div class="vazio">Nenhum item criado nesta prova ainda — comece pela tela “Textos e alocação”.</div>'}
     </div>
 
     ${ehCoord() ? `<div class="cartao"><h3>Dados e backup${modoNuvem ? '' : ' (persistência local deste navegador)'}</h3>
@@ -369,34 +598,122 @@ function telaPainel() {
   </div></div>`;
 }
 
-ACOES['cfg'] = () => {
-  const c = S.config;
+function dlgProva(p, nova = false) {
+  const opsSerie = SERIES.map(s =>
+    `<option ${p.serie === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
   abrirDlg(`
-    <div class="dlg-cab"><h2>Configurar simulado</h2><button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-cab"><h2>${nova ? 'Nova prova' : 'Configurar a prova'}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo">
       <div class="form-linha">
-        <div class="campo" style="min-width:230px"><label>Nome</label><input class="caixa" id="cfg-nome" value="${esc(c.nome)}"></div>
-        <div class="campo"><label>Etapa</label><input class="caixa" id="cfg-etapa" value="${esc(c.etapa)}"></div>
+        <div class="campo" style="min-width:230px"><label>Nome do simulado</label>
+          <input class="caixa" id="cfg-nome" value="${esc(p.nome || '')}"></div>
+        <div class="campo"><label>Série</label>
+          <select class="caixa" id="cfg-serie">${opsSerie}</select></div>
+        <div class="campo"><label>Etapa</label>
+          <input class="caixa" id="cfg-etapa" value="${esc(p.etapa || '')}"></div>
       </div>
       <div class="form-linha">
-        <div class="campo"><label>Série</label><input class="caixa" id="cfg-serie" value="${esc(c.serie)}"></div>
-        <div class="campo"><label>Data de aplicação</label><input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
-        <div class="campo"><label>Duração</label><input class="caixa" id="cfg-dur" value="${esc(c.duracao)}"></div>
+        <div class="campo"><label>Data de aplicação</label>
+          <input class="caixa" type="date" id="cfg-data" value="${esc(p.dataAplicacao || '')}"></div>
+        <div class="campo"><label>Duração</label>
+          <input class="caixa" id="cfg-dur" value="${esc(p.duracao || '')}"></div>
+        <div class="campo"><label>Quantidade de questões</label>
+          <input class="caixa" type="number" min="1" max="200" id="cfg-qtd"
+            value="${p.totalQuestoes ?? ''}" placeholder="a definir"></div>
       </div>
-      <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
-        <input type="checkbox" id="cfg-red" ${c.imprimirRedacao !== false ? 'checked' : ''}> imprimir o cartão de redação
+      <p style="font-size:12px;color:var(--ink-2);margin:-4px 0 12px">A quantidade de questões é o tamanho que a prova
+        deve ter. O painel compara esse número com os itens já aprovados e com os espaços dos textos-base.</p>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:8px">
+        <input type="checkbox" id="cfg-tem-red" ${p.temRedacao !== false ? 'checked' : ''}> esta prova tem redação</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
+        <input type="checkbox" id="cfg-red" ${p.imprimirRedacao !== false ? 'checked' : ''}> imprimir a folha de redação no cartão-resposta
         <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
     </div>
-    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
-      <button class="btn" data-acao="cfg-salvar">Salvar</button></div>`);
+    <div class="dlg-pe">
+      ${!nova && provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="cfg-salvar" data-id="${esc(p.id)}" data-nova="${nova ? '1' : ''}">Salvar</button></div>`);
+}
+
+ACOES['cfg'] = () => { const p = provaAtual(); if (p) dlgProva(p); };
+ACOES['prova-nova'] = () => {
+  const usadas = new Set(provasOrdenadas().map(p => p.serie));
+  const livre = SERIES.find(s => !usadas.has(s)) || SERIES[0];
+  dlgProva(provaNova(livre, provasOrdenadas().length), true);
 };
-ACOES['cfg-salvar'] = () => {
-  Object.assign(S.config, {
-    nome: $('#cfg-nome').value.trim(), etapa: $('#cfg-etapa').value.trim(),
-    serie: $('#cfg-serie').value.trim(), dataAplicacao: $('#cfg-data').value,
-    duracao: $('#cfg-dur').value.trim(), imprimirRedacao: $('#cfg-red').checked
-  });
-  $('#dlg').close(); commit(); PERS.config(); toast('Configurações salvas.');
+
+ACOES['cfg-salvar'] = d => {
+  const qtd = parseInt($('#cfg-qtd').value, 10);
+  const dados = {
+    nome: $('#cfg-nome').value.trim(),
+    serie: $('#cfg-serie').value,
+    etapa: $('#cfg-etapa').value.trim(),
+    dataAplicacao: $('#cfg-data').value,
+    duracao: $('#cfg-dur').value.trim(),
+    totalQuestoes: Number.isFinite(qtd) && qtd > 0 ? qtd : null,
+    temRedacao: $('#cfg-tem-red').checked,
+    imprimirRedacao: $('#cfg-red').checked
+  };
+  if (!dados.nome || !dados.etapa) { toast('Nome e etapa são obrigatórios.'); return; }
+
+  let alvo;
+  if (d.nova) {
+    if (provasOrdenadas().some(p => p.serie === dados.serie && p.etapa === dados.etapa)) {
+      toast(`Já existe uma prova de ${dados.serie} na ${dados.etapa}.`); return;
+    }
+    alvo = { ...provaNova(dados.serie, provasOrdenadas().length), ...dados, id: uid() };
+    S.provas.push(alvo);
+    S.provaAtiva = alvo.id;
+    salvarProvaAtiva(alvo.id);
+    sincronizarElenco(alvo.id);
+  } else {
+    alvo = provaPorId(d.id);
+    if (!alvo) return;
+    const mudouSerie = alvo.serie !== dados.serie;
+    Object.assign(alvo, dados);
+    // Trocar a série de uma prova troca quem a faz.
+    if (mudouSerie) sincronizarElenco(alvo.id);
+  }
+  $('#dlg').close(); commit(); PERS.prova(alvo); PERS.elenco(alvo.id);
+  toast(d.nova ? `Prova de ${alvo.serie} criada.` : 'Prova atualizada.');
+};
+
+ACOES['prova-excluir'] = d => {
+  const p = provaPorId(d.id);
+  if (!p) return;
+  const b = balancoDaProva(p.id);
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Excluir a prova de ${esc(p.serie)}?</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo"><p style="margin-top:0">Isto apaga <b>${b.textos + b.sugestoes} texto(s)-base</b>,
+      <b>${b.criados} ${b.criados === 1 ? 'item' : 'itens'}</b> e as respostas lançadas desta prova.
+      Os estudantes continuam cadastrados. Não há como desfazer — exporte um backup antes.</p></div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn vermelho" data-acao="prova-excluir-ok" data-id="${esc(p.id)}">Excluir prova</button></div>`);
+};
+ACOES['prova-excluir-ok'] = d => {
+  const alvos = textosDaProva(d.id).map(t => t.id);
+  const itensAlvo = itensDaProva(d.id).map(i => i.id);
+  S.textos = S.textos.filter(t => t.provaId !== d.id);
+  S.itens = S.itens.filter(i => i.provaId !== d.id);
+  S.provas = S.provas.filter(p => p.id !== d.id);
+  delete S.elencos[d.id];
+  delete S.respostas[d.id];
+  if (S.provaAtiva === d.id) {
+    S.provaAtiva = provasOrdenadas()[0]?.id || null;
+    salvarProvaAtiva(S.provaAtiva || '');
+  }
+  $('#dlg').close(); commit();
+  if (modoNuvem) {
+    // As respostas e o elenco caem por chave estrangeira quando a prova sai.
+    Promise.all([
+      ...alvos.map(id => nuvem.removerLinha('textos', id)),
+      ...itensAlvo.map(id => nuvem.removerLinha('itens', id)),
+      nuvem.removerLinha('provas', d.id)
+    ]).catch(PERS.falha);
+  }
+  toast('Prova excluída.');
 };
 
 ACOES['exportar-json'] = () => {
@@ -411,7 +728,14 @@ ACOES['importar-json'] = () => {
     f.text().then(txt => {
       try {
         const novo = JSON.parse(txt);
-        if (novo?.versao !== 1) throw new Error('formato');
+        // Backups anteriores ao multi-prova ainda entram: viram a prova da
+        // série que estava configurada neles.
+        if (novo?.versao === 1) {
+          S = substituir(migrarV1paraV2(novo));
+          render(); PERS.tudo(); toast('Backup de formato antigo importado e convertido.');
+          return;
+        }
+        if (novo?.versao !== VERSAO_ESTADO) throw new Error('formato');
         S = substituir(novo); render(); PERS.tudo(); toast('Backup importado.');
       } catch { toast('Arquivo inválido — esperava um backup deste sistema.'); }
     });
@@ -482,7 +806,12 @@ ACOES['perfil-redacao'] = () => {
 
 /* ================= TELA 2 · TEXTOS ================= */
 function telaTextos() {
-  const aprovados = textosAprovados();
+  const pAtiva = provaAtual();
+  if (!pAtiva) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
+    return;
+  }
+  const aprovados = textosAprovados(pAtiva.id);
   const blocos = aprovados.map((t, ti) => {
     const itens = S.itens.filter(i => i.textoId === t.id);
     const livres = Math.max(0, (t.slots || 0) - itens.length);
@@ -516,7 +845,7 @@ function telaTextos() {
     </div>`;
   }).join('');
 
-  const sugestoes = S.textos.filter(t => t.status === 'sugestao').map(t => `
+  const sugestoes = textosDaProva(pAtiva.id).filter(t => t.status === 'sugestao').map(t => `
     <div class="texto-bloco sugestao">
       <div class="texto-cab" style="background:color-mix(in srgb,var(--amarelo) 20%,transparent)">
         <div class="tnum" style="background:var(--amarelo);color:#5c4300">S</div>
@@ -533,10 +862,10 @@ function telaTextos() {
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
-      <div><h2>Textos-base</h2>
-        <span class="sub">Clique em um espaço livre para alocar um item seu · clique em um item para abri-lo</span></div>
+      <div><h2>Textos-base — ${esc(pAtiva.serie)}</h2>
+        <span class="sub">${esc(pAtiva.etapa)} · Clique em um espaço livre para alocar um item seu · clique em um item para abri-lo</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span class="chip info">Sua produção: ${S.itens.filter(i => i.autor === S.perfil.nome).length} itens</span>
+        <span class="chip info">Sua produção nesta prova: ${minhaProducao(pAtiva.id).criados} ${minhaProducao(pAtiva.id).criados === 1 ? 'item' : 'itens'}</span>
         ${ehCoord()
           ? '<button class="btn" data-acao="novo-texto">+ Novo texto</button>'
           : '<button class="btn verde" data-acao="sugerir-texto">+ Sugerir novo texto</button>'}
@@ -607,14 +936,17 @@ ACOES['salvar-texto'] = d => {
   if (!dados.titulo || !dados.fonte || !dados.linhas.length) {
     toast('Título, fonte e corpo do texto são obrigatórios.'); return;
   }
+  // A numeração dos textos é por prova: o Texto 1 do 9º ano e o Texto 1 da
+  // 1ª série convivem sem se atropelar.
+  const provaId = anterior?.provaId || idProvaAtual();
   let alvo;
   if (anterior) {
     Object.assign(anterior, dados); alvo = anterior;
   } else if (ehCoord()) {
-    alvo = { id: uid(), numero: Math.max(0, ...textosAprovados().map(t => t.numero)) + 1, status: 'aprovado', sugeridoPor: null, ...dados };
+    alvo = { id: uid(), provaId, numero: Math.max(0, ...textosAprovados(provaId).map(t => t.numero)) + 1, status: 'aprovado', sugeridoPor: null, ...dados };
     S.textos.push(alvo);
   } else {
-    alvo = { id: uid(), numero: null, status: 'sugestao', sugeridoPor: `${S.perfil.nome} (${S.perfil.componente || 'docente'})`, ...dados };
+    alvo = { id: uid(), provaId, numero: null, status: 'sugestao', sugeridoPor: `${S.perfil.nome} (${S.perfil.componente || 'docente'})`, ...dados };
     S.textos.push(alvo);
   }
   $('#dlg').close(); commit(); PERS.texto(alvo);
@@ -623,7 +955,7 @@ ACOES['salvar-texto'] = d => {
 ACOES['aprovar-texto'] = d => {
   const t = S.textos.find(x => x.id === d.id);
   t.status = 'aprovado';
-  t.numero = Math.max(0, ...textosAprovados().filter(x => x.id !== t.id).map(x => x.numero)) + 1;
+  t.numero = Math.max(0, ...textosAprovados(t.provaId).filter(x => x.id !== t.id).map(x => x.numero)) + 1;
   commit(); PERS.texto(t); toast(`Texto aprovado como Texto ${t.numero}.`);
 };
 ACOES['excluir-texto'] = d => {
@@ -633,13 +965,17 @@ ACOES['excluir-texto'] = d => {
   $('#dlg').close(); commit(); PERS.removerTexto(d.id); toast('Texto excluído.');
 };
 ACOES['texto-mover'] = d => {
-  const lista = textosAprovados();
+  const alvo = S.textos.find(t => t.id === d.id);
+  if (!alvo) return;
+  const lista = textosAprovados(alvo.provaId);
   const i = lista.findIndex(t => t.id === d.id);
   const j = i + parseInt(d.dir, 10);
   if (i < 0 || j < 0 || j >= lista.length) return;
   [lista[i].numero, lista[j].numero] = [lista[j].numero, lista[i].numero];
-  textosAprovados().forEach((t, k) => t.numero = k + 1);
-  commit(); PERS.textosTodos();
+  // Renumera só os textos desta prova — os das outras não se mexem.
+  textosAprovados(alvo.provaId).forEach((t, k) => t.numero = k + 1);
+  commit();
+  if (modoNuvem) nuvem.gravarLinhas('textos', textosDaProva(alvo.provaId)).catch(PERS.falha);
 };
 ACOES['item-mover'] = d => {
   const item = S.itens.find(x => x.id === d.id);
@@ -654,21 +990,27 @@ ACOES['item-mover'] = d => {
 };
 
 /* ================= TELA 3 · ITENS ================= */
-let filtroStatus = 'todos', soMeus = false, soMinhaArea = false;
+let filtroStatus = 'todos', soMeus = false, soMinhaArea = false, todasAsProvas = false;
 function telaItens() {
   if (telaItens._primeiraVez === undefined) {
     telaItens._primeiraVez = false;
     if (S.perfil.papel === 'docente') soMeus = true;
     if (ehCoordArea()) soMinhaArea = true;
   }
+  const pAtiva = provaAtual();
+  // O docente escreve para mais de uma série; a revisão da coordenação é
+  // sempre dentro de uma prova. Por isso o filtro de prova pode ser desligado.
   const lista = S.itens.filter(i =>
+    (todasAsProvas || i.provaId === pAtiva?.id) &&
     (filtroStatus === 'todos' || i.status === filtroStatus) &&
     (!soMeus || i.autor === S.perfil.nome) &&
     (!soMinhaArea || areaDoComponente(i.componente) === S.perfil.area));
   const linhas = lista.map(i => {
     const t = textoDe(i);
     const st = STATUS_ITEM[i.status];
+    const pr = provaPorId(i.provaId);
     return `<tr class="clic" data-acao="abrir-item" data-id="${i.id}">
+      ${todasAsProvas ? `<td><b>${esc(pr?.serie || '—')}</b></td>` : ''}
       <td>Texto ${t?.numero ?? '—'}</td>
       <td><span class="t t${i.tipo}" style="display:inline-grid;width:22px;height:22px;place-items:center;border-radius:6px;color:#fff;font-size:11px;font-weight:800">${i.tipo}</span></td>
       <td>${discChip(i.componente)}<br><span style="font-size:11px;color:var(--ink-2)">${esc(areaDoComponente(i.componente) || '—')}</span></td>
@@ -683,10 +1025,12 @@ function telaItens() {
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
-      <div><h2>Itens e fluxo de revisão</h2>
+      <div><h2>Itens e fluxo de revisão${todasAsProvas ? '' : ` — ${esc(pAtiva?.serie || '')}`}</h2>
         <span class="sub">docente → coordenação de área → coordenação geral → aprovado</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="caixa" style="width:auto" data-mud="filtro-status">${ops}</select>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
+          <input type="checkbox" data-mud="todas-provas" ${todasAsProvas ? 'checked' : ''}> todas as provas</label>
         <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
           <input type="checkbox" data-mud="so-meus" ${soMeus ? 'checked' : ''}> só meus itens</label>
         ${ehCoordArea() ? `<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700">
@@ -694,13 +1038,14 @@ function telaItens() {
         <button class="btn" data-acao="novo-item">+ Novo item</button>
       </div>
     </div>
-    ${linhas ? `<table><thead><tr><th>Texto</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
+    ${linhas ? `<table><thead><tr>${todasAsProvas ? '<th>Prova</th>' : ''}<th>Texto</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : '<div class="vazio">Nenhum item neste filtro. Crie um item pelos espaços livres em “Textos e alocação” ou pelo botão acima.</div>'}
   </div></div>
   <p class="nota-tela"><strong>Fluxo:</strong> o docente redige e envia; a coordenação comenta, devolve ou aprova em dois níveis. Só itens <strong>aprovados</strong> entram no caderno, no cartão e na correção. O campo “Versão” define se o item vale para a prova regular, a adaptada ou ambas.</p>`;
 }
 MUDS['filtro-status'] = (d, el) => { filtroStatus = el.value; render(); };
+MUDS['todas-provas'] = (d, el) => { todasAsProvas = el.checked; render(); };
 MUDS['so-meus'] = (d, el) => { soMeus = el.checked; render(); };
 MUDS['so-area'] = (d, el) => { soMinhaArea = el.checked; render(); };
 
@@ -708,8 +1053,12 @@ MUDS['so-area'] = (d, el) => { soMinhaArea = el.checked; render(); };
 let rasc = null; // cópia de trabalho do item aberto
 
 function novoRascunho(textoId) {
+  // O item nasce na prova em que o texto-base está; sem texto escolhido, na
+  // prova que está na tela.
+  const doTexto = textoId ? S.textos.find(t => t.id === textoId) : null;
+  const provaId = doTexto?.provaId || idProvaAtual();
   return {
-    id: null, textoId: textoId || textosAprovados()[0]?.id || null,
+    id: null, provaId, textoId: textoId || textosAprovados(provaId)[0]?.id || null,
     tipo: 'A', componente: S.perfil.componente || 'Português',
     autor: S.perfil.nome, habilidade: '', grupo: 'Interpretar', versao: 'ambas',
     linhasRef: '', gabarito: 'C', opcoes: ['', '', '', ''],
@@ -718,7 +1067,9 @@ function novoRascunho(textoId) {
 }
 
 ACOES['novo-item'] = d => {
-  if (!textosAprovados().length) { toast('Crie ao menos um texto-base antes.'); return; }
+  if (!textosAprovados().length) {
+    toast(`A prova de ${provaAtual()?.serie || 'esta série'} ainda não tem texto-base aprovado.`); return;
+  }
   rasc = novoRascunho(d.texto);
   dlgItem();
 };
@@ -745,7 +1096,9 @@ function dlgItem() {
     const marca = fx && n >= fx[0] && n <= fx[1] ? ' mark' : '';
     return `<div class="linha-tx${marca}"><span class="n">${n}</span><span>${esc(l)}</span></div>`;
   }).join('');
-  const opsTexto = textosAprovados().map(x =>
+  // Só os textos da prova do item: mover um item para o texto de outra série
+  // quebraria a numeração das duas.
+  const opsTexto = textosAprovados(rasc.provaId).map(x =>
     `<option value="${x.id}" ${x.id === rasc.textoId ? 'selected' : ''}>Texto ${x.numero} — ${esc(x.titulo.slice(0, 48))}</option>`).join('');
   const opsComp = Object.keys(COMPONENTES).map(c => `<option ${rasc.componente === c ? 'selected' : ''}>${c}</option>`).join('');
 
@@ -816,7 +1169,7 @@ function dlgItem() {
 
   abrirDlg(`
     <div class="dlg-cab">
-      <h2>${rasc.id ? 'Item' : 'Novo item'} · ${t ? 'Texto ' + t.numero : ''} <span class="chip ${st.cls}">${st.rot}</span></h2>
+      <h2>${rasc.id ? 'Item' : 'Novo item'} · ${esc(provaPorId(rasc.provaId)?.serie || '')}${t ? ' · Texto ' + t.numero : ''} <span class="chip ${st.cls}">${st.rot}</span></h2>
       ${rasc.id && (ehCoord() || (rasc.autor === S.perfil.nome && rasc.status === 'rascunho')) ?
         '<button class="btn mini vermelho" data-acao="it-excluir">Excluir</button>' : ''}
       <button class="fechar-x" data-acao="fechar-dlg">✕</button>
@@ -972,16 +1325,19 @@ const INSTRUCOES_PADRAO = [
   'Fique atento(a) à duração da prova, já incluído o tempo destinado à transcrição das respostas para o caderno de respostas.'
 ];
 
-function instrucoes() {
-  const c = S.config.instrucoes;
+// As instruções são de cada prova: o que vale para o 9º ano não é o que vale
+// para a 3ª série, e a instrução do tipo D só faz sentido se houver tipo D.
+function instrucoes(provaId = idProvaAtual()) {
+  const c = provaPorId(provaId)?.instrucoes;
   if (Array.isArray(c) && c.length) return c;
   if (typeof c === 'string' && c.trim())
     return c.split('\n').map(l => l.trim()).filter(Boolean);
   return INSTRUCOES_PADRAO;
 }
 
-function htmlCapa(versao, totalItens) {
-  const c = S.config;
+function htmlCapa(provaId, versao, totalItens) {
+  const c = provaPorId(provaId);
+  if (!c) return '';
   const arte = c.capaImagem
     ? `<img src="${esc(c.capaImagem)}" alt="">`
     : '';
@@ -998,7 +1354,7 @@ function htmlCapa(versao, totalItens) {
     </div>
     <div class="pas-capa-texto">
       <h2>LEIA COM ATENÇÃO AS INSTRUÇÕES ABAIXO.</h2>
-      <ol>${instrucoes().map(i => `<li>${limpar(i)}</li>`).join('')}</ol>
+      <ol>${instrucoes(provaId).map(i => `<li>${limpar(i)}</li>`).join('')}</ol>
       <div class="pas-capa-obs">
         <span class="rot">OBSERVAÇÕES</span>
         • Este caderno contém <b>${totalItens} ${totalItens === 1 ? 'item' : 'itens'}</b>${versao === 'adaptada' ? ' (versão adaptada)' : ''}.<br>
@@ -1145,8 +1501,8 @@ function htmlPagina(colunas, ident, numero, total) {
 }
 
 // Monta o caderno inteiro já paginado. Precisa do DOM para medir as peças.
-function htmlCaderno(versao, comCapa = true) {
-  const pv = prova(versao);
+function htmlCaderno(provaId, versao, comCapa = true) {
+  const pv = prova(provaId, versao);
   if (!pv.length) return '';
   const porTexto = new Map();
   for (const e of pv) {
@@ -1155,21 +1511,27 @@ function htmlCaderno(versao, comCapa = true) {
   }
   const pecas = [...porTexto.values()].flatMap(({ texto, itens }) => pecasDoBloco(texto, itens));
   const paginas = distribuir(pecas, medirPecas(pecas));
-  const ident = `${esc(S.config.nome)} — ${esc(S.config.etapa)}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
-  const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(versao, pv.length)}</div>` : '';
+  const p = provaPorId(provaId);
+  const ident = `${esc(p?.nome || '')} — ${esc(p?.serie || '')} · ${esc(p?.etapa || '')}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
+  const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(provaId, versao, pv.length)}</div>` : '';
   const total = paginas.length + (comCapa ? 1 : 0);
   return `<div class="pas">${capa}${paginas
     .map((c, i) => htmlPagina(c, ident, i + 1 + (comCapa ? 1 : 0), total)).join('')}</div>`;
 }
 
 function telaCaderno() {
-  const pv = prova(cadVersao);
+  const pAtiva = provaAtual();
+  if (!pAtiva) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
+    return;
+  }
+  const pv = prova(pAtiva.id, cadVersao);
   $('#app').innerHTML = `
   <div class="quadro">
     <div class="miolo" style="padding-bottom:0">
       <div class="cab-tela">
-        <div><h2>Caderno de provas</h2>
-          <span class="sub">${pv.length} itens aprovados nesta versão · numeração contínua · diagramação no padrão PAS</span></div>
+        <div><h2>Caderno de provas — ${esc(pAtiva.serie)}</h2>
+          <span class="sub">${esc(pAtiva.etapa)} · ${pv.length} itens aprovados nesta versão · numeração contínua · diagramação no padrão PAS</span></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="seg">
             <button class="${cadVersao === 'regular' ? 'sel' : ''}" data-acao="cad-versao" data-v="regular">Regular</button>
@@ -1180,39 +1542,45 @@ function telaCaderno() {
         </div>
       </div>
     </div>
-    ${pv.length ? `<div class="pas-previa">${htmlCaderno(cadVersao)}</div>`
+    ${pv.length ? `<div class="pas-previa">${htmlCaderno(pAtiva.id, cadVersao)}</div>`
       : '<div class="miolo"><div class="vazio">Nenhum item aprovado para esta versão ainda. Aprove itens na tela “Itens e revisão”.</div></div>'}
   </div>
   <p class="nota-tela"><strong>Diagramação calibrada</strong> contra os cadernos do PAS/CEBRASPE de 2025: A4 com duas colunas de 266pt e fio central, corpo de 10pt, número do item recuado para fora da coluna e crédito da fonte em 6pt. O <strong>comando de cada bloco é montado automaticamente</strong> a partir dos tipos de item — “julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C” —, e o texto de abertura é editável em cada texto-base. A quebra de páginas acontece na impressão: use “Imprimir” e escolha “Salvar como PDF”.</p>`;
 }
 ACOES['cad-versao'] = d => { cadVersao = d.v; render(); };
 ACOES['cad-imprimir'] = () => {
-  $('#print-area').innerHTML = htmlCaderno(cadVersao);
+  $('#print-area').innerHTML = htmlCaderno(idProvaAtual(), cadVersao);
   window.print();
 };
 
 ACOES['cad-capa'] = () => {
+  const p = provaAtual();
+  if (!p) return;
   abrirDlg(`
-    <div class="dlg-cab"><h2>Capa e instruções do caderno</h2>
+    <div class="dlg-cab"><h2>Capa e instruções — ${esc(p.serie)}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo">
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 12px">A capa e as instruções são <b>desta prova</b>.
+        Cada série tem as suas.</p>
       <div class="campo" style="margin-bottom:12px"><label>Imagem da capa (endereço)</label>
-        <input class="caixa" id="cp-img" value="${esc(S.config.capaImagem || '')}"
+        <input class="caixa" id="cp-img" value="${esc(p.capaImagem || '')}"
           placeholder="https://… — imagem inspirada nos textos ou no tema da redação"></div>
       <div class="campo"><label>Instruções (uma por linha, numeradas automaticamente)</label>
-        <textarea class="caixa" id="cp-instr" rows="10">${esc(instrucoes().join('\n'))}</textarea></div>
+        <textarea class="caixa" id="cp-instr" rows="10">${esc(instrucoes(p.id).join('\n'))}</textarea></div>
       <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Aceita <code>&lt;b&gt;</code> para destacar termos, como no caderno original.</p>
     </div>
     <div class="dlg-pe">
       <button class="btn fantasma" style="margin-right:auto" data-acao="cad-capa-padrao">Restaurar padrão</button>
       <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
-      <button class="btn" data-acao="cad-capa-salvar">Salvar</button></div>`);
+      <button class="btn" data-acao="cad-capa-salvar" data-id="${esc(p.id)}">Salvar</button></div>`);
 };
 ACOES['cad-capa-padrao'] = () => { $('#cp-instr').value = INSTRUCOES_PADRAO.join('\n'); };
-ACOES['cad-capa-salvar'] = () => {
-  S.config.capaImagem = $('#cp-img').value.trim();
-  S.config.instrucoes = $('#cp-instr').value.split('\n').map(l => l.trim()).filter(Boolean);
-  $('#dlg').close(); commit(); PERS.config(); toast('Capa atualizada.');
+ACOES['cad-capa-salvar'] = d => {
+  const p = provaPorId(d.id);
+  if (!p) return;
+  p.capaImagem = $('#cp-img').value.trim();
+  p.instrucoes = $('#cp-instr').value.split('\n').map(l => l.trim()).filter(Boolean);
+  $('#dlg').close(); commit(); PERS.prova(p); toast('Capa atualizada.');
 };
 
 /* ================= TELA 5 · CARTÕES ================= */
@@ -1235,13 +1603,13 @@ const BLOCOS_B_POR_COLUNA = 5;
 const BLOCOS_B_POR_FOLHA = 10;   // a coluna se desdobra em duas antes de virar folha nova
 const ALTURA_UTIL_D = 650;
 
-function cabecalhoCartao(est, faixa) {
-  const c = S.config;
+function cabecalhoCartao(provaId, est, faixa) {
+  const c = provaPorId(provaId) || {};
   return `
   <div class="cr-cab">
     <div class="cr-cab-prova">
-      <b>${esc(c.nome)}</b>
-      <span>${esc(c.etapa)} · ${esc(c.serie)}</span>
+      <b>${esc(c.nome || '')}</b>
+      <span>${esc(c.etapa || '')} · ${esc(c.serie || '')}</span>
       <span>Colégio Marista Águas Claras</span>
       <span>Aplicação: ${dataBR(c.dataAplicacao)}</span>
     </div>
@@ -1249,7 +1617,8 @@ function cabecalhoCartao(est, faixa) {
       <div><span>ESTUDANTE</span><b>${esc(est.nome).toUpperCase()}</b></div>
       <div><span>MATRÍCULA</span><b>${esc(est.matricula)}</b></div>
       <div><span>TURMA</span><b>${esc(est.turma)}</b></div>
-      <div><span>PROVA</span><b>${est.versao === 'adaptada' ? 'ADAPTADA' : 'REGULAR'}</b></div>
+      <div><span>PROVA</span><b>${esc((c.serie || '').toUpperCase())}</b></div>
+      <div><span>VERSÃO</span><b>${est.versao === 'adaptada' ? 'ADAPTADA' : 'REGULAR'}</b></div>
     </div>
     <div class="cr-sala"><small>SALA</small><i></i></div>
   </div>
@@ -1403,20 +1772,23 @@ function corpoRedacao() {
 }
 
 // Todas as folhas de um estudante, já numeradas “folha N de M”.
-function corposDoCartao(est) {
-  const pv = prova(est.versao);
+function corposDoCartao(provaId, est) {
+  const p = provaPorId(provaId);
+  const pv = prova(provaId, est.versao);
   const corpos = [...corposObjetivos(pv), ...corposDiscursivos(pv)];
-  if (S.config.imprimirRedacao !== false) corpos.push(corpoRedacao());
+  // A folha de redação só sai se a prova tiver redação e a coordenação optar
+  // por imprimi-la.
+  if (p?.temRedacao !== false && p?.imprimirRedacao !== false) corpos.push(corpoRedacao());
   return corpos;
 }
 
-const totalFolhas = est => corposDoCartao(est).length;
+const totalFolhas = (provaId, est) => corposDoCartao(provaId, est).length;
 
-function folhasDoCartao(est) {
-  const corpos = corposDoCartao(est);
+function folhasDoCartao(provaId, est) {
+  const corpos = corposDoCartao(provaId, est);
   return corpos.map((c, i) => `
     <div class="cr-folha">
-      ${cabecalhoCartao(est, c.faixa)}
+      ${cabecalhoCartao(provaId, est, c.faixa)}
       ${c.html}
       ${rodapeCartao(est, i + 1, corpos.length)}
     </div>`).join('');
@@ -1424,38 +1796,46 @@ function folhasDoCartao(est) {
 
 let cartTurma = 'todas';
 function telaCartoes() {
-  const turmas = [...new Set(S.estudantes.map(e => e.turma))].sort();
-  const filtrados = S.estudantes.filter(e => cartTurma === 'todas' || e.turma === cartTurma)
+  const pAtiva = provaAtual();
+  if (!pAtiva) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
+    return;
+  }
+  // Os cartões são do elenco desta prova: quem faz o 9º ano não recebe o
+  // cartão da 3ª série.
+  const elenco = estudantesDaProva(pAtiva.id);
+  const turmas = [...new Set(elenco.map(e => e.turma))].sort();
+  const filtrados = elenco.filter(e => cartTurma === 'todas' || e.turma === cartTurma)
     .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
   const linhas = filtrados.map(e => `
     <tr><td>${esc(e.nome)}</td><td style="font-family:var(--mono)">${esc(e.matricula)}</td>
       <td>${esc(e.turma)}</td><td style="text-transform:capitalize">${esc(e.versao)}</td>
-      <td>${totalFolhas(e)}</td>
+      <td>${totalFolhas(pAtiva.id, e)}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="est-editar" data-id="${e.id}">Editar</button>
         ${ehCoord() ? `<button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>` : ''}
       </td></tr>`).join('');
   const opsTurma = ['todas', ...turmas].map(t =>
     `<option value="${t}" ${cartTurma === t ? 'selected' : ''}>${t === 'todas' ? 'Todas as turmas' : t}</option>`).join('');
-  const previa = filtrados.slice(0, 1).map(folhasDoCartao).join('');
-  const nRegItens = prova('regular').length, nAdaItens = prova('adaptada').length;
-  const folhasTotal = filtrados.reduce((s, e) => s + totalFolhas(e), 0);
+  const previa = filtrados.slice(0, 1).map(e => folhasDoCartao(pAtiva.id, e)).join('');
+  const nRegItens = prova(pAtiva.id, 'regular').length, nAdaItens = prova(pAtiva.id, 'adaptada').length;
+  const folhasTotal = filtrados.reduce((s, e) => s + totalFolhas(pAtiva.id, e), 0);
 
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
-      <div><h2>Estudantes e cartões-resposta</h2>
-        <span class="sub">${S.estudantes.length} estudantes · ${folhasTotal} folha(s) a imprimir e digitalizar no filtro atual</span></div>
+      <div><h2>Cartões-resposta — ${esc(pAtiva.serie)}</h2>
+        <span class="sub">${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'} nesta prova · ${folhasTotal} folha(s) a imprimir e digitalizar no filtro atual</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="caixa" style="width:auto" data-mud="cart-turma">${opsTurma}</select>
-        <button class="btn fantasma" data-acao="est-importar">⬆ Importar lista (CSV)</button>
-        <button class="btn" data-acao="est-novo">+ Estudante</button>
+        ${ehCoord() ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
+        ${ehCoord() ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
     </div>
     ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th>Folhas</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table>`
-      : '<div class="vazio">Nenhum estudante cadastrado. Importe a lista (CSV: nome;matrícula;turma;versão) ou cadastre um a um.</div>'}
+      : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn fantasma" data-acao="cart-template">⬇ Exportar gabarito p/ leitor local (JSON)</button>
     </div>
@@ -1475,71 +1855,70 @@ function dlgEstudante(e) {
         <div class="campo"><label>Matrícula</label><input class="caixa" id="es-mat" value="${esc(e?.matricula || '')}"></div>
       </div>
       <div class="form-linha">
-        <div class="campo"><label>Turma</label><input class="caixa" id="es-turma" value="${esc(e?.turma || '')}" placeholder="ex.: 2ª B"></div>
+        <div class="campo"><label>Turma</label><input class="caixa" id="es-turma" value="${esc(e?.turma || '')}" placeholder="ex.: 1ª B"></div>
+        <div class="campo"><label>Série</label>
+          <select class="caixa" id="es-serie">${SERIES.map(s =>
+            `<option ${e?.serie === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="campo"><label>Versão da prova</label>
           <select class="caixa" id="es-versao">
             <option value="regular" ${e?.versao !== 'adaptada' ? 'selected' : ''}>Regular</option>
             <option value="adaptada" ${e?.versao === 'adaptada' ? 'selected' : ''}>Adaptada</option>
           </select></div>
       </div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0">A série define de quais provas o estudante participa.</p>
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="est-salvar" data-id="${e?.id || ''}">Salvar</button></div>`);
 }
-ACOES['est-novo'] = () => dlgEstudante(null);
+ACOES['est-novo'] = () => dlgEstudante({ serie: provaAtual()?.serie });
 ACOES['est-editar'] = d => dlgEstudante(S.estudantes.find(e => e.id === d.id));
 ACOES['est-salvar'] = d => {
   const dados = {
     nome: $('#es-nome').value.trim(), matricula: $('#es-mat').value.trim(),
-    turma: $('#es-turma').value.trim(), versao: $('#es-versao').value
+    turma: $('#es-turma').value.trim(), serie: $('#es-serie').value,
+    versao: $('#es-versao').value
   };
   if (!dados.nome || !dados.matricula) { toast('Nome e matrícula são obrigatórios.'); return; }
   let alvo;
   if (d.id) { alvo = S.estudantes.find(e => e.id === d.id); Object.assign(alvo, dados); }
   else { alvo = { id: uid(), ...dados }; S.estudantes.push(alvo); }
-  $('#dlg').close(); commit(); PERS.estudante(alvo); toast('Estudante salvo.');
+  // O elenco das provas da série acompanha o cadastro.
+  const tocadas = provasOrdenadas().filter(p => p.serie === dados.serie).map(p => p.id);
+  tocadas.forEach(sincronizarElenco);
+  $('#dlg').close(); commit(); PERS.estudante(alvo);
+  tocadas.forEach(PERS.elenco);
+  toast('Estudante salvo.');
 };
 ACOES['est-remover'] = d => {
+  const alvo = S.estudantes.find(e => e.id === d.id);
   S.estudantes = S.estudantes.filter(e => e.id !== d.id);
-  delete S.respostas[d.id];
-  commit(); PERS.removerEstudante(d.id); PERS.removerResposta(d.id); toast('Estudante removido.');
-};
-ACOES['est-importar'] = () => {
-  abrirDlg(`
-    <div class="dlg-cab"><h2>Importar lista de estudantes</h2><button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
-    <div class="dlg-corpo">
-      <p style="font-size:13px;color:var(--ink-2);margin-top:0">Cole abaixo uma linha por estudante, no formato:<br>
-        <code style="font-family:var(--mono)">nome;matrícula;turma;versão</code> — versão = <em>regular</em> ou <em>adaptada</em> (opcional, padrão regular).</p>
-      <textarea class="caixa" id="imp-est" rows="8" placeholder="Antonia Silva;2026-0142;2ª B;regular&#10;Elisa Fontes;2026-0231;2ª D;adaptada"></textarea>
-    </div>
-    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
-      <button class="btn" data-acao="est-importar-ok">Importar</button></div>`);
-};
-ACOES['est-importar-ok'] = () => {
-  const linhas = $('#imp-est').value.split('\n').map(l => l.trim()).filter(Boolean);
-  let n = 0;
-  for (const l of linhas) {
-    const [nome, matricula, turma, versao] = l.split(/[;,\t]/).map(x => (x || '').trim());
-    if (!nome || !matricula) continue;
-    const ja = S.estudantes.find(e => e.matricula === matricula);
-    const dados = { nome, matricula, turma: turma || '—', versao: /adapt/i.test(versao || '') ? 'adaptada' : 'regular' };
-    if (ja) Object.assign(ja, dados); else S.estudantes.push({ id: uid(), ...dados });
-    n++;
+  const provasComEle = [];
+  for (const [provaId, ids] of Object.entries(S.elencos || {})) {
+    if (!ids.includes(d.id)) continue;
+    S.elencos[provaId] = ids.filter(x => x !== d.id);
+    provasComEle.push(provaId);
+    delete S.respostas[provaId]?.[d.id];
   }
-  $('#dlg').close(); commit(); PERS.estudantesTodos();
-  toast(`${n} estudante(s) importado(s)/atualizado(s).`);
+  commit();
+  PERS.removerEstudante(d.id);
+  provasComEle.forEach(pid => { PERS.elenco(pid); PERS.removerResposta(pid, d.id); });
+  toast(`${alvo?.nome || 'Estudante'} removido.`);
 };
 ACOES['cart-imprimir'] = () => {
-  const filtrados = S.estudantes.filter(e => cartTurma === 'todas' || e.turma === cartTurma)
+  const pAtiva = provaAtual();
+  if (!pAtiva) return;
+  const filtrados = estudantesDaProva(pAtiva.id).filter(e => cartTurma === 'todas' || e.turma === cartTurma)
     .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
-  $('#print-area').innerHTML = filtrados.map(folhasDoCartao).join('');
+  $('#print-area').innerHTML = filtrados.map(e => folhasDoCartao(pAtiva.id, e)).join('');
   window.print();
 };
 ACOES['cart-template'] = () => {
+  const pAtiva = provaAtual();
+  if (!pAtiva) return;
   // O leitor óptico precisa saber que cada estudante tem mais de uma folha e
   // o que procurar em cada uma.
   const daVersao = v => {
-    const pv = prova(v);
+    const pv = prova(pAtiva.id, v);
     const folhas = [{
       folha: 1, tipo: 'objetiva',
       itens: pv.filter(({ item }) => item.tipo !== 'D')
@@ -1550,35 +1929,40 @@ ACOES['cart-template'] = () => {
       folha: folhas.length + 1, tipo: 'discursiva', percentuais: PERCENTUAIS_D,
       itens: ds.map(({ item, numero }) => ({ numero, tipo: 'D', linhas: item.dLinhas || 10 }))
     });
-    if (S.config.imprimirRedacao !== false)
+    if (pAtiva.temRedacao !== false && pAtiva.imprimirRedacao !== false)
       folhas.push({ folha: folhas.length + 1, tipo: 'redacao', linhas: LINHAS_REDACAO });
     return { totalItens: pv.length, folhas };
   };
+  // v3: o gabarito passa a dizer de que prova ele é. Sem isso o leitor não
+  // consegue distinguir a folha do 9º ano da folha da 3ª série.
   const tpl = {
-    formato: 'pas-marista/gabarito-v2',
-    simulado: S.config.nome, etapa: S.config.etapa,
+    formato: 'pas-marista/gabarito-v3',
+    prova: { id: pAtiva.id, serie: pAtiva.serie, etapa: pAtiva.etapa, nome: pAtiva.nome },
+    simulado: pAtiva.nome, etapa: pAtiva.etapa,
     geradoEm: new Date().toISOString(),
     identificacao: { chave: 'matricula', ancoras: 'quatro quadrados pretos, dois no topo e dois no rodapé de cada folha' },
     versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)]))
   };
-  baixar('pas-gabarito-leitor.json', JSON.stringify(tpl, null, 2));
-  toast('Gabarito exportado para o leitor local.');
+  baixar(`pas-gabarito-${pAtiva.id}.json`, JSON.stringify(tpl, null, 2));
+  toast(`Gabarito da prova de ${pAtiva.serie} exportado.`);
 };
 
 /* ================= TELA 6 · CORREÇÃO ================= */
 let corrEstId = null, corrTurmaBol = 'todas';
 
-function estudantesOrdenados() {
-  return S.estudantes.slice().sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
+// Ordenados dentro do elenco da prova — a correção é sempre de uma prova.
+function estudantesOrdenados(provaId = idProvaAtual()) {
+  return estudantesDaProva(provaId).slice()
+    .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
 }
 
 // Tabela de lançamento da redação (NC, NE, TL → NR calculado).
-function tabelaRedacao() {
-  const lista = estudantesOrdenados();
-  if (!lista.length) return '<div class="vazio">Nenhum estudante cadastrado ainda.</div>';
+function tabelaRedacao(provaId = idProvaAtual()) {
+  const lista = estudantesOrdenados(provaId);
+  if (!lista.length) return '<div class="vazio">Nenhum estudante no elenco desta prova ainda.</div>';
   const linhas = lista.map(e => {
-    const red = S.respostas[e.id]?.redacao || { nc: '', ne: '', tl: '' };
-    const r = corrigir(e);
+    const red = S.respostas[provaId]?.[e.id]?.redacao || { nc: '', ne: '', tl: '' };
+    const r = corrigir(e, provaId);
     return `<tr><td>${esc(e.nome)}</td><td>${esc(e.turma)}</td>
       <td><input class="caixa" style="width:84px" type="number" step="0.1" min="0" max="10" value="${red.nc}" data-mud="red" data-campo="nc" data-est="${e.id}"></td>
       <td><input class="caixa" style="width:74px" type="number" min="0" value="${red.ne}" data-mud="red" data-campo="ne" data-est="${e.id}"></td>
@@ -1592,13 +1976,13 @@ function tabelaRedacao() {
 
 // Tabela de notas dos itens discursivos (tipo D). Coordenação vê todos;
 // docente vê apenas os itens aprovados de sua autoria.
-function tabelaDiscursivos() {
-  const meus = S.itens.filter(i => i.status === 'aprovado' && i.tipo === 'D' &&
+function tabelaDiscursivos(provaId = idProvaAtual()) {
+  const meus = itensDaProva(provaId).filter(i => i.status === 'aprovado' && i.tipo === 'D' &&
     (ehCoord() || i.autor === S.perfil.nome));
   if (!meus.length) return null;
   const numeros = {};
   for (const v of ['regular', 'adaptada'])
-    for (const { item, numero } of prova(v))
+    for (const { item, numero } of prova(provaId, v))
       if (item.tipo === 'D') (numeros[item.id] = numeros[item.id] || {})[v] = numero;
   const cab = meus.map(i => {
     const n = numeros[i.id] || {};
@@ -1607,11 +1991,11 @@ function tabelaDiscursivos() {
     return `<th title="${esc(i.enunciado.slice(0, 100))}">Item ${rot || '—'}<br>
       <span style="font-weight:400;text-transform:none">${esc(i.componente)} · ${esc(i.autor.split(' ')[0])}</span></th>`;
   }).join('');
-  const linhas = estudantesOrdenados().map(e => {
+  const linhas = estudantesOrdenados(provaId).map(e => {
     const cels = meus.map(i => {
       const aplicavel = i.versao === 'ambas' || i.versao === e.versao;
       if (!aplicavel) return '<td style="color:var(--ink-2)">—</td>';
-      const v = S.respostas[e.id]?.discursivas?.[i.id];
+      const v = S.respostas[provaId]?.[e.id]?.discursivas?.[i.id];
       // Os mesmos cinco níveis do cartão-resposta (0, 25, 50, 75 e 100%),
       // guardados como nota de 0 a 10.
       const ops = ['<option value="">—</option>', ...PERCENTUAIS_D.map(p =>
@@ -1652,18 +2036,24 @@ function telaCorrecaoDiscursivos() {
 function telaCorrecao() {
   if (ehRedacao()) { telaCorrecaoRedacao(); return; }
   if (!ehCoord()) { telaCorrecaoDiscursivos(); return; }
-  const comResp = S.estudantes.filter(e => corrigir(e).temResp);
-  const est = S.estudantes.find(e => e.id === corrEstId) || null;
-  const turmas = [...new Set(S.estudantes.map(e => e.turma))].sort();
+  const pAtiva = provaAtual();
+  if (!pAtiva) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
+    return;
+  }
+  const provaId = pAtiva.id;
+  const elenco = estudantesOrdenados(provaId);
+  const comResp = elenco.filter(e => corrigir(e, provaId).temResp);
+  const est = elenco.find(e => e.id === corrEstId) || null;
+  const turmas = [...new Set(elenco.map(e => e.turma))].sort();
 
   const opsEst = ['<option value="">— selecione um estudante —</option>',
-    ...S.estudantes.slice().sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome))
-      .map(e => `<option value="${e.id}" ${e.id === corrEstId ? 'selected' : ''}>${esc(e.turma)} · ${esc(e.nome)} (${esc(e.matricula)})</option>`)].join('');
+    ...elenco.map(e => `<option value="${e.id}" ${e.id === corrEstId ? 'selected' : ''}>${esc(e.turma)} · ${esc(e.nome)} (${esc(e.matricula)})</option>`)].join('');
 
   let lancamento = '';
   if (est) {
-    const pv = prova(est.versao);
-    const resp = S.respostas[est.id] || { marcacoes: {}, redacao: null };
+    const pv = prova(provaId, est.versao);
+    const resp = S.respostas[provaId]?.[est.id] || { marcacoes: {}, redacao: null };
     const grade = pv.filter(x => x.item.tipo !== 'D').map(({ item, numero }) => {
       const m = String(resp.marcacoes?.[item.id] ?? '');
       const gab = item.tipo === 'B' ? String(item.gabarito).padStart(3, '0') : String(item.gabarito).toUpperCase();
@@ -1679,7 +2069,7 @@ function telaCorrecao() {
       }
       return `<div class="lanc-item ${cls}" title="Gabarito: ${gab}"><span class="no">${numero}</span>${campo}</div>`;
     }).join('');
-    const r = corrigir(est);
+    const r = corrigir(est, provaId);
     const red = resp.redacao || { nc: '', ne: '', tl: '' };
     lancamento = `
       <div class="cartao" style="margin-bottom:16px">
@@ -1702,7 +2092,7 @@ function telaCorrecao() {
   }
 
   const relatorio = turmas.map(t => {
-    const alunos = S.estudantes.filter(e => e.turma === t).map(e => ({ e, r: corrigir(e) })).filter(x => x.r.temResp);
+    const alunos = elenco.filter(e => e.turma === t).map(e => ({ e, r: corrigir(e, provaId) })).filter(x => x.r.temResp);
     if (!alunos.length) return '';
     const med = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
     const mEB = med(alunos.map(x => x.r.eb));
@@ -1722,8 +2112,8 @@ function telaCorrecao() {
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
-      <div><h2>Correção e boletins</h2>
-        <span class="sub">lançamento manual, importação do leitor local e relatórios</span></div>
+      <div><h2>Correção e boletins — ${esc(pAtiva.serie)}</h2>
+        <span class="sub">${esc(pAtiva.etapa)} · lançamento manual, importação do leitor local e relatórios</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn fantasma" data-acao="resp-importar">⬆ Importar respostas (CSV do leitor)</button>
         <button class="btn fantasma" data-acao="notas-exportar">⬇ Planilha de notas (CSV)</button>
@@ -1732,12 +2122,12 @@ function telaCorrecao() {
 
     <div class="grade g3" style="margin-bottom:16px">
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Cartões lançados</h3>
-        <div class="num">${comResp.length}<small> / ${S.estudantes.length}</small></div>
-        <div class="barra"><i style="width:${S.estudantes.length ? comResp.length / S.estudantes.length * 100 : 0}%"></i></div></div>
-      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Itens na prova regular</h3>
-        <div class="num">${prova('regular').length}</div></div>
-      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--verde)"></span>Itens na prova adaptada</h3>
-        <div class="num">${prova('adaptada').length}</div></div>
+        <div class="num">${comResp.length}<small> / ${elenco.length}</small></div>
+        <div class="barra"><i style="width:${elenco.length ? comResp.length / elenco.length * 100 : 0}%"></i></div></div>
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Itens na versão regular</h3>
+        <div class="num">${prova(provaId, 'regular').length}</div></div>
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--verde)"></span>Itens na versão adaptada</h3>
+        <div class="num">${prova(provaId, 'adaptada').length}</div></div>
     </div>
 
     <div class="campo" style="margin-bottom:14px;max-width:480px"><label>Estudante</label>
@@ -1773,25 +2163,34 @@ function telaCorrecao() {
 }
 MUDS['corr-est'] = (d, el) => { corrEstId = el.value || null; render(); };
 MUDS['corr-turma-bol'] = (d, el) => { corrTurmaBol = el.value; };
+
+// Todo lançamento é dentro da prova que está na tela.
+function respostaParaEditar(estId, provaId = idProvaAtual()) {
+  const daProva = S.respostas[provaId] || (S.respostas[provaId] = {});
+  return daProva[estId] || (daProva[estId] = { marcacoes: {}, redacao: null });
+}
 MUDS['marc'] = (d, el) => {
-  const r = S.respostas[d.est] || (S.respostas[d.est] = { marcacoes: {}, redacao: null });
+  const provaId = idProvaAtual();
+  const r = respostaParaEditar(d.est, provaId);
   const v = el.value.trim();
   if (v === '') delete r.marcacoes[d.item]; else r.marcacoes[d.item] = v.toUpperCase();
-  commit(); PERS.resposta(d.est);
+  commit(); PERS.resposta(provaId, d.est);
 };
 MUDS['red'] = (d, el) => {
-  const r = S.respostas[d.est] || (S.respostas[d.est] = { marcacoes: {}, redacao: null });
+  const provaId = idProvaAtual();
+  const r = respostaParaEditar(d.est, provaId);
   r.redacao = r.redacao || { nc: 0, ne: 0, tl: 0 };
   r.redacao[d.campo] = parseFloat(el.value) || 0;
-  commit(); PERS.resposta(d.est);
+  commit(); PERS.resposta(provaId, d.est);
 };
 MUDS['dnota'] = (d, el) => {
-  const r = S.respostas[d.est] || (S.respostas[d.est] = { marcacoes: {}, redacao: null });
+  const provaId = idProvaAtual();
+  const r = respostaParaEditar(d.est, provaId);
   r.discursivas = r.discursivas || {};
   const v = el.value.trim();
   if (v === '') delete r.discursivas[d.item];
   else r.discursivas[d.item] = Math.max(0, Math.min(10, parseFloat(v) || 0));
-  commit(); PERS.resposta(d.est);
+  commit(); PERS.resposta(provaId, d.est);
 };
 
 ACOES['resp-importar'] = () => {
@@ -1807,41 +2206,51 @@ ACOES['resp-importar'] = () => {
       <button class="btn" data-acao="resp-importar-ok">Importar</button></div>`);
 };
 ACOES['resp-importar-ok'] = () => {
+  const provaId = idProvaAtual();
+  const elenco = estudantesDaProva(provaId);
   const linhas = $('#imp-resp').value.split('\n').map(l => l.trim()).filter(Boolean);
   const mapaProva = {};
   const afetados = new Set();
-  let ok = 0, ign = 0;
+  let ok = 0, ign = 0, fora = 0;
   for (const l of linhas) {
     const [mat, no, resp] = l.split(/[;,\t]/).map(x => (x || '').trim());
-    const est = S.estudantes.find(e => e.matricula === mat);
+    // Só o elenco desta prova: uma folha da 3ª série lida por engano no
+    // lançamento do 9º ano é recusada em vez de gravar nota no lugar errado.
+    const est = elenco.find(e => e.matricula === mat);
     const numero = parseInt(no, 10);
-    if (!est || !numero || resp === undefined) { ign++; continue; }
-    const pv = mapaProva[est.versao] || (mapaProva[est.versao] = prova(est.versao));
+    if (!est) { if (mat) fora++; else ign++; continue; }
+    if (!numero || resp === undefined) { ign++; continue; }
+    const pv = mapaProva[est.versao] || (mapaProva[est.versao] = prova(provaId, est.versao));
     const entrada = pv.find(e => e.numero === numero);
     if (!entrada) { ign++; continue; }
-    const r = S.respostas[est.id] || (S.respostas[est.id] = { marcacoes: {}, redacao: null });
+    const r = respostaParaEditar(est.id, provaId);
     if (resp === '') delete r.marcacoes[entrada.item.id];
     else r.marcacoes[entrada.item.id] = resp.toUpperCase();
     afetados.add(est.id);
     ok++;
   }
-  $('#dlg').close(); commit(); PERS.respostas([...afetados]);
-  toast(`${ok} marcação(ões) importada(s)${ign ? ' · ' + ign + ' linha(s) ignorada(s)' : ''}.`);
+  $('#dlg').close(); commit(); PERS.respostas(provaId, [...afetados]);
+  toast(`${ok} marcação(ões) importada(s)` +
+    (ign ? ` · ${ign} linha(s) ignorada(s)` : '') +
+    (fora ? ` · ${fora} de estudante fora desta prova` : '') + '.');
 };
 
 ACOES['notas-exportar'] = () => {
-  const linhas = ['matricula;nome;turma;versao;certas;erradas;brancos;escore_bruto;redacao_nr'];
-  for (const e of S.estudantes) {
-    const r = corrigir(e);
+  const p = provaAtual();
+  const provaId = p?.id;
+  const linhas = ['serie;etapa;matricula;nome;turma;versao;certas;erradas;brancos;escore_bruto;redacao_nr'];
+  for (const e of estudantesDaProva(provaId)) {
+    const r = corrigir(e, provaId);
     if (!r.temResp) continue;
-    linhas.push([e.matricula, e.nome, e.turma, e.versao, r.ac, r.er, r.br,
+    linhas.push([p.serie, p.etapa, e.matricula, e.nome, e.turma, e.versao, r.ac, r.er, r.br,
       r.eb.toFixed(2).replace('.', ','), r.nr === null ? '' : r.nr.toFixed(1).replace('.', ',')].join(';'));
   }
-  baixar('pas-notas.csv', '﻿' + linhas.join('\n'), 'text/csv;charset=utf-8');
-  toast('Planilha de notas exportada.');
+  baixar(`pas-notas-${provaId}.csv`, '﻿' + linhas.join('\n'), 'text/csv;charset=utf-8');
+  toast(`Planilha de notas da prova de ${p.serie} exportada.`);
 };
 
-function htmlBoletim(est, r, pos, total, mediasTurma) {
+function htmlBoletim(provaId, est, r, pos, total, mediasTurma) {
+  const p = provaPorId(provaId) || {};
   const barras = GRUPOS.map(g => {
     const gd = r.porGrupo[g];
     const prop = gd.tot ? gd.ac / gd.tot : 0;
@@ -1857,7 +2266,7 @@ function htmlBoletim(est, r, pos, total, mediasTurma) {
   return `
   <div class="folha" style="width:100%">
     <div class="bol-cab"><h4>Boletim de Desempenho Individual</h4>
-      <p>${esc(S.config.nome)} · ${esc(S.config.etapa)} · ${esc(est.nome).toUpperCase()} · Matrícula ${esc(est.matricula)} · ${esc(est.turma)}</p></div>
+      <p>${esc(p.nome || '')} · ${esc(p.serie || '')} · ${esc(p.etapa || '')} · ${esc(est.nome).toUpperCase()} · Matrícula ${esc(est.matricula)} · ${esc(est.turma)}</p></div>
     <div class="bol-sec">
       <h5>Proporção de acertos por grupo de habilidades</h5>
       ${barras}
@@ -1876,22 +2285,25 @@ function htmlBoletim(est, r, pos, total, mediasTurma) {
 }
 
 ACOES['bol-imprimir'] = () => {
-  const alunos = S.estudantes
+  const provaId = idProvaAtual();
+  const elenco = estudantesDaProva(provaId);
+  const alunos = elenco
     .filter(e => corrTurmaBol === 'todas' || e.turma === corrTurmaBol)
-    .map(e => ({ e, r: corrigir(e) }))
+    .map(e => ({ e, r: corrigir(e, provaId) }))
     .filter(x => x.r.temResp)
     .sort((a, b) => a.e.turma.localeCompare(b.e.turma) || a.e.nome.localeCompare(b.e.nome));
   if (!alunos.length) { toast('Nenhum estudante com respostas nesse filtro.'); return; }
   const folhas = alunos.map(({ e, r }) => {
-    const rk = ranking(e.versao);
+    const rk = ranking(provaId, e.versao);
     const pos = rk.findIndex(x => x.e.id === e.id) + 1;
-    const daTurma = S.estudantes.filter(x => x.turma === e.turma).map(x => corrigir(x)).filter(x => x.temResp);
+    const daTurma = elenco.filter(x => x.turma === e.turma)
+      .map(x => corrigir(x, provaId)).filter(x => x.temResp);
     const medias = {};
     for (const g of GRUPOS) {
       const vals = daTurma.map(x => x.porGrupo[g]).filter(x => x.tot > 0).map(x => x.ac / x.tot);
       medias[g] = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
     }
-    return htmlBoletim(e, r, pos || 1, rk.length || 1, medias);
+    return htmlBoletim(provaId, e, r, pos || 1, rk.length || 1, medias);
   }).join('');
   $('#print-area').innerHTML = folhas;
   window.print();
@@ -1919,7 +2331,7 @@ function senhaProvisoria() {
   return p(0).charAt(0).toUpperCase() + p(0).slice(1) + '-' + p(1) + '-' + (1000 + (n[2] % 9000));
 }
 
-function telaEquipe() {
+function telaAdministracao() {
   if (!equipeCarregada) {
     $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Carregando equipe…</div></div></div>';
     nuvem.carregarEquipe()
@@ -1944,20 +2356,115 @@ function telaEquipe() {
       </td>
     </tr>`).join('');
 
+  // Quantos estudantes cada série tem, e quantos entraram no elenco de cada
+  // prova — é o que responde “a lista subiu certo?”.
+  const porSerie = SERIES.map(s => {
+    const n = S.estudantes.filter(e => e.serie === s).length;
+    const provasDaSerie = provasOrdenadas().filter(p => p.serie === s);
+    const elencos = provasDaSerie.map(p => `${esc(p.etapa)}: ${(S.elencos?.[p.id] || []).length}`).join(' · ');
+    return `<tr><td><b>${esc(s)}</b></td><td>${n}</td>
+      <td>${provasDaSerie.length ? elencos : '<span style="color:var(--ink-2)">nenhuma prova desta série</span>'}</td></tr>`;
+  }).join('');
+  const semSerie = S.estudantes.filter(e => !SERIES.includes(e.serie)).length;
+
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
-      <div><h2>Equipe e contas de acesso</h2>
-        <span class="sub">${equipeCache.length} pessoa(s) com acesso ao simulado · o papel definido aqui manda no que cada um vê</span></div>
-      <button class="btn" data-acao="equipe-nova">+ Adicionar pessoa</button>
+      <div><h2>Administração</h2>
+        <span class="sub">contas de acesso e lista de estudantes</span></div>
     </div>
-    ${linhas ? `<div style="overflow-x:auto"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Componente</th><th>Acesso</th><th></th></tr></thead>
-      <tbody>${linhas}</tbody></table></div>`
-      : '<div class="vazio">Nenhuma pessoa cadastrada além de você.</div>'}
+
+    <div class="cartao" style="margin-bottom:16px">
+      <div class="cab-tela" style="margin-bottom:10px">
+        <div><h3 style="margin:0">Estudantes</h3>
+          <span class="sub">${S.estudantes.length} cadastrado(s)${semSerie ? ` · ${semSerie} sem série reconhecida` : ''}</span></div>
+        <button class="btn" data-acao="est-importar">⬆ Importar lista (CSV)</button>
+      </div>
+      <table><thead><tr><th>Série</th><th>Estudantes</th><th>No elenco de cada prova</th></tr></thead>
+        <tbody>${porSerie}</tbody></table>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">A <b>série</b> de cada estudante é o que liga
+        ele à prova: quem está na 1ª série entra no elenco das provas da 1ª série, e é para esse elenco que saem
+        os cartões-resposta e os boletins.</p>
+    </div>
+
+    <div class="cartao">
+      <div class="cab-tela" style="margin-bottom:10px">
+        <div><h3 style="margin:0">Equipe e contas de acesso</h3>
+          <span class="sub">${equipeCache.length} pessoa(s) · o papel definido aqui manda no que cada um vê</span></div>
+        <button class="btn" data-acao="equipe-nova">+ Adicionar pessoa</button>
+      </div>
+      ${linhas ? `<div style="overflow-x:auto"><table>
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Componente</th><th>Acesso</th><th></th></tr></thead>
+        <tbody>${linhas}</tbody></table></div>`
+        : '<div class="vazio">Nenhuma pessoa cadastrada além de você.</div>'}
+    </div>
   </div></div>
   <p class="nota-tela"><strong>Como funciona o acesso:</strong> só quem está nesta lista consegue entrar no sistema — o banco recusa qualquer cadastro de e-mail fora dela. Ao adicionar alguém, o sistema gera uma <strong>senha provisória</strong> que você entrega à pessoa; ela troca a senha pelo botão 🔑 no topo, depois de entrar.</p>`;
 }
+
+/* ----- importação da lista de estudantes ----- */
+ACOES['est-importar'] = () => {
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Importar lista de estudantes</h2><button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p style="font-size:13px;color:var(--ink-2);margin-top:0">Cole a lista abaixo — uma linha por estudante, colunas
+        separadas por <b>;</b>, <b>,</b> ou tabulação (colar direto de uma planilha funciona):</p>
+      <p style="font-family:var(--mono);font-size:12.5px;background:var(--fundo);border:1px solid var(--borda);
+        border-radius:8px;padding:9px 12px;margin:0 0 12px">nome completo;matrícula;turma;série;versão</p>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 12px">
+        <b>Série</b> aceita “9º ano”, “1ª série”, “2a serie EM”, “3”… ·
+        <b>Versão</b> é <em>regular</em> ou <em>adaptada</em> (opcional, padrão regular) ·
+        Uma primeira linha de cabeçalho é ignorada automaticamente ·
+        Quem já existe é reconhecido pela matrícula e <b>atualizado</b>, não duplicado.</p>
+      <textarea class="caixa" id="imp-est" rows="9" placeholder="Antonia Silva de Oliveira;2026-0142;1ª B;1ª série EM;regular&#10;Elisa Fontes Marques;2026-0231;9º D;9º ano;adaptada"></textarea>
+      <div id="imp-previa"></div>
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="est-importar-conferir">Conferir</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="est-importar-ok">Importar</button></div>`);
+};
+
+const lerCsvEstudantes = () => lerLinhasEstudantes($('#imp-est').value);
+
+ACOES['est-importar-conferir'] = () => {
+  const { bons, ruins } = lerCsvEstudantes();
+  const porSerie = {};
+  for (const b of bons) porSerie[b.serie] = (porSerie[b.serie] || 0) + 1;
+  const novos = bons.filter(b => !S.estudantes.some(e => e.matricula === b.matricula)).length;
+  $('#imp-previa').innerHTML = `
+    <div class="cartao" style="margin-top:12px">
+      <h3>Conferência</h3>
+      ${bons.length ? `<p style="font-size:13px;margin:0 0 8px"><b>${bons.length}</b> linha(s) válida(s) —
+        ${novos} nova(s), ${bons.length - novos} atualizando cadastro existente.</p>
+        <table><thead><tr><th>Série</th><th>Estudantes</th></tr></thead><tbody>${
+          Object.entries(porSerie).sort().map(([s, n]) => `<tr><td>${esc(s)}</td><td>${n}</td></tr>`).join('')
+        }</tbody></table>` : '<p style="font-size:13px;margin:0">Nenhuma linha válida encontrada.</p>'}
+      ${ruins.length ? `<p style="font-size:13px;margin:12px 0 6px;color:var(--vermelho)"><b>${ruins.length}</b> linha(s) com problema:</p>
+        <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${
+          ruins.slice(0, 12).map(r => `<li>linha ${r.linha}: ${esc(r.porque)} — <span style="font-family:var(--mono)">${esc(String(r.texto).slice(0, 60))}</span></li>`).join('')
+        }${ruins.length > 12 ? `<li>…e mais ${ruins.length - 12}</li>` : ''}</ul>` : ''}
+    </div>`;
+};
+
+ACOES['est-importar-ok'] = () => {
+  const { bons, ruins } = lerCsvEstudantes();
+  if (!bons.length) { toast('Nenhuma linha válida para importar.'); return; }
+  for (const b of bons) {
+    const ja = S.estudantes.find(e => e.matricula === b.matricula);
+    if (ja) Object.assign(ja, b);
+    else S.estudantes.push({ id: uid(), ...b });
+  }
+  // O elenco de cada prova das séries tocadas é refeito a partir do cadastro.
+  const series = new Set(bons.map(b => b.serie));
+  const tocadas = provasOrdenadas().filter(p => series.has(p.serie)).map(p => p.id);
+  tocadas.forEach(sincronizarElenco);
+
+  $('#dlg').close(); commit(); PERS.estudantesTodos();
+  tocadas.forEach(PERS.elenco);
+  toast(`${bons.length} estudante(s) importado(s)` +
+    (ruins.length ? ` · ${ruins.length} linha(s) ignorada(s)` : '') + '.');
+};
 
 function dlgMembro(m) {
   const novo = !m;
@@ -2195,14 +2702,14 @@ ACOES['ps-salvar'] = async (d, botao) => {
 /* ---------------- tutorial de boas-vindas ---------------- */
 // Um passo por tela, com uma miniatura animada do sistema. O roteiro muda
 // conforme o papel: cada pessoa vê só o que ela mesma faz.
-const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Equipe'];
+const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Admin.'];
 
 const TUTORIAL = {
   coordenacao: [
     { cena: 'ola', titulo: 'Você coordena o simulado inteiro',
       texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as sete telas.' },
     { cena: 'painel', aba: 0, titulo: 'Painel',
-      texto: 'A visão geral: quantos itens já foram aprovados, o que está parado em revisão e o que cada componente curricular entregou. É por aqui que você configura o simulado — nome, etapa, série, data e duração.' },
+      texto: 'A visão geral de cada prova: quantos itens já foram aprovados, o que está parado em revisão e o que cada componente entregou. O seletor no topo troca a prova — 9º ano, 1ª, 2ª e 3ª série —, e a tabela “As provas do simulado” mostra as quatro de uma vez.' },
     { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
       texto: 'Você cadastra os textos-base e diz quantos itens cada um comporta. Os docentes ocupam esses espaços livres. As sugestões de texto que eles enviarem aparecem aqui para você aprovar.' },
     { cena: 'revisao', aba: 2, titulo: 'Itens e revisão',
@@ -2213,8 +2720,8 @@ const TUTORIAL = {
       texto: 'Cada estudante recebe as folhas nominais: objetiva, discursiva e — se você quiser — redação. As âncoras nos cantos permitem ler tudo digitalizado em lote.' },
     { cena: 'correcao', aba: 5, titulo: 'Correção e boletins',
       texto: 'Lance as marcações à mão ou importe o arquivo do leitor óptico. Daí saem os boletins individuais, os relatórios por turma e a planilha de notas.' },
-    { cena: 'equipe', aba: 6, titulo: 'Equipe',
-      texto: 'Aqui você cria os acessos. Cada pessoa recebe uma senha provisória e troca no primeiro login, como você acabou de fazer. Quem não está nesta lista não entra no sistema.' }
+    { cena: 'equipe', aba: 6, titulo: 'Administração',
+      texto: 'Aqui você cria os acessos e sobe a lista de estudantes por CSV. Cada pessoa recebe uma senha provisória e troca no primeiro login, como você acabou de fazer. A série de cada estudante é o que o liga à prova que ele vai fazer.' }
   ],
   coordenacao_area: [
     { cena: 'ola', titulo: 'Você escreve itens e revisa a sua área',
@@ -2231,6 +2738,8 @@ const TUTORIAL = {
   docente: [
     { cena: 'ola', titulo: 'Bem-vindo ao Sistema PAS',
       texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. São três telas que interessam a você.' },
+    { cena: 'painel', aba: 0, titulo: 'O que você tem para entregar',
+      texto: 'O Painel abre com a sua lista: quanto você já escreveu em cada prova — 9º ano, 1ª, 2ª e 3ª série — e o que está em revisão. Clique numa linha para trabalhar naquela prova; o seletor no topo troca a prova a qualquer momento.' },
     { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
       texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Também dá para sugerir um texto novo à coordenação.' },
     { cena: 'itens', aba: 2, titulo: 'Meus itens',
@@ -2377,11 +2886,16 @@ ACOES['nuvem-sair'] = async () => {
 
 // Traz do banco o estado completo do simulado para a memória.
 function aplicarDados(dados) {
-  S.config = dados.config;
+  S.provas = dados.provas;
   S.textos = dados.textos;
   S.itens = dados.itens;
   S.estudantes = dados.estudantes;
+  S.elencos = dados.elencos;
   S.respostas = dados.respostas;
+  // A prova escolhida por esta pessoa continua valendo, desde que ainda exista.
+  const salva = lerProvaSalva();
+  if (salva && dados.provas.some(p => p.id === salva)) S.provaAtiva = salva;
+  else if (!dados.provas.some(p => p.id === S.provaAtiva)) S.provaAtiva = dados.provas[0]?.id || null;
 }
 
 async function aposLogin() {
@@ -2406,8 +2920,8 @@ async function aposLogin() {
   tutorialAberto = false;
   try {
     const dados = await nuvem.carregarTudo();
-    if (!dados.config) {
-      // Banco vazio (primeiro acesso): sobe o estado local como ponto de partida.
+    if (!dados.provas.length) {
+      // Banco sem prova nenhuma: sobe o estado local como ponto de partida.
       await nuvem.substituirTudo(S);
       toast('Banco on-line inicializado com os dados deste navegador.');
     } else {
@@ -2423,7 +2937,7 @@ async function atualizarDaNuvem(silencioso = false) {
   if (!modoNuvem || !nuvem.usuario() || $('#dlg').open) return;
   try {
     const dados = await nuvem.carregarTudo();
-    if (dados.config) { aplicarDados(dados); save(S); render(); }
+    if (dados.provas.length) { aplicarDados(dados); save(S); render(); }
     if (!silencioso) toast('Dados atualizados.');
   } catch (e) {
     if (!silencioso) toast('Não foi possível atualizar: ' + (e.message || e));

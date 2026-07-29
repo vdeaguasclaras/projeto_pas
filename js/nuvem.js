@@ -94,25 +94,34 @@ const redefinirSenha = (email, senha) => chamarEquipe({ acao: 'senha', email, se
 const removerMembro  = (email)        => chamarEquipe({ acao: 'remover', email });
 
 async function carregarTudo() {
-  const [cfg, tx, it, es, rp] = await Promise.all([
-    sb.from('simulado_config').select('dados').eq('id', 1).maybeSingle(),
+  const [pv, tx, it, es, el, rp] = await Promise.all([
+    sb.from('provas').select('dados'),
     sb.from('textos').select('dados'),
     sb.from('itens').select('dados'),
     sb.from('estudantes').select('dados'),
-    sb.from('respostas').select('est_id,dados')
+    sb.from('prova_estudantes').select('prova_id,est_id'),
+    sb.from('respostas').select('prova_id,est_id,dados')
   ].map(p => p.then(checar)));
+
+  // Elencos e respostas chegam achatados do banco e viram mapas por prova.
+  const elencos = {};
+  for (const { prova_id, est_id } of el.data || [])
+    (elencos[prova_id] = elencos[prova_id] || []).push(est_id);
+
+  const respostas = {};
+  for (const { prova_id, est_id, dados } of rp.data || [])
+    (respostas[prova_id] = respostas[prova_id] || {})[est_id] = dados;
+
   return {
-    config: cfg.data?.dados || null,
+    provas: (pv.data || []).map(r => r.dados).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
     textos: (tx.data || []).map(r => r.dados),
     itens: (it.data || []).map(r => r.dados).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
     estudantes: (es.data || []).map(r => r.dados),
-    respostas: Object.fromEntries((rp.data || []).map(r => [r.est_id, r.dados]))
+    elencos,
+    respostas
   };
 }
 
-async function gravarConfig(dados) {
-  checar(await sb.from('simulado_config').upsert({ id: 1, dados }));
-}
 async function gravarLinha(tabela, dados) {
   checar(await sb.from(tabela).upsert({ id: dados.id, dados }));
 }
@@ -123,32 +132,53 @@ async function gravarLinhas(tabela, lista) {
 async function removerLinha(tabela, id) {
   checar(await sb.from(tabela).delete().eq('id', id));
 }
-async function gravarResposta(estId, dados) {
-  checar(await sb.from('respostas').upsert({ est_id: estId, dados }));
+
+// Respostas: a chave é (prova, estudante) desde a migração 0007.
+async function gravarResposta(provaId, estId, dados) {
+  checar(await sb.from('respostas')
+    .upsert({ prova_id: provaId, est_id: estId, dados }, { onConflict: 'prova_id,est_id' }));
 }
-async function gravarRespostas(mapa, ids) {
-  const linhas = ids.filter(id => mapa[id]).map(id => ({ est_id: id, dados: mapa[id] }));
-  if (linhas.length) checar(await sb.from('respostas').upsert(linhas));
+async function gravarRespostas(provaId, mapa, ids) {
+  const linhas = ids.filter(id => mapa[id])
+    .map(id => ({ prova_id: provaId, est_id: id, dados: mapa[id] }));
+  if (linhas.length)
+    checar(await sb.from('respostas').upsert(linhas, { onConflict: 'prova_id,est_id' }));
 }
-async function removerResposta(estId) {
-  checar(await sb.from('respostas').delete().eq('est_id', estId));
+async function removerResposta(provaId, estId) {
+  checar(await sb.from('respostas').delete().eq('prova_id', provaId).eq('est_id', estId));
+}
+
+// Elenco: quem faz cada prova. Só a coordenação escreve.
+async function gravarElenco(provaId, estIds) {
+  checar(await sb.from('prova_estudantes').delete().eq('prova_id', provaId));
+  if (estIds.length)
+    checar(await sb.from('prova_estudantes')
+      .upsert(estIds.map(est_id => ({ prova_id: provaId, est_id }))));
 }
 
 // Substituição total (coordenação: zerar, importar backup, carregar exemplo).
+// A ordem importa: respostas e elencos apontam para provas e estudantes por
+// chave estrangeira, então saem primeiro e voltam por último.
 async function substituirTudo(S) {
+  checar(await sb.from('respostas').delete().neq('est_id', ''));
+  checar(await sb.from('prova_estudantes').delete().neq('est_id', ''));
   for (const t of ['textos', 'itens', 'estudantes'])
     checar(await sb.from(t).delete().neq('id', ''));
-  checar(await sb.from('respostas').delete().neq('est_id', ''));
-  await gravarConfig(S.config);
+  checar(await sb.from('provas').delete().neq('id', ''));
+
+  await gravarLinhas('provas', S.provas);
   await gravarLinhas('textos', S.textos);
   await gravarLinhas('itens', S.itens.map((i, ix) => ({ ...i, ordem: ix })));
   await gravarLinhas('estudantes', S.estudantes);
-  await gravarRespostas(S.respostas, Object.keys(S.respostas));
+  for (const [provaId, ids] of Object.entries(S.elencos || {}))
+    await gravarElenco(provaId, ids);
+  for (const [provaId, mapa] of Object.entries(S.respostas || {}))
+    await gravarRespostas(provaId, mapa, Object.keys(mapa));
 }
 
 export const nuvem = {
   conectado, usuario, iniciar, entrar, sair, trocarSenha,
-  carregarTudo, gravarConfig, gravarLinha, gravarLinhas, removerLinha,
+  carregarTudo, gravarLinha, gravarLinhas, removerLinha, gravarElenco,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
   marcarSenhaTrocada, marcarTutorialVisto
