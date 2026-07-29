@@ -42,9 +42,9 @@ aberta pelo botão **☰** ao lado do título.
 
 **1 · Painel** — quanto já foi produzido, o que está em revisão e a entrega de
 cada componente curricular. A coordenação também configura aqui a prova — nome,
-etapa, série, data, duração e a **quantidade de questões de cada versão** — e vê as
-quatro provas
-lado a lado. O docente abre esta tela com a sua lista do que tem para entregar.
+etapa, série, data, duração e a **quantidade de questões de cada versão** — e vê
+as quatro provas lado a lado. O docente abre esta tela com a sua lista do que tem
+para entregar.
 
 **2 · Alocação por docente** (só coordenação) — quantos itens cada docente deve
 entregar em **cada prova**. É onde a coordenação distribui a prova antes de
@@ -56,9 +56,9 @@ qualquer um começar a escrever.
   está sem meta não aparece cobrado no painel dele.
 - O **recado** que você escrever na linha aparece no painel daquele docente,
   junto da meta.
-- **Dividir igualmente** reparte a quantidade de questões da prova **regular** entre
-  todos,
-  fechando a conta exatamente (o resto vai para os primeiros da lista).
+- **Dividir igualmente** reparte a quantidade de questões da prova **regular**
+  entre todos, fechando a conta exatamente (o resto vai para os primeiros da
+  lista).
   **Copiar de outra prova** repete a distribuição de uma série em outra.
 - A **conferência** no topo compara a soma das metas com o tamanho da prova e
   com o espaço dos textos-base. Ela avisa, nunca corrige sozinha — quem decide é
