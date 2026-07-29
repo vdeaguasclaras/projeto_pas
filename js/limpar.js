@@ -33,13 +33,23 @@ function podar(no) {
 
 // DOMParser não executa script nem dispara carregamento de recurso — o
 // documento nasce inerte, e é por isso que a poda pode acontecer sobre ele.
-function limpar(html) {
+//
+// Devolve a árvore podada, não o HTML: é o que permite a notação matemática
+// (js/rico.js) ser renderizada DEPOIS da poda, dentro do mesmo documento
+// inerte. A lista de permissão continua valendo para tudo o que veio de quem
+// escreveu; o HTML do KaTeX entra em seguida, e por isso não precisa — nem
+// deve — passar por ela. Ver o comentário no topo de js/rico.js.
+function limparArvore(html) {
   const doc = new DOMParser().parseFromString(
     `<div id="raiz">${String(html ?? '')}</div>`, 'text/html');
   const raiz = doc.getElementById('raiz');
-  if (!raiz) return '';
+  if (!raiz) return null;
   podar(raiz);
-  return raiz.innerHTML;
+  return raiz;
 }
 
-export { limpar, PERMITIDAS };
+function limpar(html) {
+  return limparArvore(html)?.innerHTML ?? '';
+}
+
+export { limpar, limparArvore, PERMITIDAS };

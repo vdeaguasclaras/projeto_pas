@@ -98,6 +98,44 @@ Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar e
 Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múltipla
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
+### Fórmula, expoente e símbolo no enunciado
+
+O enunciado, as opções do tipo C e a resposta esperada do tipo D têm uma **barra
+de ferramentas**. Passe o mouse em cada botão para ver o que ele faz.
+
+O primeiro grupo é **ênfase**: negrito (Ctrl+B), itálico (Ctrl+I), sublinhado
+(Ctrl+U), sobrescrito (m², 3ª) e subscrito (H₂O, CO₂).
+
+O segundo grupo é **notação matemática**. A fórmula se escreve entre sinais de
+dólar, na notação do LaTeX, e o sistema a desenha:
+
+| Você escreve | Sai impresso |
+|---|---|
+| `$\frac{1}{2}$` | a fração um meio, com o traço na horizontal |
+| `$x^{2}$` | x elevado a 2 |
+| `$x_{1}$` | x índice 1 |
+| `$\sqrt{3}$` e `$\sqrt[3]{8}$` | raiz quadrada de 3, raiz cúbica de 8 |
+| `$30^\circ$` | 30 graus |
+| `$\vec{v}$` | vetor v |
+| `$a \pm b$`, `$a \le b$`, `$a \times b$`, `$\pi$`, `$\Delta$` | ±, ≤, ×, π, Δ |
+| `$$x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$$` | fórmula centralizada, na própria linha |
+
+Os botões do segundo grupo escrevem isso para você e já deixam selecionada a
+parte que precisa trocar — clique em `a/b`, digite o numerador, dê Tab mental e
+siga.
+
+Logo abaixo do campo aparece a **PRÉVIA**, que mostra a fórmula desenhada
+exatamente como vai sair no caderno impresso. Se algo estiver errado, o comando
+aparece **em vermelho** na prévia: confira as chaves `{ }`.
+
+**Valor em real não vira fórmula.** “Custa R$ 50,00 e sobra R$ 30,00” continua
+sendo dinheiro — o sistema só entende como fórmula o dólar que vem colado no
+começo e no fim do trecho. Se precisar de um dólar solto encostado num número,
+escreva `\$`.
+
+Uma fórmula tem de estar inteira dentro do mesmo trecho: não negrite metade dela.
+Fórmula já tem a formatação dela.
+
 **5 · Caderno** — o caderno montado com os itens aprovados, em numeração
 contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
 PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
