@@ -642,3 +642,96 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
   #print-area .pas-capa{min-height:842pt;height:842pt}
 }
 
+
+/* ===== editor rico e notação matemática =====
+   Os campos de texto do item (enunciado, opções do tipo C, resposta esperada do
+   tipo D) aceitam ênfase e fórmula. A fórmula fica guardada como código entre
+   `$…$` e é desenhada pelo KaTeX na hora de exibir — ver js/rico.js. A folha do
+   KaTeX (js/vendor/katex/katex.css) entra antes desta, e o que vem aqui só
+   acerta o encaixe dele em cada contexto. */
+
+/* --- o editor --- */
+.rico{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rico-barra{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rico-grupo{display:inline-flex;border:1.5px solid var(--borda);border-radius:9px;overflow:hidden;background:var(--fundo)}
+.rico-btn{border:none;background:transparent;color:var(--ink-2);font-size:13px;font-weight:700;
+  min-width:29px;height:27px;padding:0 6px;border-right:1.5px solid var(--borda);
+  display:inline-grid;place-items:center;transition:background .12s,color .12s;line-height:1}
+.rico-grupo .rico-btn:last-child{border-right:none}
+.rico-btn:hover{background:var(--azul-claro);color:var(--ink)}
+.rico-btn.mat{color:var(--rosa);font-family:var(--mono);font-size:12px}
+.rico-btn.mat:hover{background:var(--rosa-claro);color:var(--rosa)}
+
+/* A área editável usa a mesma .caixa dos outros campos, para o formulário não
+   ter duas aparências de campo de texto. */
+.rico-area{overflow-y:auto;max-height:40vh;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.rico-area:empty::before,.rico-area.vazia::before{content:attr(data-vazio);color:var(--ink-2);opacity:.65}
+.rico-area sup,.rico-area sub{font-size:.75em}
+.rico-ajuda{margin:5px 0 0;font-size:11.5px;line-height:1.5;color:var(--ink-2)}
+.rico-ajuda code{font-family:var(--mono);font-size:11px;background:var(--fundo);border-radius:4px;padding:1px 4px}
+
+/* A prévia só aparece quando há fórmula: em item de Português ela não teria o
+   que mostrar e só empurraria o formulário para baixo. */
+.rico-previa{border:1px dashed var(--borda);border-radius:10px;padding:8px 11px;background:var(--fundo);
+  font-size:14px;line-height:1.6}
+.rico-previa[hidden]{display:none}
+.rico-rot{display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-2);margin-bottom:3px}
+.rico-saida{word-break:break-word}
+
+/* Opção do tipo C: a letra fixa à esquerda, o editor ocupando o resto. */
+.it-opcao{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.it-opcao>b{width:16px;flex:none;text-align:center;font-size:15px}
+.it-opcao .rico{flex:1;min-width:0}
+
+/* --- a coluna de enunciado na lista de itens ---
+   Duas linhas e corta: a lista serve para reconhecer o item, não para ler o
+   enunciado inteiro. O texto completo fica no `title` e no editor. */
+td.it-enun{max-width:34ch;font-size:12.5px;color:var(--ink-2);font-variant-numeric:normal}
+td.it-enun>div{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45}
+
+/* --- a fórmula renderizada ---
+   O KaTeX calcula a largura de cada pedaço da fórmula contando com
+   `box-sizing: content-box`, que é o padrão do CSS. Este projeto força
+   `border-box` em tudo (`*`, e de novo em `.pas *` e `.cr-folha *`), e com isso
+   a fração e o radical colapsavam para largura quase zero e a fórmula saía
+   escrita por cima do texto ao lado — visível justamente no caderno impresso.
+   Devolver `content-box` dentro de `.katex` é o conserto; `.fbox`, `.fcolorbox`
+   e `.angl` são as três caixas em que o próprio KaTeX pede `border-box`. */
+.katex,.katex *{box-sizing:content-box}
+.katex .fbox,.katex .fcolorbox,.katex .angl{box-sizing:border-box}
+/* O 1,21em de fábrica do KaTeX destoa do texto da interface; 1,13em ainda
+   compensa o x-height menor da fonte matemática sem parecer outro tamanho. */
+.katex{font-size:1.13em}
+
+.mat{max-width:100%}
+.mat-bloco{display:block;text-align:center;text-indent:0;margin:.35em 0}
+/* Fórmula que não compilou aparece em vermelho com o código à vista: quem
+   escreveu precisa ver o que quebrou, não um campo em branco. */
+.mat-erro{color:var(--erro);font-family:var(--mono);font-size:.9em;border-bottom:1px dotted var(--erro)}
+/* Sem o KaTeX carregado, o código é mostrado como está escrito. */
+.mat-fonte{font-family:var(--mono);font-size:.9em;color:var(--ink-2)}
+
+/* --- no caderno impresso ---
+   O corpo do caderno é Arial 10pt com entrelinha de 13,3pt. A fórmula sai na
+   fonte do KaTeX (serifada e itálica, como no caderno do PAS de verdade), só um
+   pouco maior que o texto para o x-height bater. `medirPecas` mede a altura
+   real depois de renderizada, então uma fração que estica a linha é paginada
+   corretamente — nada é cortado em silêncio. */
+.pas .katex{font-size:1.1em;line-height:1.15}
+.pas .mat-bloco{margin:4pt 0}
+.pas .katex-display{margin:0}
+.pas-item .mat-bloco,.pas-op .mat-bloco{text-indent:0;padding-left:0}
+.pas .mat-erro{font-size:9pt}
+
+/* Prévia do caderno e do cartão são sempre papel branco, mesmo no tema escuro:
+   a fórmula acompanha, senão sairia clara sobre branco. */
+.pas .katex,.pas .mat,.cr-folha .katex{color:#000}
+
+@media print{
+  /* A fórmula é desenho de fonte, não imagem: sem `print-color-adjust` o Chrome
+     pode clarear o traço da fração e do radical ao imprimir em preto e branco. */
+  #print-area .katex,#print-area .mat{-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#000}
+  /* A prévia do editor não existe no papel. */
+  .rico-previa,.rico-barra{display:none}
+}

@@ -22,8 +22,11 @@ css/estilo.css        identidade visual (Marista: azul #0d2f8a / rosa #e5007e)
 js/config-supabase.js endereço e chave publicável do banco
 js/dados.js           modelo de dados, dados de exemplo, cache local
 js/nuvem.js           driver do Supabase (auth, tabelas, Edge Function)
+js/limpar.js          poda do HTML escrito pela equipe (lista de permissão curta)
+js/rico.js            texto rico do item: ênfase e notação matemática
 js/app.js             as 7 telas, regras de prova e correção
 js/vendor/supabase.js biblioteca supabase-js (cópia versionada — sem CDN)
+js/vendor/katex/      KaTeX 0.18.1 + fontes woff2 (cópia versionada — sem CDN)
 supabase/migrations/  esquema e regras de acesso do banco
 supabase/functions/   Edge Function `equipe` (administração de contas)
 ```
@@ -194,6 +197,90 @@ faixa de subprograma e etapa, instruções numeradas à direita e as observaçõ
 rodapé. Tanto a imagem quanto o texto das instruções são editáveis na tela do
 caderno (“Capa e instruções”), já que a arte muda a cada edição e costuma
 remeter aos textos da prova ou ao tema da redação.
+
+## Notação matemática nos campos do item
+
+Pedido dos coordenadores: quem dá aula de Matemática, Física e Química escrevia
+“x^2” e “1/2” na mão, e saía assim no caderno impresso. Os campos de texto do
+item — enunciado, opções do tipo C e resposta esperada do tipo D — passaram a
+aceitar **ênfase** (negrito, itálico, sublinhado, sobrescrito, subscrito) e
+**notação matemática**.
+
+### Como é guardado, e por que assim
+
+A regra de RLS do banco libera escrita nas tabelas de item a **toda** a equipe,
+não só à coordenação: o que uma conta grava roda no navegador das outras 21. Daí
+`js/limpar.js`, cuja lista de permissão é curta de propósito — só ênfase, e
+**atributo nenhum em tag nenhuma**.
+
+O KaTeX gera `<span style>`, `<svg>` e `<math>`. Alargar a lista para aceitar
+isso transformaria o higienizador em peneira. Então a fórmula **não** é guardada
+como HTML:
+
+| No banco | Na tela |
+|---|---|
+| `A área é $A=\pi r^{2}$.` (texto comum) | fórmula desenhada pelo KaTeX |
+
+`rico()` (js/rico.js) faz as duas etapas **nesta ordem**: primeiro
+`limparArvore()` poda o que a pessoa escreveu, depois `matematizar()` varre os
+nós de texto já podados e troca os trechos entre delimitadores pelo HTML do
+KaTeX. O HTML do KaTeX entra depois da poda porque não vem de quem escreveu:
+vem do nosso renderizador, a partir de um código-fonte que a lista curta
+aceitou. `js/limpar.js` ganhou uma função (`limparArvore`), e **nenhuma tag ou
+atributo novo**.
+
+Opções de segurança do KaTeX, em `OPCOES_KATEX`:
+
+| Opção | Por quê |
+|---|---|
+| `trust: false` | barra `\href`, `\url`, `\includegraphics`, `\htmlStyle`, `\htmlClass`, `\htmlId`, `\htmlData`. É o padrão, escrito à mão para não se perder num descuido. `$\href{javascript:alert(1)}{x}$` não produz âncora — sai o comando em vermelho. |
+| `maxSize: 6` | limita tamanho pedido pelo autor (`\rule{900em}{900em}`, `\kern`, `\raisebox`). Não é execução de código: é vandalismo de diagramação, e o caderno impresso não dá para desfazer. |
+| `maxExpand: 1000` | o padrão, explícito: `\def` recursivo não trava a aba de quem só abriu a lista. |
+| `strict: 'ignore'` | `strict` é fidelidade ao LaTeX, não segurança. Em `error` um item se perderia por um “á” dentro de `$…$`; em `warn` cada acento viraria ruído no console de quem não escreveu o item. |
+| `throwOnError: false` | erro de digitação vira fórmula em vermelho com o código à vista, em vez de derrubar a tela. |
+
+Macro definida num item (`\gdef`) **não** vaza para o próximo: cada
+`renderToString` recebe a sua própria tabela de macros.
+
+### Os delimitadores
+
+`$…$` em linha, `$$…$$` em destaque. Em português “R$ 50,00” aparece em item de
+Matemática toda hora, então valem as três regras de vizinhança do Pandoc: o `$`
+que abre não pode ser seguido de espaço; o que fecha não pode ser precedido de
+espaço nem seguido de algarismo. Com isso “R$ 50,00 e R$ 30,00” e “R$50,00 e
+R$30,00” continuam sendo dinheiro. Sobra `\$` para o caso teimoso, e a prévia do
+editor mostra na hora o que o sistema entendeu.
+
+### O editor
+
+`contenteditable` com barra de ferramentas e prévia logo abaixo. A fórmula fica
+como **código** na área de edição e **desenhada** na prévia — editar dentro do
+HTML do KaTeX exigiria administrar cursor dentro dele, complicação grande para
+um sistema sem framework e sem ganho, já que a prévia mostra exatamente o que
+sai impresso. A prévia só aparece quando há fórmula.
+
+Tudo o que sai do editor passa por `limpar()` a cada tecla, então `rasc` e o
+banco só veem tags da lista curta. Colar traz texto puro: HTML de Word arrastaria
+`<span style>` que a poda descartaria em silêncio. Enter produz `<br>`, não
+`<div>` — a poda desembrulha `<div>` e a quebra desapareceria sem aviso.
+
+### KaTeX vendorizado
+
+`js/vendor/katex/`: `katex.mjs` (módulo ES, carregado sob demanda em
+`iniciarApp()` antes da primeira tela), `katex.css` e 20 fontes **só em woff2**,
+300 kB. Os `.woff`/`.ttf` do pacote ficaram fora — quadruplicariam o peso para
+atender navegador que ninguém usa. Critérios e receita de atualização em
+`js/vendor/katex/LEIA-ME.md`.
+
+Um detalhe que custou tempo: o projeto força `box-sizing: border-box` em `*`, em
+`.pas *` e em `.cr-folha *`, e o KaTeX calcula largura contando com
+`content-box`. Com `border-box` a fração colapsava e a fórmula saía escrita por
+cima do texto ao lado, justamente no caderno. `css/estilo.css` devolve
+`content-box` dentro de `.katex`.
+
+A paginação continua correta porque `medirPecas` mede a altura de cada peça com
+a fórmula **já desenhada**: uma fração que estica a linha é paginada pela altura
+real, não pela estimada.
 
 ## Fase 5 — pontuação
 

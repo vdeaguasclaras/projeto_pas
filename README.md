@@ -19,6 +19,11 @@ A coordenação **aloca** quantos itens cada docente deve entregar em cada prova
 o docente vê a sua meta e o seu progresso no painel. Item e meta se ligam pelo
 **e-mail** de quem escreve, não pelo nome — nome é rótulo, e-mail é identidade.
 
+Os campos de texto do item aceitam **ênfase** (negrito, itálico, sobrescrito,
+subscrito) e **notação matemática** entre `$…$`: fração, expoente, raiz, índice,
+grau, vetor. A fórmula é desenhada na prévia do editor, na lista de itens e no
+caderno impresso.
+
 - **Manual da equipe:** [`docs/manual-da-equipe.md`](docs/manual-da-equipe.md)
 - **Plano de implantação e arquitetura:** [`docs/plano-implantacao.md`](docs/plano-implantacao.md)
 
@@ -36,9 +41,11 @@ js/config-supabase.js   endereço e chave publicável do banco
 js/dados.js             modelo de dados e dados de exemplo
 js/nuvem.js             driver do Supabase
 js/limpar.js            higienização do HTML escrito pela equipe
+js/rico.js              texto rico dos campos do item: ênfase e notação matemática
 js/planilha.js          leitura da lista de estudantes colada pela coordenação
 js/app.js               telas, montagem da prova e correção
 js/vendor/supabase.js   biblioteca supabase-js (cópia local, sem CDN)
+js/vendor/katex/        KaTeX 0.18.1 e as fontes dele (cópia local, sem CDN)
 supabase/migrations/    esquema e regras de acesso
 supabase/functions/     Edge Function `equipe` (administra as contas)
 docs/                   manual e plano de implantação
@@ -75,8 +82,13 @@ serve — não há servidor próprio.
   `status: "aprovado"` de quem não é a coordenação geral.
 - Apagar texto, estudante, resposta ou prova é restrito à coordenação; o docente
   só descarta o próprio rascunho.
-- O HTML que a equipe escreve nas instruções da capa passa por uma lista de
-  permissão curta (`js/limpar.js`) antes de ir para a tela.
+- O HTML que a equipe escreve nas instruções da capa e nos campos do item passa
+  por uma lista de permissão curta (`js/limpar.js`) antes de ir para a tela:
+  só ênfase tipográfica, e atributo nenhum em tag nenhuma.
+- A **notação matemática** dos itens é guardada como código entre `$…$`, que é
+  texto comum, e desenhada pelo KaTeX só na hora de exibir (`js/rico.js`). O
+  HTML do KaTeX — `<span style>`, `<svg>`, `<math>` — nunca é gravado no banco,
+  e por isso a lista de permissão pôde continuar curta.
 - A chave em `js/config-supabase.js` é a chave **publicável** do Supabase, feita
   para ficar no navegador: sozinha ela não dá acesso a nada.
 - A chave de serviço existe apenas dentro da Edge Function `equipe`, que só

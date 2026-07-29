@@ -10,6 +10,9 @@ import {
 } from './dados.js';
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
+import {
+  carregarKatex, rico, simples, vazio as ricoVazio, editorRico, ligarEditoresRicos
+} from './rico.js';
 import { lerLinhasEstudantes } from './planilha.js';
 
 let S = load();
@@ -1431,6 +1434,7 @@ function telaItens() {
     return `<tr class="clic" data-acao="abrir-item" data-id="${i.id}">
       ${todasAsProvas ? `<td><b>${esc(pr?.serie || '—')}</b></td>` : ''}
       <td>Texto ${t?.numero ?? '—'}</td>
+      <td class="it-enun" title="${esc(simples(i.enunciado).slice(0, 300))}"><div>${rico(i.enunciado)}</div></td>
       <td><span class="t t${i.tipo}" style="display:inline-grid;width:22px;height:22px;place-items:center;border-radius:6px;color:#fff;font-size:11px;font-weight:800">${i.tipo}</span></td>
       <td>${discChip(i.componente)}<br><span style="font-size:11px;color:var(--ink-2)">${esc(areaDoComponente(i.componente) || '—')}</span></td>
       <td>${esc(i.autor)}</td>
@@ -1457,7 +1461,7 @@ function telaItens() {
         <button class="btn" data-acao="novo-item">+ Novo item</button>
       </div>
     </div>
-    ${linhas ? `<table><thead><tr>${todasAsProvas ? '<th>Prova</th>' : ''}<th>Texto</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
+    ${linhas ? `<table><thead><tr>${todasAsProvas ? '<th>Prova</th>' : ''}<th>Texto</th><th>Enunciado</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : '<div class="vazio">Nenhum item neste filtro. Crie um item pelos espaços livres em “Textos e alocação” ou pelo botão acima.</div>'}
   </div></div>
@@ -1537,8 +1541,8 @@ function dlgItem() {
   } else if (rasc.tipo === 'D') {
     respostaHtml = `
       <div class="campo" style="margin-bottom:12px"><label>Resposta esperada (guia de correção)</label>
-        <textarea class="caixa" rows="3" data-mud="it-campo" data-campo="gabarito"
-          placeholder="O que se espera na resposta construída do estudante">${esc(rasc.gabarito || '')}</textarea></div>
+        ${editorRico({ campo: 'gabarito', valor: rasc.gabarito || '', linhas: 3,
+                       rotulo: 'O que se espera na resposta construída do estudante' })}</div>
       <div class="form-linha">
         <div class="campo" style="flex:0;min-width:160px"><label>Linhas de resposta</label>
           <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"></div>
@@ -1558,9 +1562,10 @@ function dlgItem() {
   const opcoesHtml = rasc.tipo === 'C' ? `
     <div class="campo" style="margin-bottom:12px"><label>Opções (A a D)</label>
       ${['A', 'B', 'C', 'D'].map((L, i) => `
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-          <b style="width:16px">${L}</b>
-          <input class="caixa" data-mud="it-opcao" data-i="${i}" value="${esc(rasc.opcoes[i] || '')}">
+        <div class="it-opcao">
+          <b>${L}</b>
+          ${editorRico({ campo: 'opcao', i, valor: rasc.opcoes[i] || '', linhas: 1,
+                         rotulo: 'Opção ' + L })}
         </div>`).join('')}
     </div>` : '';
 
@@ -1639,7 +1644,12 @@ function dlgItem() {
               <div class="seg">${segGrupo}</div></div>
           </div>
           <div class="campo" style="margin-bottom:12px"><label>Enunciado</label>
-            <textarea class="caixa" rows="4" data-mud="it-campo" data-campo="enunciado">${esc(rasc.enunciado)}</textarea></div>
+            ${editorRico({ campo: 'enunciado', valor: rasc.enunciado, linhas: 4,
+                           rotulo: 'Enunciado do item' })}
+            <p class="rico-ajuda">Fórmula entre <code>$…$</code> na linha e <code>$$…$$</code> em
+              destaque, na notação do LaTeX — <code>$\\frac{1}{2}$</code>, <code>$x^2$</code>,
+              <code>$\\sqrt{3}$</code>, <code>$30^\\circ$</code>. A prévia mostra como sai impresso.
+              Valor em real não vira fórmula: “R$ 50,00” continua sendo R$ 50,00.</p></div>
           ${opcoesHtml}${respostaHtml}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -1660,8 +1670,17 @@ MUDS['it-campo'] = (d, el) => {
   rasc[el.dataset.campo] = el.value;
   if (el.dataset.campo === 'linhasRef') reabrirDlgItem();
 };
-MUDS['it-opcao'] = (d, el) => { rasc.opcoes[parseInt(el.dataset.i, 10)] = el.value; };
 MUDS['it-dlinhas'] = (d, el) => { rasc.dLinhas = Math.max(1, Math.min(40, parseInt(el.value, 10) || 10)); };
+
+// Enunciado, opções e resposta esperada são editores ricos (js/rico.js), não
+// <textarea>: recebem ênfase e notação matemática. O aviso de mudança NÃO
+// chama `commit()` nem remonta o diálogo — remontar destruiria o cursor a cada
+// tecla, o mesmo motivo já documentado em `alocacaoMudou()`.
+ligarEditoresRicos((campo, i, valor) => {
+  if (!rasc) return;
+  if (campo === 'opcao') rasc.opcoes[Number(i)] = valor;
+  else if (campo === 'enunciado' || campo === 'gabarito') rasc[campo] = valor;
+});
 ACOES['it-tipo'] = d => {
   rasc.tipo = d.v;
   if (d.v === 'B') rasc.gabarito = /^\d{1,3}$/.test(String(rasc.gabarito)) ? rasc.gabarito : '';
@@ -1680,7 +1699,9 @@ ACOES['it-versao'] = d => { rasc.versao = d.v; reabrirDlgItem(); };
 ACOES['it-gab'] = d => { rasc.gabarito = d.v; reabrirDlgItem(); };
 
 function persistirRascunho() {
-  if (!rasc.enunciado.trim()) { toast('Escreva o enunciado do item.'); return false; }
+  // Enunciado agora é HTML: “vazio” pode ser <br> ou espaço inquebrável, e
+  // `ricoVazio()` olha o texto por baixo da marcação.
+  if (ricoVazio(rasc.enunciado)) { toast('Escreva o enunciado do item.'); return false; }
   if (rasc.tipo === 'B' && !/^\d{1,3}$/.test(String(rasc.gabarito).trim())) { toast('Gabarito do tipo B: número de 0 a 999.'); return false; }
   if (rasc.tipo === 'D' && !(rasc.dLinhas >= 1)) { toast('Informe a quantidade de linhas de resposta do item discursivo.'); return false; }
   if (!rasc.id) { rasc.id = uid(); S.itens.push(rasc); }
@@ -1839,11 +1860,16 @@ function comandoDoBloco(itens, texto) {
   return `${abertura}, ${acoes}.`;
 }
 
+// O enunciado e as opções são texto rico: `rico()` poda a marcação pela lista
+// de `js/limpar.js` e só então renderiza as fórmulas — o HTML do KaTeX nasce
+// aqui, na hora de imprimir, e nunca esteve no banco. A altura de cada peça é
+// medida depois (`medirPecas`), com a fórmula já desenhada, então a paginação
+// continua certa mesmo quando uma fração estica a linha.
 function htmlItem({ item, numero }) {
-  const enun = esc(item.enunciado);
+  const enun = rico(item.enunciado);
   if (item.tipo === 'C') {
     const ops = (item.opcoes || []).map((o, i) =>
-      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${esc(o)}</p>`).join('');
+      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}</p>`).join('');
     return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${ops}</div>`;
   }
   if (item.tipo === 'D') {
@@ -2425,7 +2451,9 @@ function tabelaDiscursivos(provaId = idProvaAtual()) {
     const n = numeros[i.id] || {};
     const rot = ['regular', 'adaptada'].filter(v => n[v])
       .map(v => (v === 'regular' ? 'R-' : 'A-') + n[v]).join(' / ');
-    return `<th title="${esc(i.enunciado.slice(0, 100))}">Item ${rot || '—'}<br>
+    // Atributo não renderiza HTML: aqui vai o texto por baixo da marcação, com
+    // o código da fórmula à vista — é o que quem escreveu digitou.
+    return `<th title="${esc(simples(i.enunciado).slice(0, 140))}">Item ${rot || '—'}<br>
       <span style="font-weight:400;text-transform:none">${esc(i.componente)} · ${esc(i.autor.split(' ')[0])}</span></th>`;
   }).join('');
   const linhas = estudantesOrdenados(provaId).map(e => {
@@ -3418,6 +3446,14 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------------- inicialização ---------------- */
 (async function iniciarApp() {
+  // O KaTeX entra antes da primeira tela porque daí em diante a renderização é
+  // síncrona em todo o sistema — o caderno mede a altura de cada peça de HTML
+  // já pronta para paginar, e não teria como esperar por uma promessa no meio
+  // disso. Se a carga falhar, `rico()` mostra o código da fórmula como está
+  // escrito, e o sistema segue: item nenhum fica em branco por causa disso.
+  try { await carregarKatex(); }
+  catch { toast('Notação matemática indisponível — as fórmulas aparecem como código.'); }
+
   if (NUVEM.ativa && NUVEM.chave && !NUVEM.chave.startsWith('PREENCHER')) {
     try {
       await nuvem.iniciar(NUVEM.url, NUVEM.chave);
