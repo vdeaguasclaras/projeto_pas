@@ -42,7 +42,8 @@ aberta pelo botão **☰** ao lado do título.
 
 **1 · Painel** — quanto já foi produzido, o que está em revisão e a entrega de
 cada componente curricular. A coordenação também configura aqui a prova — nome,
-etapa, série, data, duração e **quantidade de questões** — e vê as quatro provas
+etapa, série, data, duração e a **quantidade de questões de cada versão** — e vê as
+quatro provas
 lado a lado. O docente abre esta tela com a sua lista do que tem para entregar.
 
 **2 · Alocação por docente** (só coordenação) — quantos itens cada docente deve
@@ -55,7 +56,8 @@ qualquer um começar a escrever.
   está sem meta não aparece cobrado no painel dele.
 - O **recado** que você escrever na linha aparece no painel daquele docente,
   junto da meta.
-- **Dividir igualmente** reparte a quantidade de questões da prova entre todos,
+- **Dividir igualmente** reparte a quantidade de questões da prova **regular** entre
+  todos,
   fechando a conta exatamente (o resto vai para os primeiros da lista).
   **Copiar de outra prova** repete a distribuição de uma série em outra.
 - A **conferência** no topo compara a soma das metas com o tamanho da prova e
@@ -217,6 +219,37 @@ pesam mais numa redação de 10 linhas do que numa de 30.
 **8 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
 a **lista de estudantes**.
 
+## Tamanho de cada prova
+
+São **dois números por prova**, porque a prova adaptada (de inclusão) tem tamanho
+próprio:
+
+| Série | Regular | Adaptada |
+|---|---|---|
+| 9º ano | 90 | a definir |
+| 1ª série EM | 100 | a definir |
+| 2ª série EM | 110 | a definir |
+| 3ª série EM | 120 | a definir |
+
+Os números da regular já estão no sistema. Os da adaptada ficam **em branco** até
+a coordenação definir — e em branco significa *a definir*, não zero: a barra de
+progresso daquela versão fica sem denominador em vez de acusar falta que ninguém
+estabeleceu. Ajuste em **⚙ Configurar prova**, no Painel.
+
+O painel mostra cada versão com o seu número (“5 de 100 itens aprovados”), e a
+conferência avisa quando a adaptada já tem item aprovado mas ainda não tem
+tamanho.
+
+## Escrever com ênfase e fórmula
+
+O **enunciado, as opções e a resposta esperada** do item, e também o **corpo do
+texto-base**, aceitam negrito, itálico, sobrescrito, subscrito e **notação
+matemática**. A fórmula vai entre `$…$` na notação do LaTeX — `$\frac{1}{2}$`,
+`$x^2$`, `$\sqrt{3}$`, `$30^\circ$` — e a **prévia** logo abaixo do campo mostra
+como sai impresso.
+
+Valor em real não vira fórmula: “R$ 50,00 e R$ 30,00” atravessa intacto.
+
 ## Trocar de prova
 
 O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no alto
@@ -235,7 +268,7 @@ inclusão. São dois eixos diferentes.
   sua produção em *todas* as provas de uma vez. Na tela de itens, a caixa
   **todas as provas** desliga o filtro quando você quer ver tudo junto.
 
-Cada prova tem nome, etapa, data, duração, **quantidade de questões** e a escolha
+Cada prova tem nome, etapa, data, duração, **quantidade de questões (uma por versão)** e a escolha
 de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa, as instruções
 do caderno e a **proposta de redação** também são de cada prova.
 
