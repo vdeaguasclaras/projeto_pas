@@ -5,7 +5,14 @@ PAS/UnB do Colégio Marista Águas Claras.
 
 Sete telas: painel de coordenação, textos-base com alocação de itens por vagas,
 editor de itens com revisão comentada em dois níveis, caderno de provas, cartões-resposta
-nominais, correção com boletins, e administração da equipe.
+nominais, correção com boletins, e administração da equipe e dos estudantes.
+
+Atende quatro provas — **9º ano, 1ª, 2ª e 3ª série** —, cada uma com os seus
+textos, itens, capa, instruções e elenco. O seletor no menu lateral diz em qual
+se está trabalhando. O estudante pertence a uma **série**, e é ela que o liga à
+prova.
+
+A navegação é por **menu lateral**, que vira gaveta em tela estreita.
 
 - **Manual da equipe:** [`docs/manual-da-equipe.md`](docs/manual-da-equipe.md)
 - **Plano de implantação e arquitetura:** [`docs/plano-implantacao.md`](docs/plano-implantacao.md)
@@ -23,6 +30,8 @@ css/estilo.css          identidade visual
 js/config-supabase.js   endereço e chave publicável do banco
 js/dados.js             modelo de dados e dados de exemplo
 js/nuvem.js             driver do Supabase
+js/limpar.js            higienização do HTML escrito pela equipe
+js/planilha.js          leitura da lista de estudantes colada pela coordenação
 js/app.js               telas, montagem da prova e correção
 js/vendor/supabase.js   biblioteca supabase-js (cópia local, sem CDN)
 supabase/migrations/    esquema e regras de acesso
@@ -57,6 +66,12 @@ serve — não há servidor próprio.
 - Todas as tabelas exigem, via RLS, que o e-mail da sessão esteja na equipe.
 - O papel (coordenação / docente / redação) vem do banco, não do que a conta diz
   sobre si mesma.
+- O fluxo de revisão é regra do banco, não só da tela: um gatilho recusa
+  `status: "aprovado"` de quem não é a coordenação geral.
+- Apagar texto, estudante, resposta ou prova é restrito à coordenação; o docente
+  só descarta o próprio rascunho.
+- O HTML que a equipe escreve nas instruções da capa passa por uma lista de
+  permissão curta (`js/limpar.js`) antes de ir para a tela.
 - A chave em `js/config-supabase.js` é a chave **publicável** do Supabase, feita
   para ficar no navegador: sozinha ela não dá acesso a nada.
 - A chave de serviço existe apenas dentro da Edge Function `equipe`, que só

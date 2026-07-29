@@ -5,12 +5,36 @@
 
 const KEY = 'pas-marista-mvp-v1';
 
+// Versão do formato do estado. v1 tinha uma prova só (`config`); v2 tem a
+// lista `provas`, e textos, itens e respostas passam a saber a que prova
+// pertencem. `load()` converte o cache v1 em vez de descartá-lo.
+const VERSAO_ESTADO = 2;
+
+// As séries que a escola aplica. É por elas que estudante e prova se
+// encontram: o estudante pertence a uma série, a prova é de uma série.
+const SERIES = ['9º ano', '1ª série EM', '2ª série EM', '3ª série EM'];
+
 // Componentes curriculares em ordem alfabética (única língua estrangeira: Inglês).
+// Artes é lançada pelas quatro linguagens da BNCC — quem dá aula de Música e
+// quem dá aula de Artes Visuais são pessoas diferentes, e a coordenação precisa
+// ver a entrega de cada uma separada.
 const COMPONENTES = {
-  'Artes': 'd-art', 'Biologia': 'd-bio', 'Filosofia': 'd-fil', 'Física': 'd-fis',
-  'Geografia': 'd-geo', 'História': 'd-his', 'Inglês': 'd-ing', 'Literatura': 'd-lit',
-  'Matemática': 'd-mat', 'Português': 'd-lp', 'Química': 'd-qui', 'Sociologia': 'd-soc'
+  'Artes Visuais': 'd-artv', 'Biologia': 'd-bio', 'Dança': 'd-dan',
+  'Filosofia': 'd-fil', 'Física': 'd-fis', 'Geografia': 'd-geo',
+  'História': 'd-his', 'Inglês': 'd-ing', 'Literatura': 'd-lit',
+  'Matemática': 'd-mat', 'Música': 'd-mus', 'Português': 'd-lp',
+  'Química': 'd-qui', 'Sociologia': 'd-soc', 'Teatro': 'd-tea'
 };
+
+// “Artes” genérica não é mais oferecida, mas continua válida: há gente
+// cadastrada nela. Some do seletor de componente e aparece marcada para
+// reclassificar, em vez de virar valor inválido no cadastro de alguém.
+const COMPONENTES_LEGADOS = { 'Artes': 'd-art' };
+const TODOS_COMPONENTES = { ...COMPONENTES, ...COMPONENTES_LEGADOS };
+const ehComponenteLegado = c => Object.hasOwn(COMPONENTES_LEGADOS, c);
+
+// Para onde “Artes” se desdobrou — o texto que a tela usa para explicar.
+const SUCESSORAS_DE_ARTES = ['Artes Visuais', 'Dança', 'Música', 'Teatro'];
 
 const GRUPOS = ['Interpretar', 'Planejar', 'Executar', 'Criticar'];
 
@@ -34,27 +58,65 @@ const STATUS_ITEM = {
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-3);
 
+// Identificadores estáveis e legíveis — os mesmos gravados na migração 0007,
+// para que o modo local e o banco falem da mesma prova.
+const ID_DA_SERIE = {
+  '9º ano': 'pr-9ano', '1ª série EM': 'pr-1em',
+  '2ª série EM': 'pr-2em', '3ª série EM': 'pr-3em'
+};
+
+// A quantidade de questões do 9º ano veio da coordenação; as do ensino médio
+// ficam em aberto até ela definir, e a interface mostra "a definir".
+const QUESTOES_DA_SERIE = { '9º ano': 90 };
+
+function provaNova(serie, ordem) {
+  return {
+    id: ID_DA_SERIE[serie] || uid(),
+    ordem,
+    serie,
+    nome: 'Simulado PAS 2026',
+    etapa: '1ª Etapa',
+    dataAplicacao: '',
+    duracao: '4h30',
+    totalQuestoes: QUESTOES_DA_SERIE[serie] ?? null,
+    temRedacao: true,
+    imprimirRedacao: true
+  };
+}
+
+const provasPadrao = () => SERIES.map((s, i) => provaNova(s, i));
+
 function blank() {
   return {
-    versao: 1,
-    config: {
-      nome: 'Simulado PAS', etapa: '1ª Etapa', serie: '2ª série EM',
-      dataAplicacao: '', duracao: '4h30'
-    },
+    versao: VERSAO_ESTADO,
+    provas: provasPadrao(),
+    provaAtiva: ID_DA_SERIE['1ª série EM'],
     perfil: { papel: 'coordenacao', nome: 'Coordenação', componente: null },
     textos: [],
     itens: [],
     estudantes: [],
+    // provaId → [estId]: quem faz cada prova. Materializado, e não derivado da
+    // série, para que a turma que fez a etapa continue no histórico depois de
+    // todo mundo passar de ano.
+    elencos: {},
+    // provaId → estId → respostas. Sem a prova na chave, a 2ª etapa
+    // sobrescreveria a 1ª do mesmo estudante.
     respostas: {}
   };
 }
 
+// Exemplo de demonstração. O conteúdo todo vive na prova da 1ª série; as
+// outras três nascem vazias, como ficam de verdade até a coordenação começar.
+const PROVA_EXEMPLO = ID_DA_SERIE['1ª série EM'];
+const SERIE_EXEMPLO = '1ª série EM';
+
 function seed() {
   const s = blank();
-  s.config = {
-    nome: 'Simulado PAS 2026', etapa: '1ª Etapa', serie: '2ª série EM',
+  s.provaAtiva = PROVA_EXEMPLO;
+  Object.assign(s.provas.find(p => p.id === PROVA_EXEMPLO), {
+    nome: 'Simulado PAS 2026', etapa: '1ª Etapa',
     dataAplicacao: '2026-09-12', duracao: '4h30'
-  };
+  });
   s.perfil = { papel: 'coordenacao', nome: 'Raul', componente: null };
 
   const t1 = {
@@ -178,22 +240,57 @@ function seed() {
   ];
 
   s.estudantes = [
-    { id: 'e1', nome: 'Antonia Silva',   matricula: '2026-0142', turma: '2ª B', versao: 'regular'  },
-    { id: 'e2', nome: 'Bruno Carvalho',  matricula: '2026-0077', turma: '2ª A', versao: 'regular'  },
-    { id: 'e3', nome: 'Clara Nogueira',  matricula: '2026-0119', turma: '2ª B', versao: 'regular'  },
-    { id: 'e4', nome: 'Davi Sampaio',    matricula: '2026-0205', turma: '2ª C', versao: 'regular'  },
-    { id: 'e5', nome: 'Elisa Fontes',    matricula: '2026-0231', turma: '2ª D', versao: 'adaptada' },
-    { id: 'e6', nome: 'Felipe Arruda',   matricula: '2026-0058', turma: '2ª A', versao: 'regular'  }
-  ];
+    { id: 'e1', nome: 'Antonia Silva',   matricula: '2026-0142', turma: '1ª B', versao: 'regular'  },
+    { id: 'e2', nome: 'Bruno Carvalho',  matricula: '2026-0077', turma: '1ª A', versao: 'regular'  },
+    { id: 'e3', nome: 'Clara Nogueira',  matricula: '2026-0119', turma: '1ª B', versao: 'regular'  },
+    { id: 'e4', nome: 'Davi Sampaio',    matricula: '2026-0205', turma: '1ª C', versao: 'regular'  },
+    { id: 'e5', nome: 'Elisa Fontes',    matricula: '2026-0231', turma: '1ª D', versao: 'adaptada' },
+    { id: 'e6', nome: 'Felipe Arruda',   matricula: '2026-0058', turma: '1ª A', versao: 'regular'  }
+  ].map(e => ({ ...e, serie: SERIE_EXEMPLO }));
+
+  s.elencos = { [PROVA_EXEMPLO]: s.estudantes.map(e => e.id) };
 
   // Respostas por id de item; discursivas (tipo D) por nota 0–10;
   // redação pela planilha oficial (NR = NC − 2·NE/TL).
   s.respostas = {
-    e1: { marcacoes: { it1: 'C', it2: 'C', it3: 'B', it5: '960' }, discursivas: { it8: 8.5 }, redacao: { nc: 9.0, ne: 3, tl: 28 } },
-    e2: { marcacoes: { it1: 'C', it2: 'E', it3: 'D', it5: '720' }, discursivas: {}, redacao: { nc: 7.5, ne: 6, tl: 30 } },
-    e3: { marcacoes: { it1: 'E', it2: 'C', it3: 'B', it5: '960' }, discursivas: { it8: 6.0 }, redacao: { nc: 8.0, ne: 2, tl: 25 } }
+    [PROVA_EXEMPLO]: {
+      e1: { marcacoes: { it1: 'C', it2: 'C', it3: 'B', it5: '960' }, discursivas: { it8: 8.5 }, redacao: { nc: 9.0, ne: 3, tl: 28 } },
+      e2: { marcacoes: { it1: 'C', it2: 'E', it3: 'D', it5: '720' }, discursivas: {}, redacao: { nc: 7.5, ne: 6, tl: 30 } },
+      e3: { marcacoes: { it1: 'E', it2: 'C', it3: 'B', it5: '960' }, discursivas: { it8: 6.0 }, redacao: { nc: 8.0, ne: 2, tl: 25 } }
+    }
   };
 
+  for (const t of s.textos) t.provaId = PROVA_EXEMPLO;
+  for (const i of s.itens)  i.provaId = PROVA_EXEMPLO;
+
+  return s;
+}
+
+// Converte um estado v1 (prova única) em v2. Serve tanto para o cache do
+// navegador quanto para um backup JSON antigo que alguém importe.
+function migrarV1paraV2(velho) {
+  const s = blank();
+  const c = velho.config || {};
+  const serie = SERIES.includes(c.serie) ? c.serie : '1ª série EM';
+  const alvo = ID_DA_SERIE[serie];
+
+  Object.assign(s.provas.find(p => p.id === alvo), {
+    nome: c.nome || 'Simulado PAS 2026',
+    etapa: c.etapa || '1ª Etapa',
+    dataAplicacao: c.dataAplicacao || '',
+    duracao: c.duracao || '4h30',
+    imprimirRedacao: c.imprimirRedacao !== false,
+    ...(c.instrucoes ? { instrucoes: c.instrucoes } : {}),
+    ...(c.capaImagem ? { capaImagem: c.capaImagem } : {})
+  });
+
+  s.provaAtiva  = alvo;
+  s.perfil      = velho.perfil || s.perfil;
+  s.textos      = (velho.textos || []).map(t => ({ ...t, provaId: alvo }));
+  s.itens       = (velho.itens || []).map(i => ({ ...i, provaId: alvo }));
+  s.estudantes  = (velho.estudantes || []).map(e => ({ ...e, serie: e.serie || serie }));
+  s.elencos     = { [alvo]: s.estudantes.map(e => e.id) };
+  s.respostas   = { [alvo]: velho.respostas || {} };
   return s;
 }
 
@@ -209,7 +306,12 @@ function gravarLS(v) {
 function load() {
   try {
     const s = JSON.parse(lerLS());
-    if (s && s.versao === 1) return s;
+    if (s && s.versao === VERSAO_ESTADO) return s;
+    if (s && s.versao === 1) {
+      const novo = migrarV1paraV2(s);
+      save(novo);
+      return novo;
+    }
   } catch { /* estado corrompido → recomeça do exemplo */ }
   const s = seed();
   save(s);
@@ -226,6 +328,8 @@ function substituir(novo) {
 }
 
 export {
-  KEY, COMPONENTES, GRUPOS, TIPOS, STATUS_ITEM,
-  uid, blank, seed, load, save, substituir
+  KEY, VERSAO_ESTADO, COMPONENTES, COMPONENTES_LEGADOS, TODOS_COMPONENTES,
+  ehComponenteLegado, SUCESSORAS_DE_ARTES,
+  GRUPOS, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
+  uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
 };

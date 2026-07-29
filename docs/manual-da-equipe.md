@@ -20,9 +20,23 @@ Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 | **Professora de redação** | Lança NC, NE e TL da redação de cada estudante. |
 
 As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
-Artes), **Humanas** (História, Geografia, Filosofia, Sociologia),
-**Matemática**, **Ciências da Natureza** (Biologia, Física, Química) e
-**Inglês**.
+Artes Visuais, Dança, Música, Teatro), **Humanas** (História, Geografia,
+Filosofia, Sociologia), **Matemática**, **Ciências da Natureza** (Biologia,
+Física, Química) e **Inglês**.
+
+> **Artes agora são quatro componentes** — Artes Visuais, Dança, Música e
+> Teatro —, porque quem dá aula de cada linguagem é uma pessoa diferente e a
+> coordenação precisa ver a entrega de cada uma separada. Quem estava
+> cadastrado na “Artes” antiga continua trabalhando normalmente; a tela de
+> Administração marca essas pessoas com **reclassificar**, para a coordenação
+> escolher a linguagem certa quando puder.
+
+## Onde ficam as coisas
+
+O **menu à esquerda** leva às telas. No alto dele fica a **prova** em que você
+está trabalhando; embaixo, quem está logado, o tema claro/escuro e o botão de
+sair. Em tela estreita — celular ou tablet em pé — o menu vira uma gaveta,
+aberta pelo botão **☰** ao lado do título.
 
 ## As telas
 
@@ -44,6 +58,18 @@ Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação 
 área daquele componente** decide a primeira etapa; a **coordenação geral** decide
 a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
 na sua mão.
+
+Os botões no rodapé do item dizem **para onde a ação leva**:
+
+| Botão | O que faz |
+|---|---|
+| **Salvar** | guarda as alterações e **deixa o item onde está** — não envia nada |
+| **Enviar para revisão** | manda para a coordenação da área do componente |
+| **Aprovar** | na coordenação de área, segue para a geral; na geral, entra no caderno |
+| **Devolver** | volta para quem escreveu, com o comentário |
+| **Reabrir revisão** | tira um item aprovado do caderno até ser aprovado de novo |
+| **Fechar** | sai do item (o que não foi salvo se perde) |
+| **Excluir** | apaga o item — fica separado, à esquerda, para não ser clicado por engano |
 
 Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar em
 “linhas de referência” aparecem destacadas em amarelo.
@@ -95,7 +121,55 @@ impressão dos boletins por turma.
 - Cada **docente** vê apenas as notas dos próprios itens discursivos.
 - A **coordenação** vê tudo.
 
-**7 · Equipe** (só coordenação) — criar, editar e remover os acessos.
+**7 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
+a **lista de estudantes**.
+
+## Trocar de prova
+
+O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no topo
+diz em qual você está trabalhando, e ele manda em todas as telas — os textos, os
+itens, o caderno, os cartões e a correção são sempre os daquela prova. A escolha
+fica guardada no seu navegador; a do colega é independente da sua.
+
+Não confunda com o campo **Versão** do item (regular / adaptada / ambas): esse
+diz para qual caderno da *mesma* prova o item vale — a versão adaptada é a de
+inclusão. São dois eixos diferentes.
+
+- **Coordenação**: o Painel traz a tabela “As provas do simulado”, com as quatro
+  lado a lado — textos, itens, aprovados e situação de cada uma. Clique numa
+  linha para ir trabalhar naquela prova.
+- **Docente**: o Painel abre com “O que você tem para entregar”, que mostra a
+  sua produção em *todas* as provas de uma vez. Na tela de itens, a caixa
+  **todas as provas** desliga o filtro quando você quer ver tudo junto.
+
+Cada prova tem nome, etapa, data, duração, **quantidade de questões** e a escolha
+de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa e as instruções
+do caderno também são de cada prova.
+
+## Coordenação: subir a lista de estudantes
+
+Tela **7 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
+estudante, colunas separadas por `;`, `,` ou tabulação (colar direto de uma
+planilha funciona):
+
+```
+nome completo;matrícula;turma;série;versão
+Antonia Silva de Oliveira;2026-0142;1ª B;1ª série EM;regular
+Elisa Fontes Marques;2026-0231;9º D;9º ano;adaptada
+```
+
+- A **série** aceita as grafias de sempre — “9º ano”, “1ª série”, “2a serie EM”,
+  “3”. O que não for reconhecido é recusado com o motivo, não adivinhado.
+- A **versão** é opcional (padrão: regular).
+- Uma primeira linha de cabeçalho é reconhecida e ignorada.
+- Quem já existe é encontrado pela **matrícula** e atualizado, não duplicado.
+
+Use **Conferir** antes de importar: ele mostra quantos estudantes entram em cada
+série e lista as linhas com problema, sem gravar nada.
+
+A **série é o que liga o estudante à prova**: quem está na 1ª série entra no
+elenco das provas da 1ª série, e é para esse elenco que saem os cartões-resposta
+e os boletins.
 
 ## Trabalhando em várias pessoas ao mesmo tempo
 
@@ -108,7 +182,7 @@ atualiza sozinho quando você volta para a aba).
 
 ## Coordenação: criar o acesso de alguém
 
-1. Tela **7 · Equipe** → **+ Adicionar pessoa**.
+1. Tela **7 · Administração** → **+ Adicionar pessoa**.
 2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
    que a pessoa coordena e, se quiser, o componente que ela leciona.
 3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar
@@ -122,5 +196,8 @@ mostra quem ainda está com senha provisória. “Nova senha” volta a exigir a
 ## Cuidados
 
 - “Zerar tudo”, “Importar backup” e “Recarregar dados de exemplo” (no Painel)
-  substituem os dados **de toda a equipe**. Exporte um backup antes.
+  substituem os dados **de toda a equipe, nas quatro provas**. Exporte um backup
+  antes. O banco só aceita essas operações da coordenação.
+- Aprovar item é decisão da coordenação e o **banco confere**: docente e
+  coordenação de área não conseguem marcar “aprovado” por fora do fluxo.
 - Exporte o backup JSON ao fim de cada etapa importante do trabalho.
