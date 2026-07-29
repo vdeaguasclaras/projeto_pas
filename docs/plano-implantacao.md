@@ -44,7 +44,7 @@ o backup em JSON.
 | `coordenacao` | Tudo, inclusive administrar contas e decidir a etapa final da revisão. |
 | `coordenacao_area` | Docente + primeira etapa da revisão dos itens da sua área (`equipe.area`). |
 | `docente` | Escreve itens e lança as notas dos próprios discursivos. |
-| `redacao` | Só o lançamento da redação. |
+| `redacao` | A proposta de redação da prova e o lançamento dela. |
 
 Áreas em `AREAS` (js/app.js): Linguagens (Português, Literatura, Artes Visuais,
 Dança, Música, Teatro), Humanas (História, Geografia, Filosofia, Sociologia),
@@ -170,7 +170,7 @@ um **conjunto de folhas por estudante**, cada uma com cabeçalho completo,
 |---|---|
 | Objetiva | Todos os itens em ordem numérica ocupando 4/5 da folha, em 4 colunas. Só os tipos **A** (C/E) e **C** (A–D) recebem bolhas; os tipos **B** e **D** aparecem rotulados, remetendo ao seu campo próprio. A coluna à direita traz os itens do **tipo B**, com centena, dezena e unidade. |
 | Discursiva | Uma pauta de resposta por item do **tipo D**, com as bolhas de **percentual de acerto** — 0, 25, 50, 75 e 100% —, preenchidas por quem corrige. |
-| Redação | Pauta de 30 linhas de 17pt, igual à do rascunho oficial. **Opcional**: a coordenação decide em “Configurar simulado” se imprime. |
+| Redação | Pauta de 30 linhas de 17pt, igual à do rascunho oficial, com o **tema** da proposta impresso acima dela. **Opcional**: a coordenação decide em “Configurar simulado” se imprime. |
 
 Quando o conteúdo não cabe, a folha se desdobra em vez de cortar: a coluna dos
 itens tipo B vira duas antes de gerar uma folha de continuação, e os discursivos
@@ -186,6 +186,50 @@ O lançamento das notas dos discursivos, na tela de correção, passou a oferece
 exatamente os mesmos cinco níveis do cartão, em vez de um número livre de 0 a
 10, para que o que se marca no papel e o que se digita no sistema sejam a mesma
 coisa.
+
+### Redação — a proposta como parte da prova
+
+Até aqui a redação era só uma nota: a prova dizia `temRedacao`, o cartão
+imprimia uma pauta de 30 linhas e a correção lançava NC, NE e TL. Faltava a
+**proposta** — o que o estudante lê. Ela agora existe e é impressa no caderno:
+
+- Mora em **`prova.redacao`**, dentro do `dados` jsonb de `public.provas`, ao
+  lado de `temRedacao`, das instruções e da imagem da capa: `{ tema, comando,
+  tipoTexto, motivadores: [{ titulo, texto, fonte }] }`. Não houve esquema novo
+  — a proposta acompanha a prova de graça no backup JSON, na exclusão em cascata
+  e na sincronização linha a linha (`PERS.prova`). Como as demais coisas da
+  prova, é escrita só pela coordenação (RLS de `provas`, migração 0007).
+- A coordenação a escreve na tela do **Caderno**, em “✍ Proposta de redação”,
+  ao lado de “Capa e instruções” — a proposta é peça do caderno, e é ali que se
+  vê o resultado.
+- No caderno ela é **paginada à parte** e vai por último: as suas peças não
+  dividem coluna com item nenhum, e o rótulo do alto da página passa de
+  “-- PARTE 2 --” para “-- PROVA DE REDAÇÃO --” (`htmlPagina` recebeu o rótulo
+  como parâmetro). Cada parágrafo de motivador é uma peça, então proposta longa
+  reflui por mais de uma página em vez de ser cortada.
+- O texto passa por `limpar()`, como as instruções da capa: `<b>`/`<i>` para
+  ênfase, nada que carregue recurso externo ou execute código.
+- A folha de redação do **cartão-resposta** passou a trazer o **tema** acima da
+  pauta: é a folha que a professora corrige, e ela não tem o caderno na mão.
+- **Prova sem redação não tem nada de redação**: sem proposta, sem botão, sem
+  página no caderno, sem folha no cartão, sem campos NC/NE/TL na correção, sem
+  coluna “Redação” no relatório por turma e sem a casa da NR no boletim.
+
+Na tela de quem corrige, a proposta ficou **ao lado do lançamento**, e a tabela
+mostra a conta que forma a nota — `9,0 − 2·3/28`, desconto 0,21 — porque o
+desconto por erro depende do tamanho do texto. A fórmula oficial não mudou:
+`NR = NC − 2·NE/TL`, com piso zero, e agora vive num lugar só (`contaDoNR()`),
+de onde `corrigir()` também a lê. O lançamento **não remonta a tela** (só a
+linha e o contador, como em `alocacaoMudou`), para que o Tab entre os campos não
+perca o foco com 30 estudantes na tabela.
+
+Sem TL não há NR: a linha aparece como “falta TL” em vez de mostrar a NC como se
+fosse nota. TL acima da pauta de 30 linhas é avisado, não corrigido.
+
+**O que não foi criado:** nenhuma grade de critérios além de NC/NE/TL. A escola
+não entregou rubrica, e inventar competências criaria um sistema de notas
+paralelo ao oficial. Se a rubrica vier, o lugar dela é `resposta.redacao`, com
+NC derivada dos critérios — a fórmula do PAS continua sendo a que fecha a nota.
 
 ### Capa
 

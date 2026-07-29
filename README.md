@@ -9,9 +9,9 @@ comentada em dois níveis, caderno de provas, cartões-resposta nominais, corre�
 com boletins, e administração da equipe e dos estudantes.
 
 Atende quatro provas — **9º ano, 1ª, 2ª e 3ª série** —, cada uma com os seus
-textos, itens, capa, instruções e elenco. O seletor no menu lateral diz em qual
-se está trabalhando. O estudante pertence a uma **série**, e é ela que o liga à
-prova.
+textos, itens, capa, instruções, **proposta de redação** e elenco. O seletor no
+menu lateral diz em qual se está trabalhando. O estudante pertence a uma
+**série**, e é ela que o liga à prova.
 
 A navegação é por **menu lateral**, que vira gaveta em tela estreita.
 
@@ -75,8 +75,9 @@ serve — não há servidor próprio.
   `status: "aprovado"` de quem não é a coordenação geral.
 - Apagar texto, estudante, resposta ou prova é restrito à coordenação; o docente
   só descarta o próprio rascunho.
-- O HTML que a equipe escreve nas instruções da capa passa por uma lista de
-  permissão curta (`js/limpar.js`) antes de ir para a tela.
+- O HTML que a equipe escreve nas instruções da capa e na proposta de redação
+  passa por uma lista de permissão curta (`js/limpar.js`) antes de ir para a
+  tela e para o papel.
 - A chave em `js/config-supabase.js` é a chave **publicável** do Supabase, feita
   para ficar no navegador: sozinha ela não dá acesso a nada.
 - A chave de serviço existe apenas dentro da Edge Function `equipe`, que só

@@ -17,7 +17,7 @@ Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 | **Coordenação pedagógica** | Vê e faz tudo: configura o simulado, aprova a etapa final da revisão, gera caderno, cartões e boletins, e administra as contas da equipe. |
 | **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. |
 | **Docente** | Escreve itens, acompanha a revisão dos seus e lança as notas dos próprios itens discursivos. |
-| **Professora de redação** | Lança NC, NE e TL da redação de cada estudante. |
+| **Professora de redação** | Vê a proposta de redação da prova e lança NC, NE e TL da redação de cada estudante. |
 
 As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
 Artes Visuais, Dança, Música, Teatro), **Humanas** (História, Geografia,
@@ -117,6 +117,22 @@ precisa citar linhas; o PAS não numera).
 A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
 uma imagem temática e o texto das instruções ao estudante.
 
+A **proposta de redação** também é escrita aqui, no botão **“✍ Proposta de
+redação”**, e sai impressa **nas últimas páginas do caderno**, depois dos itens:
+
+- **Tema** e **comando** (o que se pede ao estudante) são obrigatórios; o **tipo
+  de texto esperado** é opcional.
+- **Textos motivadores**: quantos você quiser, cada um com título (opcional),
+  texto e **fonte**. Uma **linha em branco** separa parágrafos, como nos
+  textos-base em prosa; `<b>` e `<i>` funcionam para destacar termos.
+- A proposta é **de cada prova**: o 9º ano não escreve sobre o tema da 3ª série.
+  Troque de prova no menu à esquerda para escrever a de cada uma.
+- Enquanto a proposta estiver em branco, o **Painel avisa** na “Conferência da
+  prova” — a prova tem redação e o caderno está incompleto.
+- O botão só aparece se a prova **tiver redação** (“⚙ Configurar prova”, no
+  Painel). Prova sem redação não tem proposta, nem folha de redação no cartão,
+  nem lançamento de NC/NE/TL — a redação simplesmente não existe ali.
+
 **6 · Cartões-resposta** — impressão dos cartões nominais do elenco da prova. A
 lista de estudantes sobe em **8 · Administração**; aqui você confere quem está na
 prova e imprime.
@@ -128,8 +144,9 @@ Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
   com centena, dezena e unidade;
 - **discursiva** — uma pauta por item tipo D, com as bolhas de percentual de
   acerto (0, 25, 50, 75 e 100%) que **quem corrige** preenche;
-- **redação** — pauta de 30 linhas. A coordenação decide se imprime, em
-  “⚙ Configurar prova”, no Painel.
+- **redação** — pauta de 30 linhas, com o **tema** da proposta impresso acima
+  dela (é esta folha que a professora corrige). A coordenação decide se imprime,
+  em “⚙ Configurar prova”, no Painel.
 
 Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos e
 “folha N de M”, para a digitalização em lote saber a que estudante e a que parte
@@ -139,9 +156,25 @@ da prova cada imagem pertence.
 CSV do leitor óptico), notas dos itens discursivos, redação (NC, NE e TL) e
 impressão dos boletins por turma.
 
-- A **professora de redação** vê apenas a tabela de lançamento da redação.
+- A **professora de redação** vê a **proposta daquela prova** de um lado e a
+  tabela de lançamento do outro — nada mais.
 - Cada **docente** vê apenas as notas dos próprios itens discursivos.
 - A **coordenação** vê tudo.
+
+No lançamento da redação você digita três coisas — **NC** (nota de conteúdo, de
+0 a 10), **NE** (número de erros) e **TL** (total de linhas escritas) — e a nota
+sai da planilha oficial: **NR = NC − 2·NE/TL**. A coluna **“como a nota se
+forma”** mostra a conta com os seus números (`9,0 − 2·3/28`, desconto 0,21),
+porque o desconto por erro depende do tamanho do texto: os mesmos três erros
+pesam mais numa redação de 10 linhas do que numa de 30.
+
+- **Sem TL não há nota**: a linha fica marcada como “falta TL”, em vez de
+  mostrar uma nota que seria só a NC.
+- Se a conta passar do zero, a nota é **0** e a tabela diz isso.
+- TL acima da pauta de 30 linhas é **avisado**, não corrigido — quem decide é
+  quem corrigiu.
+- Cada campo é gravado ao sair dele, e só a linha daquele estudante é
+  recalculada: a tela não se remonta, então o **Tab** vai para o campo seguinte.
 
 **8 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
 a **lista de estudantes**.
@@ -165,8 +198,8 @@ inclusão. São dois eixos diferentes.
   **todas as provas** desliga o filtro quando você quer ver tudo junto.
 
 Cada prova tem nome, etapa, data, duração, **quantidade de questões** e a escolha
-de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa e as instruções
-do caderno também são de cada prova.
+de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa, as instruções
+do caderno e a **proposta de redação** também são de cada prova.
 
 ## Coordenação: subir a lista de estudantes
 

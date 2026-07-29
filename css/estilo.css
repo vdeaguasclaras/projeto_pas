@@ -722,3 +722,72 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
 .capa-mini-vertical b{inset:5px 3px 5px 47%}
 .capa-mini-horizontal i{inset:0 0 50% 0}
 .capa-mini-horizontal b{inset:55% 3px 4px 3px}
+
+/* ===== módulo de redação =====
+   Três lugares: a proposta impressa nas últimas páginas do caderno
+   (.pas-red-*), o tema na folha de redação do cartão-resposta (.cr-red-tema) e
+   a tela de quem corrige, com a proposta ao lado do lançamento (.red-*).
+   As medidas do caderno seguem o bloco “caderno de provas”: corpo de 10pt,
+   entrelinha 13,3pt, crédito da fonte em 6pt à direita.                      */
+
+/* Proposta no caderno. Os seletores levam `.pas` na frente de propósito: o
+   bloco do caderno zera a margem de todo <p> com `.pas p`, que é mais
+   específico do que uma classe sozinha — sem o prefixo, o espaçamento daqui
+   não valeria nada. */
+.pas .pas-red-tema{margin:0 0 9pt;text-indent:0;font-weight:700;text-align:left}
+.pas .pas-red-tema span{display:block;font-size:8pt;font-weight:700;letter-spacing:1pt;margin-bottom:1pt}
+.pas .pas-red-mot{margin:9pt 0 3pt;text-indent:0;font-size:9pt;font-weight:700;text-align:left}
+/* O comando da proposta ganha respiro do último motivador. Classe própria em
+   vez de mexer em `.pas-comando`, que é o comando dos blocos de item. */
+.pas .pas-red-comando{margin:9pt 0 0}
+.pas .pas-red-obs{margin:11pt 0 0;text-indent:0;font-size:8.5pt;line-height:1.35;
+  border-top:.7pt solid #999;padding-top:5pt;text-align:left}
+/* A régua que mede as peças antes de paginar também é `.pas` (js/app.js:
+   `regua.className = 'pas pas-regua'`), então as regras acima valem lá dentro e
+   a altura medida é a mesma da impressa. */
+
+/* tema na folha de redação do cartão-resposta */
+.cr-red-tema{margin-top:6pt;border:.7pt solid #efc3da;background:#fff8fb;padding:4pt 7pt;
+  font-size:7.5pt;font-weight:700;color:#111}
+.cr-red-tema span{display:block;font-size:6pt;letter-spacing:.5pt;color:#e5007e;margin-bottom:1pt}
+
+/* tela da correção: proposta à esquerda, lançamento à direita. Abaixo de
+   1024px empilha — a tabela tem sete colunas e precisa da largura inteira. */
+.red-corr{display:grid;gap:16px;grid-template-columns:minmax(0,340px) minmax(0,1fr)}
+@media(max-width:1024px){.red-corr{grid-template-columns:1fr}}
+
+.red-resumo{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;
+  border:1px solid var(--borda);border-radius:14px;padding:12px 16px;background:var(--papel);font-size:13.5px}
+.red-resumo b{font-size:18px;font-variant-numeric:tabular-nums}
+.red-formula{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--azul);
+  background:var(--azul-claro);border-radius:8px;padding:4px 10px;white-space:nowrap}
+
+.red-proposta{font-size:13.5px;line-height:1.6}
+.red-proposta .red-tema{margin:0 0 10px;font-size:15px;font-weight:800}
+.red-proposta .red-tema span{display:block;font-size:11px;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-2)}
+.red-proposta .red-comando{margin:0 0 8px;padding-left:11px;border-left:3px solid var(--rosa)}
+.red-proposta .red-tipo{margin:0 0 10px;font-size:12.5px;color:var(--ink-2)}
+.red-mot{border-top:1px solid var(--borda);padding-top:8px;margin-top:8px}
+.red-mot>summary{font-size:12.5px;font-weight:800;color:var(--rosa);cursor:pointer}
+.red-mot p{margin:6px 0 0}
+.red-mot .fonte{font-size:11.5px;color:var(--ink-2);text-align:right}
+
+/* “como a nota se forma”: a conta com os números daquele estudante */
+.red-tab td{vertical-align:middle}
+.red-conta{font-size:12.5px;color:var(--ink-2)}
+.red-conta .conta{font-family:var(--mono);font-weight:700;white-space:nowrap}
+.red-conta small{display:block;font-size:11px;line-height:1.5}
+.red-piso{color:var(--alerta);font-weight:700}
+.red-falta{font-size:12px;font-weight:700;color:var(--ink-2)}
+.red-alerta{font-size:11px;font-weight:700;color:var(--alerta)}
+
+/* edição da proposta: cada texto motivador num bloco seu */
+.rd-sec{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:0 0 10px}
+.rd-mot{border:1px solid var(--borda);border-radius:12px;padding:12px 14px;margin-bottom:12px;background:var(--fundo)}
+.rd-mot-cab{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.rd-mot-cab b{font-size:13px}
+
+/* boletim de prova sem redação: duas colunas, sem a casa vazia da NR */
+.bol-notas.sem-red{grid-template-columns:repeat(2,1fr)}
+
