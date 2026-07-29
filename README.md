@@ -8,8 +8,11 @@ editor de itens com revisão comentada em dois níveis, caderno de provas, cart�
 nominais, correção com boletins, e administração da equipe e dos estudantes.
 
 Atende quatro provas — **9º ano, 1ª, 2ª e 3ª série** —, cada uma com os seus
-textos, itens, capa, instruções e elenco. O seletor no topo diz em qual se está
-trabalhando. O estudante pertence a uma **série**, e é ela que o liga à prova.
+textos, itens, capa, instruções e elenco. O seletor no menu lateral diz em qual
+se está trabalhando. O estudante pertence a uma **série**, e é ela que o liga à
+prova.
+
+A navegação é por **menu lateral**, que vira gaveta em tela estreita.
 
 - **Manual da equipe:** [`docs/manual-da-equipe.md`](docs/manual-da-equipe.md)
 - **Plano de implantação e arquitetura:** [`docs/plano-implantacao.md`](docs/plano-implantacao.md)

@@ -4,7 +4,8 @@
 // mutação é sincronizada por linha através do facade PERS.
 import { NUVEM } from './config-supabase.js';
 import {
-  COMPONENTES, GRUPOS, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
+  COMPONENTES, TODOS_COMPONENTES, ehComponenteLegado, SUCESSORAS_DE_ARTES,
+  GRUPOS, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
   uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
 } from './dados.js';
 import { nuvem } from './nuvem.js';
@@ -107,7 +108,7 @@ const PERS = {
 
 // Áreas do conhecimento — é por elas que a coordenação de área revisa.
 const AREAS = {
-  'Linguagens': ['Português', 'Literatura', 'Artes'],
+  'Linguagens': ['Português', 'Literatura', 'Artes Visuais', 'Dança', 'Música', 'Teatro', 'Artes'],
   'Humanas': ['História', 'Geografia', 'Filosofia', 'Sociologia'],
   'Matemática': ['Matemática'],
   'Ciências da Natureza': ['Biologia', 'Física', 'Química'],
@@ -131,7 +132,20 @@ const nomePerfil = () => {
   return `Coordenação · ${S.perfil.nome}`;
 };
 
-const discChip = comp => `<span class="disc ${COMPONENTES[comp] || 'd-soc'}">${esc(comp)}</span>`;
+// Aceita também o componente legado, para que quem ainda está em “Artes” não
+// apareça sem cor nem nome pelo sistema.
+const discChip = comp => `<span class="disc ${TODOS_COMPONENTES[comp] || 'd-soc'}">${esc(comp)}</span>`;
+
+// Opções de componente. Só as atuais são oferecidas; se o registro que está
+// sendo editado usa uma legada, ela entra na lista marcada — trocar é decisão
+// de quem edita, não efeito colateral de abrir o formulário.
+function opcoesComponente(atual) {
+  const nomes = Object.keys(COMPONENTES);
+  if (atual && !nomes.includes(atual)) nomes.push(atual);
+  return nomes.sort((a, b) => a.localeCompare(b, 'pt-BR')).map(c =>
+    `<option value="${esc(c)}" ${atual === c ? 'selected' : ''}>${esc(c)}${
+      ehComponenteLegado(c) ? ' (a reclassificar)' : ''}</option>`).join('');
+}
 
 /* ---------------- prova ativa ---------------- */
 // Qual prova está na tela é preferência de quem está usando, não estado
@@ -259,14 +273,16 @@ function ranking(provaId, versao) {
 }
 
 /* ---------------- casca / navegação ---------------- */
+// `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
+// que também vira o título do cabeçalho.
 const TELAS = {
-  painel:        { rot: '1 · Painel' },
-  textos:        { rot: '2 · Textos e alocação' },
-  itens:         { rot: '3 · Itens e revisão' },
-  caderno:       { rot: '4 · Caderno' },
-  cartoes:       { rot: '5 · Cartões-resposta' },
-  correcao:      { rot: '6 · Correção e boletins' },
-  administracao: { rot: '7 · Administração', soCoordenacaoNaNuvem: true }
+  painel:        { n: 1, rot: 'Painel' },
+  textos:        { n: 2, rot: 'Textos e alocação' },
+  itens:         { n: 3, rot: 'Itens e revisão' },
+  caderno:       { n: 4, rot: 'Caderno' },
+  cartoes:       { n: 5, rot: 'Cartões-resposta' },
+  correcao:      { n: 6, rot: 'Correção e boletins' },
+  administracao: { n: 7, rot: 'Administração', soCoordenacaoNaNuvem: true }
 };
 // A tela de Administração cuida de contas e da lista de estudantes — só
 // aparece para a coordenação e só com o sistema ligado ao banco on-line.
@@ -281,8 +297,8 @@ function telaAtual() {
   return telasVisiveis().some(([k]) => k === alvo) ? alvo : 'painel';
 }
 
-// Seletor de prova — a mesma peça no cabeçalho de todas as telas. O docente
-// também troca de prova: ele escreve item para mais de uma série.
+// Seletor de prova, no alto do menu lateral. O docente também troca de prova:
+// ele escreve item para mais de uma série.
 function seletorDeProva() {
   const lista = provasOrdenadas();
   if (!lista.length) return '';
@@ -295,47 +311,76 @@ function seletorDeProva() {
     <span>Prova</span><select data-mud="prova-ativa" aria-label="Prova ativa">${ops}</select></label>`;
 }
 
+/* ---------------- menu lateral, como gaveta na tela estreita ---------------- */
+const fecharMenu = () => {
+  $('.casca')?.classList.remove('menu-aberto');
+  $('#lado-veu')?.setAttribute('hidden', '');
+  $('.menu-btn')?.setAttribute('aria-expanded', 'false');
+};
+// Esvazia a casca quando ninguém está autenticado: menu e seletor de prova não
+// fazem sentido antes de entrar.
+function cascaVazia(comSair = false) {
+  $('#lado-prova').innerHTML = '';
+  $('#nav').innerHTML = '';
+  $('#quem').innerHTML = `<div class="lado-acoes">${botaoTema()}${
+    comSair ? '<button class="sair-btn" data-acao="nuvem-sair">Sair</button>' : ''}</div>`;
+}
+
 function render() {
   const p = provaAtual();
-  $('#h-titulo').textContent = 'Sistema PAS Marista';
-  $('#h-sub').textContent = p
-    ? `${p.nome} — ${p.etapa} · ${p.serie}` +
-      (p.dataAplicacao ? ` · Aplicação: ${dataBR(p.dataAplicacao)}` : '')
-    : 'Nenhuma prova cadastrada ainda.';
 
   if (modoNuvem && !nuvem.usuario()) {
-    $('#quem').innerHTML = botaoTema();
-    $('#nav').innerHTML = '';
+    $('#h-titulo').textContent = 'Sistema PAS Marista';
+    $('#h-sub').textContent = 'Entre com a conta que a coordenação criou para você.';
+    cascaVazia();
     telaLogin();
     return;
   }
 
   // Senha provisória: nada mais aparece até a pessoa criar a sua.
   if (modoNuvem && S.perfil.trocarSenha) {
-    $('#quem').innerHTML = `${botaoTema()}<button class="sair-btn" data-acao="nuvem-sair">Sair</button>`;
-    $('#nav').innerHTML = '';
+    $('#h-titulo').textContent = 'Primeiro acesso';
+    $('#h-sub').textContent = 'Crie a sua senha para continuar.';
+    cascaVazia(true);
     telaTrocarSenha();
     return;
   }
 
+  const atual = telaAtual();
+  $('#h-titulo').textContent = TELAS[atual].rot;
+  $('#h-sub').textContent = p
+    ? `${p.nome} — ${p.etapa} · ${p.serie}` +
+      (p.dataAplicacao ? ` · Aplicação: ${dataBR(p.dataAplicacao)}` : '')
+    : 'Nenhuma prova cadastrada ainda.';
+
+  $('#lado-prova').innerHTML = seletorDeProva();
+
   const ini = (S.perfil.nome || '?').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
   const identidade = modoNuvem
-    ? `<span style="font-weight:700;font-size:13px">${esc(nomePerfil())}</span>
-       <button class="tema-btn" data-acao="nuvem-atualizar" title="Recarregar os dados do banco on-line">🔄</button>
-       <button class="tema-btn" data-acao="minha-conta" title="Minha conta (trocar senha)">🔑</button>
-       <button class="sair-btn" data-acao="nuvem-sair" title="Sair da conta">Sair</button>`
-    : `<select id="sel-perfil" aria-label="Perfil ativo">
-        <option value="coordenacao" ${ehCoord() ? 'selected' : ''}>${ehCoord() ? esc(nomePerfil()) : 'Coordenação · entrar'}</option>
-        <option value="docente" ${S.perfil.papel === 'docente' ? 'selected' : ''}>${S.perfil.papel === 'docente' ? esc(nomePerfil()) : 'Docente · entrar'}</option>
-        <option value="redacao" ${ehRedacao() ? 'selected' : ''}>${ehRedacao() ? esc(nomePerfil()) : 'Prof. de redação · entrar'}</option>
-      </select>`;
-  $('#quem').innerHTML = `${seletorDeProva()}${botaoTema()}${identidade}<div class="avatar">${esc(ini)}</div>`;
+    ? `<div class="lado-quem"><div class="avatar">${esc(ini)}</div>
+         <span class="nome">${esc(nomePerfil())}</span></div>
+       <div class="lado-acoes">
+         ${botaoTema()}
+         <button class="tema-btn" data-acao="nuvem-atualizar" title="Recarregar os dados do banco on-line">🔄</button>
+         <button class="tema-btn" data-acao="minha-conta" title="Minha conta (trocar senha)">🔑</button>
+         <button class="sair-btn" data-acao="nuvem-sair" title="Sair da conta">Sair</button>
+       </div>`
+    // Sem nuvem o próprio seletor é a identidade — repetir o nome ao lado do
+    // avatar diria a mesma coisa duas vezes.
+    : `<div class="lado-quem"><div class="avatar">${esc(ini)}</div>
+         <select id="sel-perfil" aria-label="Perfil ativo">
+          <option value="coordenacao" ${ehCoord() ? 'selected' : ''}>${ehCoord() ? esc(nomePerfil()) : 'Coordenação · entrar'}</option>
+          <option value="docente" ${S.perfil.papel === 'docente' ? 'selected' : ''}>${S.perfil.papel === 'docente' ? esc(nomePerfil()) : 'Docente · entrar'}</option>
+          <option value="redacao" ${ehRedacao() ? 'selected' : ''}>${ehRedacao() ? esc(nomePerfil()) : 'Prof. de redação · entrar'}</option>
+         </select></div>
+       <div class="lado-acoes">${botaoTema()}</div>`;
+  $('#quem').innerHTML = identidade;
   const sel = $('#sel-perfil');
   if (sel) sel.addEventListener('change', ev => dlgPerfil(ev.target.value));
 
-  const atual = telaAtual();
   $('#nav').innerHTML = telasVisiveis()
-    .map(([k, v]) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>${v.rot}</a>`).join('');
+    .map(([k, v]) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>
+      <span class="n">${v.n}</span>${esc(v.rot)}</a>`).join('');
   ({
     painel: telaPainel, textos: telaTextos, itens: telaItens, caderno: telaCaderno,
     cartoes: telaCartoes, correcao: telaCorrecao, administracao: telaAdministracao
@@ -345,7 +390,15 @@ function render() {
   if (modoNuvem && S.perfil.tutorialVisto === false && !tutorialAberto && !$('#dlg').open)
     abrirTutorial(0);
 }
-window.addEventListener('hashchange', render);
+// Navegar fecha a gaveta: na tela estreita ela cobre o conteúdo que se acabou
+// de pedir.
+window.addEventListener('hashchange', () => { fecharMenu(); render(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('.casca')?.classList.contains('menu-aberto')) {
+    fecharMenu();
+    $('.menu-btn')?.focus();
+  }
+});
 
 /* ---------------- ações delegadas ---------------- */
 const ACOES = {};
@@ -361,6 +414,14 @@ document.addEventListener('change', e => {
   const fn = MUDS[el.dataset.mud];
   if (fn) fn(el.dataset, el);
 });
+ACOES['menu-abrir'] = () => {
+  $('.casca')?.classList.add('menu-aberto');
+  $('#lado-veu')?.removeAttribute('hidden');
+  $('.menu-btn')?.setAttribute('aria-expanded', 'true');
+  $('.lado-nav a')?.focus();
+};
+ACOES['menu-fechar'] = () => { fecharMenu(); $('.menu-btn')?.focus(); };
+
 const MUDS = {};
 MUDS['prova-ativa'] = (d, el) => {
   S.provaAtiva = el.value;
@@ -560,7 +621,7 @@ function telaPainel() {
 
     <div class="grade g3" style="margin-bottom:16px">
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Itens aprovados</h3>
-        <div class="num">${b.aprovados}<small>${b.totalQuestoes ? ` / ${b.totalQuestoes} da prova` : ' — total a definir'}</small></div>
+        <div class="num">${b.aprovados}<small>${b.totalQuestoes ? ` / ${b.totalQuestoes} da prova` : ' de um total ainda a definir'}</small></div>
         <div class="barra"><i style="width:${b.totalQuestoes ? Math.min(100, b.aprovados / b.totalQuestoes * 100) : 0}%"></i></div>
         <span style="font-size:12px;color:var(--ink-2)">${b.criados} criados ao todo</span></div>
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Em revisão</h3>
@@ -775,8 +836,7 @@ function dlgPerfil(papel) {
       <div class="dlg-pe"><button class="btn fantasma" data-acao="perfil-cancelar">Cancelar</button>
         <button class="btn" data-acao="perfil-coord">Entrar</button></div>`);
   } else {
-    const ops = Object.keys(COMPONENTES).map(c =>
-      `<option ${S.perfil.componente === c ? 'selected' : ''}>${c}</option>`).join('');
+    const ops = opcoesComponente(S.perfil.componente);
     abrirDlg(`
       <div class="dlg-cab"><h2>Entrar como docente</h2><button class="fechar-x" data-acao="perfil-cancelar">✕</button></div>
       <div class="dlg-corpo">
@@ -1100,7 +1160,7 @@ function dlgItem() {
   // quebraria a numeração das duas.
   const opsTexto = textosAprovados(rasc.provaId).map(x =>
     `<option value="${x.id}" ${x.id === rasc.textoId ? 'selected' : ''}>Texto ${x.numero} — ${esc(x.titulo.slice(0, 48))}</option>`).join('');
-  const opsComp = Object.keys(COMPONENTES).map(c => `<option ${rasc.componente === c ? 'selected' : ''}>${c}</option>`).join('');
+  const opsComp = opcoesComponente(rasc.componente);
 
   const segTipo = Object.keys(TIPOS).map(tp =>
     `<button class="${rasc.tipo === tp ? 'sel' : ''}" data-acao="it-tipo" data-v="${tp}" title="${TIPOS[tp].rotulo}">${tp}</button>`).join('');
@@ -1153,25 +1213,36 @@ function dlgItem() {
 
   // Quem faz o quê no fluxo: quem escreveu envia; a coordenação da área do
   // item decide a 1ª etapa; a coordenação geral decide a última.
-  const botoes = [];
-  botoes.push('<button class="btn" data-acao="it-salvar">Salvar</button>');
+  //
+  // A barra diz para ONDE cada ação leva o item, não só o que ela faz: a
+  // dúvida recorrente é se “Salvar” já manda para a revisão. Salvar guarda e
+  // deixa o item onde está; quem move é sempre um botão colorido.
   const meuItem = rasc.autor === S.perfil.nome;
+  const acoes = [];
   if ((meuItem || ehCoord()) && ['rascunho', 'devolvido'].includes(rasc.status))
-    botoes.push('<button class="btn rosa" data-acao="it-enviar">Enviar para revisão</button>');
+    acoes.push({ cls: 'rosa', acao: 'it-enviar', rot: 'Enviar para revisão',
+                 dica: 'vai para a coordenação de ' + (areaDoComponente(rasc.componente) || 'área') });
   if (rasc.status === 'area' && revisaArea(rasc))
-    botoes.push('<button class="btn verde" data-acao="it-aprovar-area">Aprovar → coordenação geral</button>',
-                '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
+    acoes.push({ cls: 'verde', acao: 'it-aprovar-area', rot: 'Aprovar', dica: 'segue para a coordenação geral' },
+               { cls: 'vermelho', acao: 'it-devolver', rot: 'Devolver', dica: 'volta para ' + (rasc.autor || 'quem escreveu') });
   if (rasc.status === 'geral' && ehCoord())
-    botoes.push('<button class="btn verde" data-acao="it-aprovar">Aprovar item</button>',
-                '<button class="btn vermelho" data-acao="it-devolver">Devolver com ajustes</button>');
+    acoes.push({ cls: 'verde', acao: 'it-aprovar', rot: 'Aprovar item', dica: 'entra no caderno da prova' },
+               { cls: 'vermelho', acao: 'it-devolver', rot: 'Devolver', dica: 'volta para ' + (rasc.autor || 'quem escreveu') });
   if (rasc.status === 'aprovado' && ehCoord())
-    botoes.push('<button class="btn fantasma" data-acao="it-reabrir">Reabrir revisão</button>');
+    acoes.push({ cls: 'fantasma', acao: 'it-reabrir', rot: 'Reabrir revisão', dica: 'sai do caderno até ser aprovado de novo' });
+
+  const podeExcluir = rasc.id && (ehCoord() || (meuItem && rasc.status === 'rascunho'));
+  const botoes = `
+    ${podeExcluir ? `<button class="btn vermelho fantasma pe-excluir" data-acao="it-excluir"
+        title="Apagar este item definitivamente">Excluir</button>` : ''}
+    <button class="btn fantasma" data-acao="fechar-dlg">Fechar</button>
+    <button class="btn" data-acao="it-salvar" title="Guarda as alterações e mantém o item onde está">Salvar</button>
+    ${acoes.map(a => `<button class="btn ${a.cls}" data-acao="${a.acao}">
+      ${esc(a.rot)}<small class="pe-dica">${esc(a.dica)}</small></button>`).join('')}`;
 
   abrirDlg(`
     <div class="dlg-cab">
       <h2>${rasc.id ? 'Item' : 'Novo item'} · ${esc(provaPorId(rasc.provaId)?.serie || '')}${t ? ' · Texto ' + t.numero : ''} <span class="chip ${st.cls}">${st.rot}</span></h2>
-      ${rasc.id && (ehCoord() || (rasc.autor === S.perfil.nome && rasc.status === 'rascunho')) ?
-        '<button class="btn mini vermelho" data-acao="it-excluir">Excluir</button>' : ''}
       <button class="fechar-x" data-acao="fechar-dlg">✕</button>
     </div>
     <div class="dlg-corpo">
@@ -1194,12 +1265,18 @@ function dlgItem() {
           <div class="form-linha">
             <div class="campo" style="flex:0"><label>Tipo</label><div class="seg">${segTipo}</div></div>
             <div class="campo"><label>Componente</label><select class="caixa" data-mud="it-campo" data-campo="componente">${opsComp}</select></div>
-            <div class="campo" style="flex:0"><label>Versão</label><div class="seg">${segVersao}</div></div>
+          </div>
+          <div class="form-linha">
+            <div class="campo" style="flex:1 1 100%"><label>Versão da prova em que este item entra</label>
+              <div class="seg">${segVersao}</div></div>
           </div>
           <div class="form-linha">
             <div class="campo"><label>Habilidade</label>
               <input class="caixa" data-mud="it-campo" data-campo="habilidade" value="${esc(rasc.habilidade)}" placeholder="ex.: H6 — Inferências"></div>
-            <div class="campo" style="flex:0"><label>Grupo</label><div class="seg">${segGrupo}</div></div>
+          </div>
+          <div class="form-linha">
+            <div class="campo" style="flex:1 1 100%"><label>Grupo de habilidades</label>
+              <div class="seg">${segGrupo}</div></div>
           </div>
           <div class="campo" style="margin-bottom:12px"><label>Enunciado</label>
             <textarea class="caixa" rows="4" data-mud="it-campo" data-campo="enunciado">${esc(rasc.enunciado)}</textarea></div>
@@ -1214,7 +1291,7 @@ function dlgItem() {
         </div>
       </div>
     </div>
-    <div class="dlg-pe">${botoes.join('')}</div>`, true);
+    <div class="dlg-pe fixo">${botoes}</div>`, true);
 }
 
 function reabrirDlgItem() { dlgItem(); }
@@ -2346,7 +2423,8 @@ function telaAdministracao() {
       <td>${esc(m.nome || '—')}${m.email === meuEmail ? ' <span class="chip info">você</span>' : ''}</td>
       <td style="font-family:var(--mono);font-size:12.5px">${esc(m.email)}</td>
       <td>${esc(PAPEIS[m.papel] || m.papel)}${m.area ? `<br><span style="font-size:11px;color:var(--ink-2)">${esc(m.area)}</span>` : ''}</td>
-      <td>${m.componente ? discChip(m.componente) : '—'}</td>
+      <td>${m.componente ? discChip(m.componente) : '—'}${
+        ehComponenteLegado(m.componente) ? '<br><span class="chip pend">reclassificar</span>' : ''}</td>
       <td>${m.trocar_senha ? '<span class="chip pend">senha provisória</span>' : '<span class="chip ok">ativo</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="equipe-editar" data-email="${esc(m.email)}">Editar</button>
@@ -2367,12 +2445,30 @@ function telaAdministracao() {
   }).join('');
   const semSerie = S.estudantes.filter(e => !SERIES.includes(e.serie)).length;
 
+  // Artes virou quatro componentes. Quem ficou na antiga continua trabalhando
+  // normalmente — mas a coordenação precisa ver que falta reclassificar, senão
+  // a entrega dessas pessoas segue somada num balde só.
+  const aReclassificar = equipeCache.filter(m => ehComponenteLegado(m.componente));
+  const avisoArtes = aReclassificar.length ? `
+    <div class="cartao aviso" style="margin-bottom:16px">
+      <h3>Artes agora é ${SUCESSORAS_DE_ARTES.length} componentes</h3>
+      <p style="font-size:13px;margin:0 0 8px">Cada linguagem tem o seu docente e a sua entrega:
+        ${SUCESSORAS_DE_ARTES.map(c => discChip(c)).join(' ')}</p>
+      <p style="font-size:13px;margin:0">
+        ${aReclassificar.length === 1 ? 'Uma pessoa continua' : `${aReclassificar.length} pessoas continuam`}
+        no componente antigo — ${esc(aReclassificar.map(m => m.nome || m.email).join(', '))}.
+        Nada quebrou: ${aReclassificar.length === 1 ? 'ela segue' : 'elas seguem'} usando o sistema normalmente.
+        Use <b>Editar</b> para escolher a linguagem certa quando puder.</p>
+    </div>` : '';
+
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Administração</h2>
         <span class="sub">contas de acesso e lista de estudantes</span></div>
     </div>
+
+    ${avisoArtes}
 
     <div class="cartao" style="margin-bottom:16px">
       <div class="cab-tela" style="margin-bottom:10px">
@@ -2470,8 +2566,7 @@ function dlgMembro(m) {
   const novo = !m;
   const opsPapel = Object.entries(PAPEIS).map(([k, v]) =>
     `<option value="${k}" ${m?.papel === k ? 'selected' : ''}>${v}</option>`).join('');
-  const opsComp = ['<option value="">— nenhum —</option>', ...Object.keys(COMPONENTES).map(c =>
-    `<option ${m?.componente === c ? 'selected' : ''}>${c}</option>`)].join('');
+  const opsComp = `<option value="">— nenhum —</option>${opcoesComponente(m?.componente)}`;
   const opsArea = Object.keys(AREAS).map(a =>
     `<option ${m?.area === a ? 'selected' : ''}>${a}</option>`).join('');
   abrirDlg(`
@@ -2702,6 +2797,7 @@ ACOES['ps-salvar'] = async (d, botao) => {
 /* ---------------- tutorial de boas-vindas ---------------- */
 // Um passo por tela, com uma miniatura animada do sistema. O roteiro muda
 // conforme o papel: cada pessoa vê só o que ela mesma faz.
+// Rótulos curtos do menu no simulacro do tutorial — a coluna é estreita.
 const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Admin.'];
 
 const TUTORIAL = {
@@ -2737,7 +2833,7 @@ const TUTORIAL = {
   ],
   docente: [
     { cena: 'ola', titulo: 'Bem-vindo ao Sistema PAS',
-      texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. São três telas que interessam a você.' },
+      texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. O menu à esquerda leva às telas; no alto dele fica a prova em que você está trabalhando.' },
     { cena: 'painel', aba: 0, titulo: 'O que você tem para entregar',
       texto: 'O Painel abre com a sua lista: quanto você já escreveu em cada prova — 9º ano, 1ª, 2ª e 3ª série — e o que está em revisão. Clique numa linha para trabalhar naquela prova; o seletor no topo troca a prova a qualquer momento.' },
     { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
@@ -2790,11 +2886,17 @@ function cenaTutorial(passo) {
         `<s style="--d:${i * .08}s"></s>`).join('')}</div>`,
     formula: `<div class="tut-formula">NR = NC − 2·NE/TL</div>`
   };
+  // O simulacro imita a casca de verdade: menu à esquerda, conteúdo à direita.
   return `
   <div class="tut-mock">
-    <div class="tut-topo"><span></span><em></em></div>
-    <div class="tut-abas">${abas}</div>
-    <div class="tut-palco">${cenas[passo.cena] || ''}</div>
+    <div class="tut-lado">
+      <div class="tut-marca"><span></span><em></em></div>
+      <div class="tut-abas">${abas}</div>
+    </div>
+    <div class="tut-direita">
+      <div class="tut-topo"><em></em></div>
+      <div class="tut-palco">${cenas[passo.cena] || ''}</div>
+    </div>
   </div>`;
 }
 

@@ -46,10 +46,19 @@ o backup em JSON.
 | `docente` | Escreve itens e lança as notas dos próprios discursivos. |
 | `redacao` | Só o lançamento da redação. |
 
-Áreas em `AREAS` (js/app.js): Linguagens (Português, Literatura, Artes),
-Humanas (História, Geografia, Filosofia, Sociologia), Matemática, Ciências da
-Natureza (Biologia, Física, Química) e Inglês. `revisaArea(item)` compara a área
-do componente do item com a área de quem está logado.
+Áreas em `AREAS` (js/app.js): Linguagens (Português, Literatura, Artes Visuais,
+Dança, Música, Teatro), Humanas (História, Geografia, Filosofia, Sociologia),
+Matemática, Ciências da Natureza (Biologia, Física, Química) e Inglês.
+`revisaArea(item)` compara a área do componente do item com a área de quem está
+logado.
+
+Componentes em `COMPONENTES` (js/dados.js). A “Artes” genérica saiu da lista e
+vive em `COMPONENTES_LEGADOS`: continua válida e colorida onde já está gravada,
+mas não é oferecida para escolhas novas. `opcoesComponente(atual)` acrescenta o
+valor legado à lista **só** quando é o do registro sendo editado, marcado como
+“a reclassificar” — trocar é decisão de quem edita, não efeito colateral de
+abrir o formulário. Para aposentar um componente no futuro, mova-o de
+`COMPONENTES` para `COMPONENTES_LEGADOS`; nada mais precisa mudar.
 
 ## Primeiro acesso
 

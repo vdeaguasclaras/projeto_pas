@@ -15,11 +15,26 @@ const VERSAO_ESTADO = 2;
 const SERIES = ['9º ano', '1ª série EM', '2ª série EM', '3ª série EM'];
 
 // Componentes curriculares em ordem alfabética (única língua estrangeira: Inglês).
+// Artes é lançada pelas quatro linguagens da BNCC — quem dá aula de Música e
+// quem dá aula de Artes Visuais são pessoas diferentes, e a coordenação precisa
+// ver a entrega de cada uma separada.
 const COMPONENTES = {
-  'Artes': 'd-art', 'Biologia': 'd-bio', 'Filosofia': 'd-fil', 'Física': 'd-fis',
-  'Geografia': 'd-geo', 'História': 'd-his', 'Inglês': 'd-ing', 'Literatura': 'd-lit',
-  'Matemática': 'd-mat', 'Português': 'd-lp', 'Química': 'd-qui', 'Sociologia': 'd-soc'
+  'Artes Visuais': 'd-artv', 'Biologia': 'd-bio', 'Dança': 'd-dan',
+  'Filosofia': 'd-fil', 'Física': 'd-fis', 'Geografia': 'd-geo',
+  'História': 'd-his', 'Inglês': 'd-ing', 'Literatura': 'd-lit',
+  'Matemática': 'd-mat', 'Música': 'd-mus', 'Português': 'd-lp',
+  'Química': 'd-qui', 'Sociologia': 'd-soc', 'Teatro': 'd-tea'
 };
+
+// “Artes” genérica não é mais oferecida, mas continua válida: há gente
+// cadastrada nela. Some do seletor de componente e aparece marcada para
+// reclassificar, em vez de virar valor inválido no cadastro de alguém.
+const COMPONENTES_LEGADOS = { 'Artes': 'd-art' };
+const TODOS_COMPONENTES = { ...COMPONENTES, ...COMPONENTES_LEGADOS };
+const ehComponenteLegado = c => Object.hasOwn(COMPONENTES_LEGADOS, c);
+
+// Para onde “Artes” se desdobrou — o texto que a tela usa para explicar.
+const SUCESSORAS_DE_ARTES = ['Artes Visuais', 'Dança', 'Música', 'Teatro'];
 
 const GRUPOS = ['Interpretar', 'Planejar', 'Executar', 'Criticar'];
 
@@ -313,6 +328,8 @@ function substituir(novo) {
 }
 
 export {
-  KEY, VERSAO_ESTADO, COMPONENTES, GRUPOS, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
+  KEY, VERSAO_ESTADO, COMPONENTES, COMPONENTES_LEGADOS, TODOS_COMPONENTES,
+  ehComponenteLegado, SUCESSORAS_DE_ARTES,
+  GRUPOS, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
   uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
 };

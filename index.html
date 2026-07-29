@@ -10,18 +10,36 @@
 <link rel="stylesheet" href="css/estilo.css">
 </head>
 <body>
-<header class="topo">
-  <div class="topo-in">
-    <div class="logo"><span>PAS</span></div>
-    <div>
-      <h1 id="h-titulo">Sistema PAS Marista</h1>
-      <p id="h-sub"></p>
+<a class="pular" href="#app">Pular para o conteúdo</a>
+<div class="casca">
+  <!-- Menu lateral: identidade, prova em que se trabalha, telas e quem está logado. -->
+  <aside class="lado" id="lado">
+    <div class="lado-marca">
+      <div class="logo"><span>PAS</span></div>
+      <div class="lado-marca-txt">
+        <b>Sistema PAS</b>
+        <small>Marista Águas Claras</small>
+      </div>
+      <button class="lado-fechar" data-acao="menu-fechar" aria-label="Fechar o menu">✕</button>
     </div>
-    <div class="quem" id="quem"></div>
+    <div class="lado-prova" id="lado-prova"></div>
+    <nav class="lado-nav" id="nav" aria-label="Telas do sistema"></nav>
+    <div class="lado-pe" id="quem"></div>
+  </aside>
+  <!-- Véu que escurece o conteúdo quando o menu vira gaveta, na tela estreita. -->
+  <div class="lado-veu" id="lado-veu" data-acao="menu-fechar" hidden></div>
+
+  <div class="coluna">
+    <header class="topo">
+      <button class="menu-btn" data-acao="menu-abrir" aria-label="Abrir o menu" aria-controls="lado" aria-expanded="false">☰</button>
+      <div class="topo-txt">
+        <h1 id="h-titulo">Sistema PAS Marista</h1>
+        <p id="h-sub"></p>
+      </div>
+    </header>
+    <main id="app" tabindex="-1"></main>
   </div>
-  <nav class="abas" id="nav" aria-label="Telas do sistema"></nav>
-</header>
-<main id="app"></main>
+</div>
 <div id="print-area" aria-hidden="true"></div>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status" aria-live="polite"></div>

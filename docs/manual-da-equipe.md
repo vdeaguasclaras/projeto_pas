@@ -20,9 +20,23 @@ Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 | **Professora de redação** | Lança NC, NE e TL da redação de cada estudante. |
 
 As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
-Artes), **Humanas** (História, Geografia, Filosofia, Sociologia),
-**Matemática**, **Ciências da Natureza** (Biologia, Física, Química) e
-**Inglês**.
+Artes Visuais, Dança, Música, Teatro), **Humanas** (História, Geografia,
+Filosofia, Sociologia), **Matemática**, **Ciências da Natureza** (Biologia,
+Física, Química) e **Inglês**.
+
+> **Artes agora são quatro componentes** — Artes Visuais, Dança, Música e
+> Teatro —, porque quem dá aula de cada linguagem é uma pessoa diferente e a
+> coordenação precisa ver a entrega de cada uma separada. Quem estava
+> cadastrado na “Artes” antiga continua trabalhando normalmente; a tela de
+> Administração marca essas pessoas com **reclassificar**, para a coordenação
+> escolher a linguagem certa quando puder.
+
+## Onde ficam as coisas
+
+O **menu à esquerda** leva às telas. No alto dele fica a **prova** em que você
+está trabalhando; embaixo, quem está logado, o tema claro/escuro e o botão de
+sair. Em tela estreita — celular ou tablet em pé — o menu vira uma gaveta,
+aberta pelo botão **☰** ao lado do título.
 
 ## As telas
 
@@ -44,6 +58,18 @@ Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação 
 área daquele componente** decide a primeira etapa; a **coordenação geral** decide
 a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
 na sua mão.
+
+Os botões no rodapé do item dizem **para onde a ação leva**:
+
+| Botão | O que faz |
+|---|---|
+| **Salvar** | guarda as alterações e **deixa o item onde está** — não envia nada |
+| **Enviar para revisão** | manda para a coordenação da área do componente |
+| **Aprovar** | na coordenação de área, segue para a geral; na geral, entra no caderno |
+| **Devolver** | volta para quem escreveu, com o comentário |
+| **Reabrir revisão** | tira um item aprovado do caderno até ser aprovado de novo |
+| **Fechar** | sai do item (o que não foi salvo se perde) |
+| **Excluir** | apaga o item — fica separado, à esquerda, para não ser clicado por engano |
 
 Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar em
 “linhas de referência” aparecem destacadas em amarelo.
