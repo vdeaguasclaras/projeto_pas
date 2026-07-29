@@ -1772,6 +1772,30 @@ function instrucoes(provaId = idProvaAtual()) {
   return INSTRUCOES_PADRAO;
 }
 
+// Arranjos da capa. A folha é sempre A4 (595×842pt) — o que muda é como a arte
+// e as instruções a dividem. É escolha de cada prova porque a arte muda a cada
+// edição: a imagem que remete a um texto vertical não é a que remete a uma
+// paisagem panorâmica, e forçar uma na moldura da outra a deforma.
+// As medidas de cada arranjo vivem em css/estilo.css, bloco “arranjos de capa”.
+const ARRANJOS_CAPA = {
+  vertical: {
+    rot: 'Vertical — arte na faixa esquerda',
+    desc: 'Arte em 44% da largura, do topo ao pé da folha, e as instruções nos 56% restantes. É o desenho do caderno do PAS e o padrão do sistema.'
+  },
+  horizontal: {
+    rot: 'Horizontal — arte na metade de cima',
+    desc: 'Arte na metade superior da folha (421pt de 842pt) e instruções na metade inferior, em duas colunas da largura das do miolo. Para imagem panorâmica.'
+  }
+};
+const ARRANJO_CAPA_PADRAO = 'vertical';
+
+// A prova gravada antes deste campo existir não tem `capaArranjo` — e capa
+// nenhuma deve mudar de forma por causa de uma atualização do sistema.
+function arranjoCapa(provaId = idProvaAtual()) {
+  const a = provaPorId(provaId)?.capaArranjo;
+  return ARRANJOS_CAPA[a] ? a : ARRANJO_CAPA_PADRAO;
+}
+
 function htmlCapa(provaId, versao, totalItens) {
   const c = provaPorId(provaId);
   if (!c) return '';
@@ -1779,7 +1803,7 @@ function htmlCapa(provaId, versao, totalItens) {
     ? `<img src="${esc(c.capaImagem)}" alt="">`
     : '';
   return `
-  <div class="pas-capa">
+  <div class="pas-capa capa-${arranjoCapa(provaId)}">
     <div class="pas-capa-arte">
       ${arte}
       <div class="pas-capa-marca">PAS<small>Simulado — Programa de Avaliação Seriada</small></div>
@@ -1993,12 +2017,22 @@ ACOES['cad-imprimir'] = () => {
 ACOES['cad-capa'] = () => {
   const p = provaAtual();
   if (!p) return;
+  const atual = arranjoCapa(p.id);
+  const opsArranjo = Object.entries(ARRANJOS_CAPA).map(([k, a]) => `
+        <label class="capa-arranjo-op${k === atual ? ' sel' : ''}">
+          <input type="radio" name="cp-arranjo" value="${k}" data-mud="cp-arranjo"
+            ${k === atual ? 'checked' : ''}>
+          <span class="capa-mini capa-mini-${k}" aria-hidden="true"><i></i><b></b></span>
+          <span class="capa-arranjo-txt"><strong>${esc(a.rot)}</strong>${esc(a.desc)}</span>
+        </label>`).join('');
   abrirDlg(`
     <div class="dlg-cab"><h2>Capa e instruções — ${esc(p.serie)}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo">
       <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 12px">A capa e as instruções são <b>desta prova</b>.
         Cada série tem as suas.</p>
+      <div class="campo" style="margin-bottom:12px"><label>Arranjo da capa</label>
+        <div class="capa-arranjos">${opsArranjo}</div></div>
       <div class="campo" style="margin-bottom:12px"><label>Imagem da capa (endereço)</label>
         <input class="caixa" id="cp-img" value="${esc(p.capaImagem || '')}"
           placeholder="https://… — imagem inspirada nos textos ou no tema da redação"></div>
@@ -2012,9 +2046,17 @@ ACOES['cad-capa'] = () => {
       <button class="btn" data-acao="cad-capa-salvar" data-id="${esc(p.id)}">Salvar</button></div>`);
 };
 ACOES['cad-capa-padrao'] = () => { $('#cp-instr').value = INSTRUCOES_PADRAO.join('\n'); };
+// Só destaca o cartão escolhido: quem clica no arranjo precisa ver que clicou
+// antes de salvar, e remontar o diálogo aqui apagaria as instruções em edição.
+MUDS['cp-arranjo'] = (d, el) => {
+  for (const op of $$('.capa-arranjo-op'))
+    op.classList.toggle('sel', op.contains(el));
+};
 ACOES['cad-capa-salvar'] = d => {
   const p = provaPorId(d.id);
   if (!p) return;
+  const arr = $('input[name="cp-arranjo"]:checked')?.value;
+  p.capaArranjo = ARRANJOS_CAPA[arr] ? arr : ARRANJO_CAPA_PADRAO;
   p.capaImagem = $('#cp-img').value.trim();
   p.instrucoes = $('#cp-instr').value.split('\n').map(l => l.trim()).filter(Boolean);
   $('#dlg').close(); commit(); PERS.prova(p); toast('Capa atualizada.');

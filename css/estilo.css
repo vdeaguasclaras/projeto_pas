@@ -492,22 +492,38 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .pas-pauta.sem-linhas{border:.7px solid #999}
 .pas-pauta.sem-linhas i{border:none}
 
-/* capa: imagem temática à esquerda, instruções à direita */
+/* capa: arte temática, instruções numeradas e as observações no pé.
+   O que é comum aos dois arranjos está aqui; o que divide a folha —
+   vertical (arte na faixa esquerda) ou horizontal (arte na metade de cima) —
+   está no bloco “arranjos de capa”, no fim deste arquivo. */
 .pas-capa{display:flex;gap:0;height:842pt}
 .pas-capa-arte{
-  width:44%;position:relative;background:#0d2f8a;color:#fff;overflow:hidden;
+  position:relative;background:#0d2f8a;color:#fff;overflow:hidden;
   display:flex;flex-direction:column;justify-content:space-between}
 .pas-capa-arte img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.62}
-.pas-capa-marca{position:relative;padding:34pt 22pt 0;font-size:34pt;font-weight:800;letter-spacing:2pt;line-height:1}
+.pas-capa-marca{position:relative;font-size:34pt;font-weight:800;letter-spacing:2pt;line-height:1}
 .pas-capa-marca small{display:block;font-size:8.5pt;font-weight:600;letter-spacing:.4pt;margin-top:3pt}
-.pas-capa-faixa{position:relative;background:rgba(0,0,0,.78);padding:14pt 22pt;margin-bottom:96pt}
+.pas-capa-faixa{position:relative;background:rgba(0,0,0,.78);padding:14pt 22pt}
 .pas-capa-faixa span{display:block;font-size:9pt;letter-spacing:1.6pt}
 .pas-capa-faixa b{display:block;font-size:30pt;line-height:1.05}
-.pas-capa-texto{width:56%;padding:34pt 27pt 20pt 20pt}
-.pas-capa-texto h2{font-size:11pt;text-align:center;margin-bottom:10pt;letter-spacing:.3pt}
-.pas-capa-texto ol{margin:0;padding-left:16pt;font-size:8.5pt;line-height:1.42;text-align:justify}
+/* Coluna flex: título, instruções e observações em sequência, com as
+   instruções sendo a única peça que cede espaço. Se a coordenação escrever
+   instruções demais, quem é aparado é o fim da lista — e não as observações,
+   que dizem quantos itens o caderno tem e de que prova ele é. Aparar em
+   silêncio não é bom; aparar o rodapé, que fica fora da vista de quem edita,
+   seria pior. A capacidade medida de cada arranjo está no bloco “arranjos de
+   capa”, no fim deste arquivo. */
+.pas-capa-texto{display:flex;flex-direction:column;min-height:0}
+.pas-capa-texto h2{flex:none;font-size:11pt;text-align:center;margin-bottom:10pt;letter-spacing:.3pt}
+.pas-capa-texto ol{flex:0 1 auto;min-height:0;overflow:hidden;
+  margin:0;padding-left:16pt;font-size:8.5pt;line-height:1.42;text-align:justify}
 .pas-capa-texto li{margin-bottom:6pt}
-.pas-capa-obs{margin-top:14pt;border-top:1pt solid #999;padding-top:8pt;font-size:7.5pt;line-height:1.4}
+/* A lista é um item flex e não deixa mais a margem da última instrução vazar
+   para fora, como vazava quando era bloco. Sem isto, o vão até as observações
+   passaria de 14pt para 20pt e a capa vertical, que já está calibrada,
+   mudaria de medida sozinha. */
+.pas-capa-texto li:last-child{margin-bottom:0}
+.pas-capa-obs{flex:none;margin-top:14pt;border-top:1pt solid #999;padding-top:8pt;font-size:7.5pt;line-height:1.4}
 .pas-capa-obs .rot{display:block;font-size:8pt;font-weight:700;margin-bottom:3pt}
 
 /* prévia na tela: folha real, apenas reduzida */
@@ -639,6 +655,70 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
   #print-area .pas{page:caderno}
   #print-area .pas-previa{background:none;padding:0;overflow:visible}
   #print-area .pas-pagina{box-shadow:none;margin:0}
+  /* A capa é a folha inteira, e cada metade do arranjo horizontal é metade
+     dela. Amarrar as três alturas aqui, com a especificidade do #print-area,
+     evita que o Chrome recalcule a porcentagem contra a caixa da impressão e
+     entregue uma arte esticada ou instruções cortadas. */
   #print-area .pas-capa{min-height:842pt;height:842pt}
+  #print-area .pas-capa.capa-horizontal .pas-capa-arte,
+  #print-area .pas-capa.capa-horizontal .pas-capa-texto{min-height:421pt;height:421pt;flex:none}
+  /* A arte é fundo, e o Chrome só imprime fundo se quem imprime marcar
+     “Gráficos de plano de fundo”, que vem desmarcado. Sem isto a faixa sai
+     branca — e a marca PAS, que é branca, desaparece junto. Medido: com esta
+     regra o azul #0d2f8a vai para o PDF mesmo com a opção desmarcada. */
+  #print-area .pas-capa-arte{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 
+/* ===== arranjos de capa =====
+   A capa é sempre uma folha A4 de 595×842pt; o arranjo decide como a arte e as
+   instruções a dividem, e é escolhido por prova em “⚙ Capa e instruções”
+   (`capaArranjo` na prova, ARRANJOS_CAPA em js/app.js). As medidas abaixo estão
+   em pt, as mesmas na tela e no papel: a prévia é a folha, não uma aproximação. */
+
+/* vertical — arte na faixa esquerda (44% de 595pt = 261,8pt), instruções nos
+   56% restantes (333,2pt), ambas do topo ao pé. É o desenho do caderno do PAS
+   e o padrão: prova gravada antes deste campo existir continua assim. */
+.pas-capa.capa-vertical{flex-direction:row}
+.pas-capa.capa-vertical .pas-capa-arte{width:44%}
+.pas-capa.capa-vertical .pas-capa-marca{padding:34pt 22pt 0}
+.pas-capa.capa-vertical .pas-capa-faixa{margin-bottom:96pt}
+.pas-capa.capa-vertical .pas-capa-texto{width:56%;padding:34pt 27pt 20pt 20pt}
+
+/* horizontal 50% — a arte ocupa a metade de cima (421pt) e as instruções a
+   metade de baixo (421pt). As instruções vão em duas colunas: a largura cheia
+   daria linhas de ~540pt, o dobro do que se lê sem perder a linha, e as duas
+   colunas de ~260pt repetem a medida das colunas do miolo do caderno. */
+.pas-capa.capa-horizontal{flex-direction:column}
+.pas-capa.capa-horizontal .pas-capa-arte{width:100%;height:421pt;flex:none}
+.pas-capa.capa-horizontal .pas-capa-marca{padding:30pt 27pt 0}
+/* a faixa não atravessa a folha: alinhada à esquerda, como um selo */
+.pas-capa.capa-horizontal .pas-capa-faixa{align-self:flex-start;min-width:210pt;margin:0 0 34pt}
+.pas-capa.capa-horizontal .pas-capa-texto{width:100%;height:421pt;flex:none;padding:18pt 27pt 16pt}
+.pas-capa.capa-horizontal .pas-capa-texto ol{columns:2;column-gap:20pt;column-fill:balance}
+/* instrução partida entre o pé de uma coluna e o topo da outra é instrução que
+   se lê duas vezes; cada uma fica inteira onde começou */
+.pas-capa.capa-horizontal .pas-capa-texto li{break-inside:avoid}
+
+/* escolha do arranjo no diálogo “Capa e instruções”: cada opção mostra em
+   miniatura onde a arte fica, porque o nome sozinho não diz a forma */
+.capa-arranjos{display:flex;flex-direction:column;gap:8px}
+/* `label.` e não só `.capa-arranjo-op`: dentro de .campo existe uma regra para
+   `label` (rótulo de campo, em caixa alta) que ganharia de uma classe sozinha */
+label.capa-arranjo-op{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;cursor:pointer;
+  text-transform:none;letter-spacing:normal;font-weight:400;color:var(--ink);margin:0;
+  border:1px solid var(--borda);border-radius:12px;background:var(--papel);transition:border-color .15s,background .15s}
+label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
+.capa-arranjo-op input{margin-top:2px;flex:none;accent-color:var(--azul)}
+.capa-arranjo-txt{font-size:12.5px;color:var(--ink-2);line-height:1.45}
+.capa-arranjo-txt strong{display:block;font-size:13.5px;color:var(--ink);margin-bottom:2px}
+/* miniatura: retângulo na proporção da folha A4, a arte em azul e as
+   instruções sugeridas por fios — a mesma divisão que o arranjo faz no papel */
+.capa-mini{display:block;position:relative;flex:none;width:34px;height:48px;margin-top:1px;overflow:hidden;
+  border:1px solid var(--borda);border-radius:3px;background:var(--papel)}
+.capa-mini i,.capa-mini b{position:absolute;display:block}
+.capa-mini i{background:var(--azul-esc)}
+.capa-mini b{background:repeating-linear-gradient(180deg,var(--ink-2) 0 1px,transparent 1px 4px);opacity:.55}
+.capa-mini-vertical i{inset:0 56% 0 0}
+.capa-mini-vertical b{inset:5px 3px 5px 47%}
+.capa-mini-horizontal i{inset:0 0 50% 0}
+.capa-mini-horizontal b{inset:55% 3px 4px 3px}
