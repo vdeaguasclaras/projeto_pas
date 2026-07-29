@@ -1952,9 +1952,11 @@ const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
 const PX_POR_PT = 4 / 3;
 
 // Mede cada peça numa régua com a largura exata da coluna.
-function medirPecas(pecas) {
+// `larga` mede na largura da coluna única (541,1pt) em vez da coluna do miolo
+// (266,05pt) — é o que a proposta de redação usa.
+function medirPecas(pecas, larga = false) {
   const regua = document.createElement('div');
-  regua.className = 'pas pas-regua';
+  regua.className = 'pas pas-regua' + (larga ? ' larga' : '');
   document.body.appendChild(regua);
   const alturas = pecas.map(html => {
     regua.innerHTML = html;
@@ -1982,19 +1984,46 @@ function distribuir(pecas, alturas) {
   return paginas;
 }
 
+// Peças que anunciam o que vem depois. Título no pé de uma página com o texto
+// na seguinte é título que não serve para nada — quem lê já virou a folha.
+const ehTitulo = html => /class="pas-red-(mot|tema)"/.test(html);
+
+// Paginação de coluna única: uma coluna por folha, na largura cheia. A altura
+// útil é a mesma — o que muda é a largura, e ela já entrou na medição.
+function distribuirEmUmaColuna(pecas, alturas) {
+  const paginas = [];
+  let atual = [], altura = 0;
+  const virar = () => { paginas.push([atual, []]); atual = []; altura = 0; };
+
+  pecas.forEach((html, i) => {
+    // Um título só começa página onde couber também o primeiro pedaço do que
+    // ele anuncia; senão, vira a folha antes dele.
+    const junto = ehTitulo(html) && i + 1 < pecas.length ? alturas[i + 1] : 0;
+    if (altura > 0 && altura + alturas[i] + junto > ALTURA_COLUNA) virar();
+    atual.push(html);
+    altura += alturas[i];
+  });
+  if (atual.length) virar();
+  return paginas;
+}
+
 // `parte` é o rótulo centralizado do alto da página. Os itens saem em “PARTE 2”,
 // como nos cadernos do PAS; a proposta de redação tem o seu próprio.
-function htmlPagina(colunas, ident, numero, total, parte = '-- PARTE 2 --') {
+function htmlPagina(colunas, ident, numero, total, parte = '-- PARTE 2 --', umaColuna = false) {
+  // Coluna única (proposta de redação): uma coluna na largura cheia e sem fio
+  // central. O fio separa duas colunas; sem elas, seria um risco no meio do
+  // texto.
+  const corpo = umaColuna
+    ? `<div class="pas-col pas-col-larga">${colunas[0].join('')}</div>`
+    : `<div class="pas-col">${colunas[0].join('')}</div>
+       <div class="pas-col">${colunas[1].join('')}</div>`;
   return `
-  <div class="pas-pagina">
+  <div class="pas-pagina${umaColuna ? ' pas-uma-col' : ''}">
     <div class="pas-ident">${ident}</div>
     <div class="pas-fio-topo"></div>
     <div class="pas-parte">${esc(parte)}</div>
     <div class="pas-fio-vert"></div>
-    <div class="pas-corpo">
-      <div class="pas-col">${colunas[0].join('')}</div>
-      <div class="pas-col">${colunas[1].join('')}</div>
-    </div>
+    <div class="pas-corpo">${corpo}</div>
     <div class="pas-fio-base"></div>
     <div class="pas-fol">${numero} / ${total}</div>
   </div>`;
@@ -2018,8 +2047,11 @@ function htmlCaderno(provaId, versao, comCapa = true) {
   }
   const pecas = [...porTexto.values()].flatMap(({ texto, itens }) => pecasDoBloco(texto, itens));
   const paginas = pecas.length ? distribuir(pecas, medirPecas(pecas)) : [];
+  // A proposta vai em coluna única, como no caderno do PAS: medida e paginada
+  // na largura cheia, não na coluna do miolo.
   const pecasRed = comRedacao ? pecasDaProposta(provaId) : [];
-  const paginasRed = pecasRed.length ? distribuir(pecasRed, medirPecas(pecasRed)) : [];
+  const paginasRed = pecasRed.length
+    ? distribuirEmUmaColuna(pecasRed, medirPecas(pecasRed, true)) : [];
   const p = provaPorId(provaId);
   const ident = `${esc(p?.nome || '')} — ${esc(p?.serie || '')} · ${esc(p?.etapa || '')}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
   const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(provaId, versao, pv.length)}</div>` : '';
@@ -2027,7 +2059,7 @@ function htmlCaderno(provaId, versao, comCapa = true) {
   let n = comCapa ? 1 : 0;
   const folhas = [
     ...paginas.map(c => htmlPagina(c, ident, ++n, total)),
-    ...paginasRed.map(c => htmlPagina(c, ident, ++n, total, PARTE_REDACAO))
+    ...paginasRed.map(c => htmlPagina(c, ident, ++n, total, PARTE_REDACAO, true))
   ].join('');
   return `<div class="pas">${capa}${folhas}</div>`;
 }

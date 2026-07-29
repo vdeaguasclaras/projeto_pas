@@ -458,12 +458,22 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .pas-col{width:var(--col);padding-top:2.5pt;text-align:justify;overflow:hidden}
 .pas-fio-vert{position:absolute;top:var(--topo);left:297.4pt;width:.7pt;height:var(--alt-col);background:#000}
 
+/* Página de coluna única — a da proposta de redação. A largura é a das duas
+   colunas somadas com o vão (541,1pt, a mesma de .pas-corpo), e a página não
+   leva fio central: não há duas colunas para separar. */
+.pas-col-larga{width:541.1pt}
+.pas-pagina.pas-uma-col .pas-fio-vert{display:none}
+
 /* régua invisível usada para medir a altura de cada bloco antes de paginar */
 .pas-regua{
   position:absolute;left:-10000pt;top:0;width:var(--col);visibility:hidden;
   display:flow-root;   /* contém as margens dos filhos: sem isso a medida sai curta */
   text-align:justify;font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.33;
 }
+/* Medir para coluna única exige régua da largura da coluna única: a mesma peça
+   ocupa menos altura em 541pt do que em 266pt, e paginar com a medida errada
+   corta a proposta no lugar errado. */
+.pas-regua.larga{width:541.1pt}
 .pas-bloco{margin-bottom:13.3pt}
 .pas-texto-titulo{font-weight:700;margin-bottom:2pt}
 .pas-texto p{text-indent:28.4pt}
