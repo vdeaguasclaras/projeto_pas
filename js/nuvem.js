@@ -94,13 +94,14 @@ const redefinirSenha = (email, senha) => chamarEquipe({ acao: 'senha', email, se
 const removerMembro  = (email)        => chamarEquipe({ acao: 'remover', email });
 
 async function carregarTudo() {
-  const [pv, tx, it, es, el, rp] = await Promise.all([
+  const [pv, tx, it, es, el, rp, al] = await Promise.all([
     sb.from('provas').select('dados'),
     sb.from('textos').select('dados'),
     sb.from('itens').select('dados'),
     sb.from('estudantes').select('dados'),
     sb.from('prova_estudantes').select('prova_id,est_id'),
-    sb.from('respostas').select('prova_id,est_id,dados')
+    sb.from('respostas').select('prova_id,est_id,dados'),
+    sb.from('alocacoes').select('prova_id,email,dados')
   ].map(p => p.then(checar)));
 
   // Elencos e respostas chegam achatados do banco e viram mapas por prova.
@@ -112,13 +113,18 @@ async function carregarTudo() {
   for (const { prova_id, est_id, dados } of rp.data || [])
     (respostas[prova_id] = respostas[prova_id] || {})[est_id] = dados;
 
+  const alocacoes = {};
+  for (const { prova_id, email, dados } of al.data || [])
+    (alocacoes[prova_id] = alocacoes[prova_id] || {})[email] = dados;
+
   return {
     provas: (pv.data || []).map(r => r.dados).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
     textos: (tx.data || []).map(r => r.dados),
     itens: (it.data || []).map(r => r.dados).sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)),
     estudantes: (es.data || []).map(r => r.dados),
     elencos,
-    respostas
+    respostas,
+    alocacoes
   };
 }
 
@@ -148,6 +154,24 @@ async function removerResposta(provaId, estId) {
   checar(await sb.from('respostas').delete().eq('prova_id', provaId).eq('est_id', estId));
 }
 
+// Alocação: quanto cada docente deve entregar em cada prova. Só a coordenação
+// escreve. Meta zerada é apagada — "sem meta" e "meta zero" dizem coisas
+// diferentes, e guardar zero faria a tela afirmar a segunda.
+async function gravarAlocacao(provaId, email, dados) {
+  if (!dados || !dados.meta)
+    return void checar(await sb.from('alocacoes').delete()
+      .eq('prova_id', provaId).eq('email', email));
+  checar(await sb.from('alocacoes')
+    .upsert({ prova_id: provaId, email, dados }, { onConflict: 'prova_id,email' }));
+}
+async function gravarAlocacoes(provaId, mapa) {
+  const linhas = Object.entries(mapa || {}).filter(([, a]) => a?.meta)
+    .map(([email, dados]) => ({ prova_id: provaId, email, dados }));
+  checar(await sb.from('alocacoes').delete().eq('prova_id', provaId));
+  if (linhas.length)
+    checar(await sb.from('alocacoes').upsert(linhas, { onConflict: 'prova_id,email' }));
+}
+
 // Elenco: quem faz cada prova. Só a coordenação escreve.
 async function gravarElenco(provaId, estIds) {
   checar(await sb.from('prova_estudantes').delete().eq('prova_id', provaId));
@@ -162,6 +186,7 @@ async function gravarElenco(provaId, estIds) {
 async function substituirTudo(S) {
   checar(await sb.from('respostas').delete().neq('est_id', ''));
   checar(await sb.from('prova_estudantes').delete().neq('est_id', ''));
+  checar(await sb.from('alocacoes').delete().neq('email', ''));
   for (const t of ['textos', 'itens', 'estudantes'])
     checar(await sb.from(t).delete().neq('id', ''));
   checar(await sb.from('provas').delete().neq('id', ''));
@@ -174,11 +199,19 @@ async function substituirTudo(S) {
     await gravarElenco(provaId, ids);
   for (const [provaId, mapa] of Object.entries(S.respostas || {}))
     await gravarRespostas(provaId, mapa, Object.keys(mapa));
+  // As alocações apontam para `equipe` por chave estrangeira: uma meta de
+  // alguém que não está mais na equipe é recusada pelo banco, e não deve
+  // derrubar a restauração inteira do backup.
+  for (const [provaId, mapa] of Object.entries(S.alocacoes || {})) {
+    try { await gravarAlocacoes(provaId, mapa); }
+    catch (e) { console.warn(`alocações de ${provaId} não restauradas:`, e.message || e); }
+  }
 }
 
 export const nuvem = {
   conectado, usuario, iniciar, entrar, sair, trocarSenha,
   carregarTudo, gravarLinha, gravarLinhas, removerLinha, gravarElenco,
+  gravarAlocacao, gravarAlocacoes,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
   marcarSenhaTrocada, marcarTutorialVisto

@@ -6,7 +6,7 @@ Abra o endereço do sistema e entre com o seu e-mail e a **senha provisória** q
 a coordenação entregou. O sistema pede, na hora, que você **crie a sua própria
 senha** — só depois disso o resto aparece. Em seguida, um **tutorial rápido**
 mostra as telas do seu perfil; ele abre uma vez só, e você pode revê-lo quando
-quiser no botão 🔑 → “Rever o tutorial”.
+quiser no botão 🔑 do menu → “Rever o tutorial”.
 
 Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 
@@ -17,7 +17,7 @@ Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 | **Coordenação pedagógica** | Vê e faz tudo: configura o simulado, aprova a etapa final da revisão, gera caderno, cartões e boletins, e administra as contas da equipe. |
 | **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. |
 | **Docente** | Escreve itens, acompanha a revisão dos seus e lança as notas dos próprios itens discursivos. |
-| **Professora de redação** | Lança NC, NE e TL da redação de cada estudante. |
+| **Professora de redação** | Vê a proposta de redação da prova e lança NC, NE e TL da redação de cada estudante. |
 
 As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
 Artes Visuais, Dança, Música, Teatro), **Humanas** (História, Geografia,
@@ -41,15 +41,36 @@ aberta pelo botão **☰** ao lado do título.
 ## As telas
 
 **1 · Painel** — quanto já foi produzido, o que está em revisão e a entrega de
-cada componente curricular. A coordenação também configura aqui o nome, a
-etapa, a série e a data de aplicação do simulado.
+cada componente curricular. A coordenação também configura aqui a prova — nome,
+etapa, série, data, duração e **quantidade de questões** — e vê as quatro provas
+lado a lado. O docente abre esta tela com a sua lista do que tem para entregar.
 
-**2 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
+**2 · Alocação por docente** (só coordenação) — quantos itens cada docente deve
+entregar em **cada prova**. É onde a coordenação distribui a prova antes de
+qualquer um começar a escrever.
+
+- A meta é por prova: a mesma pessoa pode ter 6 itens no 9º ano e 3 na 3ª série.
+  Troque de prova no menu à esquerda para alocar cada uma.
+- **Campo em branco = sem meta**, que não é a mesma coisa que meta zero: quem
+  está sem meta não aparece cobrado no painel dele.
+- O **recado** que você escrever na linha aparece no painel daquele docente,
+  junto da meta.
+- **Dividir igualmente** reparte a quantidade de questões da prova entre todos,
+  fechando a conta exatamente (o resto vai para os primeiros da lista).
+  **Copiar de outra prova** repete a distribuição de uma série em outra.
+- A **conferência** no topo compara a soma das metas com o tamanho da prova e
+  com o espaço dos textos-base. Ela avisa, nunca corrige sozinha — quem decide é
+  você.
+
+Os docentes veem a sua meta no Painel, em “O que você tem para entregar”, com
+uma barra de *aprovados / meta* por prova.
+
+**3 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
 Clique num *espaço livre* para escrever um item seu naquele texto. Docentes
 podem **sugerir** textos novos; a coordenação aprova e define quantos itens o
 texto comporta.
 
-**3 · Itens e revisão** — a lista de todos os itens e o fluxo de aprovação:
+**4 · Itens e revisão** — a lista de todos os itens e o fluxo de aprovação:
 rascunho → coordenação de área → coordenação geral → aprovado. Quem revisa
 comenta dentro do item; quem escreveu responde ali mesmo. **Só item aprovado
 entra no caderno, no cartão e na correção.**
@@ -77,7 +98,45 @@ Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar e
 Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múltipla
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
-**4 · Caderno** — o caderno montado com os itens aprovados, em numeração
+### Fórmula, expoente e símbolo no enunciado
+
+O enunciado, as opções do tipo C e a resposta esperada do tipo D têm uma **barra
+de ferramentas**. Passe o mouse em cada botão para ver o que ele faz.
+
+O primeiro grupo é **ênfase**: negrito (Ctrl+B), itálico (Ctrl+I), sublinhado
+(Ctrl+U), sobrescrito (m², 3ª) e subscrito (H₂O, CO₂).
+
+O segundo grupo é **notação matemática**. A fórmula se escreve entre sinais de
+dólar, na notação do LaTeX, e o sistema a desenha:
+
+| Você escreve | Sai impresso |
+|---|---|
+| `$\frac{1}{2}$` | a fração um meio, com o traço na horizontal |
+| `$x^{2}$` | x elevado a 2 |
+| `$x_{1}$` | x índice 1 |
+| `$\sqrt{3}$` e `$\sqrt[3]{8}$` | raiz quadrada de 3, raiz cúbica de 8 |
+| `$30^\circ$` | 30 graus |
+| `$\vec{v}$` | vetor v |
+| `$a \pm b$`, `$a \le b$`, `$a \times b$`, `$\pi$`, `$\Delta$` | ±, ≤, ×, π, Δ |
+| `$$x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$$` | fórmula centralizada, na própria linha |
+
+Os botões do segundo grupo escrevem isso para você e já deixam selecionada a
+parte que precisa trocar — clique em `a/b`, digite o numerador, dê Tab mental e
+siga.
+
+Logo abaixo do campo aparece a **PRÉVIA**, que mostra a fórmula desenhada
+exatamente como vai sair no caderno impresso. Se algo estiver errado, o comando
+aparece **em vermelho** na prévia: confira as chaves `{ }`.
+
+**Valor em real não vira fórmula.** “Custa R$ 50,00 e sobra R$ 30,00” continua
+sendo dinheiro — o sistema só entende como fórmula o dólar que vem colado no
+começo e no fim do trecho. Se precisar de um dólar solto encostado num número,
+escreva `\$`.
+
+Uma fórmula tem de estar inteira dentro do mesmo trecho: não negrite metade dela.
+Fórmula já tem a formatação dela.
+
+**5 · Caderno** — o caderno montado com os itens aprovados, em numeração
 contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
 PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
 e escolha “Salvar como PDF”.
@@ -96,8 +155,25 @@ precisa citar linhas; o PAS não numera).
 A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
 uma imagem temática e o texto das instruções ao estudante.
 
-**5 · Cartões-resposta** — cadastro de estudantes (um a um ou colando a lista no
-formato `nome;matrícula;turma;versão`) e impressão dos cartões nominais.
+A **proposta de redação** também é escrita aqui, no botão **“✍ Proposta de
+redação”**, e sai impressa **nas últimas páginas do caderno**, depois dos itens:
+
+- **Tema** e **comando** (o que se pede ao estudante) são obrigatórios; o **tipo
+  de texto esperado** é opcional.
+- **Textos motivadores**: quantos você quiser, cada um com título (opcional),
+  texto e **fonte**. Uma **linha em branco** separa parágrafos, como nos
+  textos-base em prosa; `<b>` e `<i>` funcionam para destacar termos.
+- A proposta é **de cada prova**: o 9º ano não escreve sobre o tema da 3ª série.
+  Troque de prova no menu à esquerda para escrever a de cada uma.
+- Enquanto a proposta estiver em branco, o **Painel avisa** na “Conferência da
+  prova” — a prova tem redação e o caderno está incompleto.
+- O botão só aparece se a prova **tiver redação** (“⚙ Configurar prova”, no
+  Painel). Prova sem redação não tem proposta, nem folha de redação no cartão,
+  nem lançamento de NC/NE/TL — a redação simplesmente não existe ali.
+
+**6 · Cartões-resposta** — impressão dos cartões nominais do elenco da prova. A
+lista de estudantes sobe em **8 · Administração**; aqui você confere quem está na
+prova e imprime.
 
 Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
 
@@ -106,28 +182,45 @@ Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
   com centena, dezena e unidade;
 - **discursiva** — uma pauta por item tipo D, com as bolhas de percentual de
   acerto (0, 25, 50, 75 e 100%) que **quem corrige** preenche;
-- **redação** — pauta de 30 linhas. A coordenação decide se imprime, em
-  “Configurar simulado”.
+- **redação** — pauta de 30 linhas, com o **tema** da proposta impresso acima
+  dela (é esta folha que a professora corrige). A coordenação decide se imprime,
+  em “⚙ Configurar prova”, no Painel.
 
 Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos e
 “folha N de M”, para a digitalização em lote saber a que estudante e a que parte
 da prova cada imagem pertence.
 
-**6 · Correção e boletins** — lançamento das marcações (à mão ou importando o
+**7 · Correção e boletins** — lançamento das marcações (à mão ou importando o
 CSV do leitor óptico), notas dos itens discursivos, redação (NC, NE e TL) e
 impressão dos boletins por turma.
 
-- A **professora de redação** vê apenas a tabela de lançamento da redação.
+- A **professora de redação** vê a **proposta daquela prova** de um lado e a
+  tabela de lançamento do outro — nada mais.
 - Cada **docente** vê apenas as notas dos próprios itens discursivos.
 - A **coordenação** vê tudo.
 
-**7 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
+No lançamento da redação você digita três coisas — **NC** (nota de conteúdo, de
+0 a 10), **NE** (número de erros) e **TL** (total de linhas escritas) — e a nota
+sai da planilha oficial: **NR = NC − 2·NE/TL**. A coluna **“como a nota se
+forma”** mostra a conta com os seus números (`9,0 − 2·3/28`, desconto 0,21),
+porque o desconto por erro depende do tamanho do texto: os mesmos três erros
+pesam mais numa redação de 10 linhas do que numa de 30.
+
+- **Sem TL não há nota**: a linha fica marcada como “falta TL”, em vez de
+  mostrar uma nota que seria só a NC.
+- Se a conta passar do zero, a nota é **0** e a tabela diz isso.
+- TL acima da pauta de 30 linhas é **avisado**, não corrigido — quem decide é
+  quem corrigiu.
+- Cada campo é gravado ao sair dele, e só a linha daquele estudante é
+  recalculada: a tela não se remonta, então o **Tab** vai para o campo seguinte.
+
+**8 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
 a **lista de estudantes**.
 
 ## Trocar de prova
 
-O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no topo
-diz em qual você está trabalhando, e ele manda em todas as telas — os textos, os
+O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no alto
+do menu à esquerda diz em qual você está trabalhando, e ele manda em todas as telas — os textos, os
 itens, o caderno, os cartões e a correção são sempre os daquela prova. A escolha
 fica guardada no seu navegador; a do colega é independente da sua.
 
@@ -143,12 +236,12 @@ inclusão. São dois eixos diferentes.
   **todas as provas** desliga o filtro quando você quer ver tudo junto.
 
 Cada prova tem nome, etapa, data, duração, **quantidade de questões** e a escolha
-de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa e as instruções
-do caderno também são de cada prova.
+de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa, as instruções
+do caderno e a **proposta de redação** também são de cada prova.
 
 ## Coordenação: subir a lista de estudantes
 
-Tela **7 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
+Tela **8 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
 estudante, colunas separadas por `;`, `,` ou tabulação (colar direto de uma
 planilha funciona):
 
@@ -177,12 +270,12 @@ O simulado é o mesmo para toda a equipe: o que você salva aparece para os
 outros. Cada alteração é gravada na hora, item por item — duas pessoas mexendo
 em coisas diferentes não se atrapalham.
 
-Para ver o que os colegas fizeram agora, clique em 🔄 no topo (o sistema também
+Para ver o que os colegas fizeram agora, clique em 🔄 no pé do menu à esquerda (o sistema também
 atualiza sozinho quando você volta para a aba).
 
 ## Coordenação: criar o acesso de alguém
 
-1. Tela **7 · Administração** → **+ Adicionar pessoa**.
+1. Tela **8 · Administração** → **+ Adicionar pessoa**.
 2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
    que a pessoa coordena e, se quiser, o componente que ela leciona.
 3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar

@@ -7,8 +7,9 @@ const KEY = 'pas-marista-mvp-v1';
 
 // Versão do formato do estado. v1 tinha uma prova só (`config`); v2 tem a
 // lista `provas`, e textos, itens e respostas passam a saber a que prova
-// pertencem. `load()` converte o cache v1 em vez de descartá-lo.
-const VERSAO_ESTADO = 2;
+// pertencem; v3 traz `alocacoes` (meta por docente) e o autor do item por
+// e-mail. `load()` converte o cache antigo em vez de descartá-lo.
+const VERSAO_ESTADO = 3;
 
 // As séries que a escola aplica. É por elas que estudante e prova se
 // encontram: o estudante pertence a uma série, a prova é de uma série.
@@ -80,7 +81,12 @@ function provaNova(serie, ordem) {
     duracao: '4h30',
     totalQuestoes: QUESTOES_DA_SERIE[serie] ?? null,
     temRedacao: true,
-    imprimirRedacao: true
+    imprimirRedacao: true,
+    // Arranjo da capa: 'vertical' (arte na faixa esquerda, como no caderno do
+    // PAS) ou 'horizontal' (arte na metade de cima da folha). Mora no `dados`
+    // jsonb da prova, então não pede mudança de esquema; a prova antiga, que
+    // não tem o campo, cai no vertical em `arranjoCapa()` (js/app.js).
+    capaArranjo: 'vertical'
   };
 }
 
@@ -101,7 +107,11 @@ function blank() {
     elencos: {},
     // provaId → estId → respostas. Sem a prova na chave, a 2ª etapa
     // sobrescreveria a 1ª do mesmo estudante.
-    respostas: {}
+    respostas: {},
+    // provaId → e-mail do docente → meta. Quanto cada um deve entregar em cada
+    // prova. Chaveado por e-mail, não por nome: nome é rótulo, e-mail é
+    // identidade — é por ele que meta e produção se cruzam.
+    alocacoes: {}
   };
 }
 
@@ -115,7 +125,37 @@ function seed() {
   s.provaAtiva = PROVA_EXEMPLO;
   Object.assign(s.provas.find(p => p.id === PROVA_EXEMPLO), {
     nome: 'Simulado PAS 2026', etapa: '1ª Etapa',
-    dataAplicacao: '2026-09-12', duracao: '4h30'
+    dataAplicacao: '2026-09-12', duracao: '4h30',
+    // A proposta de redação é da prova, como a capa e as instruções: tema,
+    // comando, tipo de texto esperado e os textos motivadores. Fica no próprio
+    // registro da prova, que é uma linha {id, dados jsonb} em `public.provas` —
+    // não há esquema novo a criar. Prova com `temRedacao: false` simplesmente
+    // não tem este campo, e nada de redação aparece em lugar nenhum.
+    redacao: {
+      tema: 'A água do Cerrado como patrimônio de todos',
+      tipoTexto: 'texto argumentativo em prosa',
+      comando: 'A partir dos textos motivadores e das leituras feitas ao longo da etapa, ' +
+        'redija um texto argumentativo em prosa defendendo uma posição sobre a proteção das ' +
+        'nascentes do Cerrado. Apresente pelo menos dois argumentos e uma proposta de ação ' +
+        'que envolva a comunidade escolar.',
+      motivadores: [
+        {
+          titulo: 'Trecho de reportagem',
+          texto: 'Das doze grandes bacias hidrográficas brasileiras, oito nascem no Cerrado. ' +
+            'A vegetação de raízes profundas funciona como uma esponja: infiltra a água da ' +
+            'chuva e a devolve devagar às nascentes.\n\n' +
+            'Onde a vereda é drenada para plantio, a devolução para de acontecer. O rio não ' +
+            'seca de uma vez — ele perde a vazão de base, aquela que o sustenta na estiagem.',
+          fonte: 'Agência Brasil, 2025 (adaptado)'
+        },
+        {
+          titulo: 'Do texto de Guimarães Rosa lido nesta prova',
+          texto: 'Mas a caixa-d’água racha: onde a vereda seca, o buriti tomba, e com ele ' +
+            'vai-se a memória da água.',
+          fonte: 'Guimarães Rosa (adaptado)'
+        }
+      ]
+    }
   });
   s.perfil = { papel: 'coordenacao', nome: 'Raul', componente: null };
 
@@ -266,9 +306,10 @@ function seed() {
   return s;
 }
 
-// Converte um estado v1 (prova única) em v2. Serve tanto para o cache do
-// navegador quanto para um backup JSON antigo que alguém importe.
-function migrarV1paraV2(velho) {
+// Converte um estado v1 (prova única) no formato atual. Parte de `blank()`, que
+// já é a forma corrente, então acompanha as versões seguintes sem retoque.
+// Serve tanto para o cache do navegador quanto para um backup JSON antigo.
+function migrarDeV1(velho) {
   const s = blank();
   const c = velho.config || {};
   const serie = SERIES.includes(c.serie) ? c.serie : '1ª série EM';
@@ -303,12 +344,18 @@ function gravarLS(v) {
   try { localStorage.setItem(KEY, v); } catch { /* sem persistência local */ }
 }
 
+// v2 → v3: só acrescenta `alocacoes`. Nada do que já existia muda de forma, e
+// o item sem `autorEmail` continua válido — a chave do autor cai no nome.
+function migrarV2paraV3(velho) {
+  return { ...velho, versao: 3, alocacoes: velho.alocacoes || {} };
+}
+
 function load() {
   try {
     const s = JSON.parse(lerLS());
     if (s && s.versao === VERSAO_ESTADO) return s;
-    if (s && s.versao === 1) {
-      const novo = migrarV1paraV2(s);
+    if (s && (s.versao === 1 || s.versao === 2)) {
+      const novo = migrarV2paraV3(s.versao === 1 ? migrarDeV1(s) : s);
       save(novo);
       return novo;
     }
@@ -331,5 +378,5 @@ export {
   KEY, VERSAO_ESTADO, COMPONENTES, COMPONENTES_LEGADOS, TODOS_COMPONENTES,
   ehComponenteLegado, SUCESSORAS_DE_ARTES,
   GRUPOS, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
-  uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
+  uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 };

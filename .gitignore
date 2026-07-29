@@ -1,0 +1,10 @@
+# Worktrees temporários criados pelo Claude Code quando agentes trabalham em
+# paralelo. São checkouts do próprio repositório: commitá-los aninharia uma
+# cópia do projeto dentro dele mesmo. A ferramenta os remove sozinha ao fim.
+.claude/worktrees/
+
+# Lixo de sistema operacional, que aparece quando alguém abre a pasta no
+# Finder ou no Explorer.
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -6,10 +6,13 @@ import { NUVEM } from './config-supabase.js';
 import {
   COMPONENTES, TODOS_COMPONENTES, ehComponenteLegado, SUCESSORAS_DE_ARTES,
   GRUPOS, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
-  uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
+  uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 } from './dados.js';
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
+import {
+  carregarKatex, rico, simples, vazio as ricoVazio, editorRico, ligarEditoresRicos
+} from './rico.js';
 import { lerLinhasEstudantes } from './planilha.js';
 
 let S = load();
@@ -74,6 +77,12 @@ const PERS = {
   provasTodas() { if (modoNuvem) nuvem.gravarLinhas('provas', S.provas).catch(PERS.falha); },
   elenco(provaId) {
     if (modoNuvem) nuvem.gravarElenco(provaId, S.elencos[provaId] || []).catch(PERS.falha);
+  },
+  alocacao(provaId, chave) {
+    if (modoNuvem) nuvem.gravarAlocacao(provaId, chave, S.alocacoes[provaId]?.[chave]).catch(PERS.falha);
+  },
+  alocacoes(provaId) {
+    if (modoNuvem) nuvem.gravarAlocacoes(provaId, S.alocacoes[provaId] || {}).catch(PERS.falha);
   },
   texto(t) { if (modoNuvem) nuvem.gravarLinha('textos', t).catch(PERS.falha); },
   textosTodos() { if (modoNuvem) nuvem.gravarLinhas('textos', S.textos).catch(PERS.falha); },
@@ -258,8 +267,10 @@ function corrigir(est, provaId = idProvaAtual()) {
     g.tot++; if (certa) g.ac++;
     detalhes.push({ numero, gab, m: marcada ? m : null, certa });
   }
-  const red = resp.redacao;
-  const nr = (red && red.tl > 0) ? Math.max(0, red.nc - 2 * red.ne / red.tl) : null;
+  // A nota da redação sai da planilha oficial (NR = NC − 2·NE/TL). A conta vive
+  // num lugar só, `contaDoNR()`, que é a mesma que a tela de lançamento mostra
+  // parcela por parcela — duas implementações da mesma fórmula divergiriam.
+  const nr = contaDoNR(resp.redacao)?.nr ?? null;
   const temResp = Object.keys(resp.marcacoes || {}).length > 0 ||
     Object.keys(resp.discursivas || {}).length > 0;
   return { ac, er, br, eb, porGrupo, nr, detalhes, temResp, total: pv.length, dLanc, dTotal };
@@ -275,20 +286,30 @@ function ranking(provaId, versao) {
 /* ---------------- casca / navegação ---------------- */
 // `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
 // que também vira o título do cabeçalho.
+// `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
+// que também vira o título do cabeçalho. A ordem é a do trabalho: distribuir a
+// prova entre os docentes vem antes de escrever item.
+//
+// Só o número mudou quando a Alocação entrou — as rotas são por nome
+// (`#/textos`), então nenhum endereço salvo quebrou.
+// `curto` é o rótulo do simulacro do tutorial, onde a coluna é estreita.
 const TELAS = {
-  painel:        { n: 1, rot: 'Painel' },
-  textos:        { n: 2, rot: 'Textos e alocação' },
-  itens:         { n: 3, rot: 'Itens e revisão' },
-  caderno:       { n: 4, rot: 'Caderno' },
-  cartoes:       { n: 5, rot: 'Cartões-resposta' },
-  correcao:      { n: 6, rot: 'Correção e boletins' },
-  administracao: { n: 7, rot: 'Administração', soCoordenacaoNaNuvem: true }
+  painel:        { n: 1, rot: 'Painel',               curto: 'Painel' },
+  alocacao:      { n: 2, rot: 'Alocação por docente', curto: 'Alocação', soCoordenacao: true },
+  textos:        { n: 3, rot: 'Textos e alocação',    curto: 'Textos' },
+  itens:         { n: 4, rot: 'Itens e revisão',      curto: 'Itens' },
+  caderno:       { n: 5, rot: 'Caderno',              curto: 'Caderno' },
+  cartoes:       { n: 6, rot: 'Cartões-resposta',     curto: 'Cartões' },
+  correcao:      { n: 7, rot: 'Correção e boletins',  curto: 'Correção' },
+  administracao: { n: 8, rot: 'Administração',        curto: 'Admin.', soCoordenacaoNaNuvem: true }
 };
-// A tela de Administração cuida de contas e da lista de estudantes — só
-// aparece para a coordenação e só com o sistema ligado ao banco on-line.
+// Administração cuida de contas e da lista de estudantes — só aparece para a
+// coordenação e só com o sistema ligado ao banco. Alocação é da coordenação em
+// qualquer modo: quem recebe meta não a define.
 function telasVisiveis() {
-  return Object.entries(TELAS)
-    .filter(([, v]) => !v.soCoordenacaoNaNuvem || (modoNuvem && ehCoord()));
+  return Object.entries(TELAS).filter(([, v]) =>
+    (!v.soCoordenacaoNaNuvem || (modoNuvem && ehCoord())) &&
+    (!v.soCoordenacao || ehCoord()));
 }
 function telaAtual() {
   const h = location.hash.replace('#/', '');
@@ -382,8 +403,9 @@ function render() {
     .map(([k, v]) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>
       <span class="n">${v.n}</span>${esc(v.rot)}</a>`).join('');
   ({
-    painel: telaPainel, textos: telaTextos, itens: telaItens, caderno: telaCaderno,
-    cartoes: telaCartoes, correcao: telaCorrecao, administracao: telaAdministracao
+    painel: telaPainel, alocacao: telaAlocacao, textos: telaTextos, itens: telaItens,
+    caderno: telaCaderno, cartoes: telaCartoes, correcao: telaCorrecao,
+    administracao: telaAdministracao
   }[atual])();
 
   // Estreia: o tutorial do papel abre sozinho, uma única vez.
@@ -469,52 +491,130 @@ function balancoDaProva(provaId) {
   };
 }
 
-// O que a pessoa que está logada produziu numa prova.
-function minhaProducao(provaId) {
-  const meus = itensDaProva(provaId).filter(i => i.autor === S.perfil.nome);
+/* ---------------- quem escreveu o quê ---------------- */
+// Identidade de quem escreve. Na nuvem é o e-mail — chave primária de `equipe`,
+// estável e única. Sem nuvem é o nome, que é tudo que existe ali. Nome sozinho
+// não serve para fechar conta: é editável e a lista tem Paulo Leite e Paulo
+// Eduardo, que a interface mostrava como "Paulo" nos dois casos.
+const idDocente = p => (p?.email || p?.nome || '').toLowerCase();
+const idAutorDoItem = i => (i.autorEmail || i.autor || '').toLowerCase();
+const souEu = i => idAutorDoItem(i) === idDocente(S.perfil);
+
+// O que uma pessoa produziu numa prova. Sem argumento, quem está logado.
+function producaoDe(provaId, chave = idDocente(S.perfil)) {
+  const meus = itensDaProva(provaId).filter(i => idAutorDoItem(i) === chave);
   return {
+    itens: meus,
     criados: meus.length,
     aprovados: meus.filter(i => i.status === 'aprovado').length,
     emRevisao: meus.filter(i => ['area', 'geral'].includes(i.status)).length,
     devolvidos: meus.filter(i => i.status === 'devolvido').length,
-    rascunhos: meus.filter(i => i.status === 'rascunho').length
+    rascunhos: meus.filter(i => i.status === 'rascunho').length,
+    // Por tipo, para conferir contra a divisão da meta quando ela existir.
+    porTipo: Object.fromEntries(Object.keys(TIPOS).map(t =>
+      [t, meus.filter(i => i.tipo === t).length]))
   };
+}
+const minhaProducao = provaId => producaoDe(provaId);
+
+/* ---------------- alocação: a meta de cada docente ---------------- */
+const alocacaoDe = (provaId, chave) => S.alocacoes?.[provaId]?.[chave] || null;
+const minhaAlocacao = provaId => alocacaoDe(provaId, idDocente(S.perfil));
+
+// Quem pode receber meta. Na nuvem, a equipe cadastrada, menos a coordenação
+// geral (que não escreve item) e a professora de redação. Sem nuvem, quem já
+// aparece como autor — é o que dá para saber.
+function docentesAlocaveis() {
+  if (modoNuvem) {
+    return equipeCache
+      .filter(m => ['docente', 'coordenacao_area'].includes(m.papel))
+      .map(m => ({ chave: idDocente(m), nome: m.nome || m.email, email: m.email, componente: m.componente }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }
+  const vistos = new Map();
+  for (const i of S.itens) {
+    const chave = idAutorDoItem(i);
+    if (chave && !vistos.has(chave))
+      vistos.set(chave, { chave, nome: i.autor, email: i.autorEmail || null, componente: i.componente });
+  }
+  const eu = idDocente(S.perfil);
+  if (eu && !vistos.has(eu))
+    vistos.set(eu, { chave: eu, nome: S.perfil.nome, email: S.perfil.email || null, componente: S.perfil.componente });
+  return [...vistos.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+// Soma das metas de uma prova, para comparar com o tamanho dela.
+function somaDasMetas(provaId) {
+  const m = S.alocacoes?.[provaId] || {};
+  return Object.values(m).reduce((s, a) => s + (a.meta || 0), 0);
+}
+
+// Barrinha de progresso contra a meta. Sem meta não desenha barra: "sem meta"
+// e "meta zero" dizem coisas diferentes, e uma barra vazia afirmaria a segunda.
+function progressoDaMeta(feito, meta) {
+  if (!meta) return '<span style="font-size:11.5px;color:var(--ink-2)">sem meta definida</span>';
+  const pct = Math.min(100, Math.round(feito / meta * 100));
+  const cls = feito >= meta ? 'ok' : feito > 0 ? 'pend' : 'falta';
+  return `<div class="meta-barra ${cls}" title="${feito} de ${meta}">
+    <i style="width:${pct}%"></i><b>${feito}/${meta}</b></div>`;
 }
 
 // Visão do docente: o que ele deve entregar em CADA prova, não só na ativa.
-// A meta por tipo de item entra aqui quando a tela de Administração passar a
-// alocá-la; por ora a linha mostra a produção e o estágio de cada item.
 function painelDoDocente() {
-  const linhas = provasOrdenadas().map(p => {
+  const provas = provasOrdenadas();
+  const linhas = provas.map(p => {
     const m = minhaProducao(p.id);
-    const b = balancoDaProva(p.id);
+    const a = minhaAlocacao(p.id);
+    const meta = a?.meta || 0;
+    // A situação responde "estou em dia?" — e isso só tem resposta contra a
+    // meta. Sem meta, o mais honesto é relatar o estágio do que existe.
     const situacao = m.devolvidos ? '<span class="chip falta">Devolvido — ajustar</span>'
+      : meta && m.aprovados >= meta ? '<span class="chip ok">Meta cumprida</span>'
+      : meta && m.criados >= meta ? '<span class="chip pend">Entregue, em revisão</span>'
+      : meta ? `<span class="chip falta">Faltam ${meta - m.criados}</span>`
       : m.emRevisao ? '<span class="chip pend">Em revisão</span>'
       : m.rascunhos ? '<span class="chip info">Rascunho pendente</span>'
       : m.criados ? '<span class="chip ok">Tudo aprovado</span>'
       : '<span class="chip">Nada entregue</span>';
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td>${progressoDaMeta(m.aprovados, meta)}</td>
       <td>${m.criados}</td><td>${m.aprovados}</td><td>${m.emRevisao}</td>
       <td>${situacao}</td>
-      <td style="font-size:11.5px;color:var(--ink-2)">${b.totalQuestoes
-        ? `${b.aprovados} de ${b.totalQuestoes} na prova`
-        : `${b.aprovados} aprovado${b.aprovados === 1 ? '' : 's'} na prova`}</td>
     </tr>`;
   }).join('');
-  const tot = provasOrdenadas().reduce((s, p) => {
+
+  const tot = provas.reduce((s, p) => {
     const m = minhaProducao(p.id);
-    return { criados: s.criados + m.criados, aprovados: s.aprovados + m.aprovados };
-  }, { criados: 0, aprovados: 0 });
+    return {
+      criados: s.criados + m.criados,
+      aprovados: s.aprovados + m.aprovados,
+      meta: s.meta + (minhaAlocacao(p.id)?.meta || 0)
+    };
+  }, { criados: 0, aprovados: 0, meta: 0 });
+
+  // Observações que a coordenação anexou à meta — ditas aqui, onde interessam.
+  const recados = provas
+    .map(p => ({ p, obs: minhaAlocacao(p.id)?.observacao }))
+    .filter(x => x.obs);
 
   return `<div class="cartao" style="margin-bottom:16px">
     <h3>O que você tem para entregar</h3>
-    <table><thead><tr><th>Prova</th><th>Criados</th><th>Aprovados</th><th>Em revisão</th><th>Situação</th><th></th></tr></thead>
-      <tbody>${linhas}</tbody></table>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Prova</th><th>Aprovados / meta</th><th>Criados</th><th>Aprovados</th><th>Em revisão</th><th>Situação</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>
     <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">
-      No total você tem <b>${tot.criados}</b> ${tot.criados === 1 ? 'item' : 'itens'} nas quatro provas,
-      ${tot.aprovados} já ${tot.aprovados === 1 ? 'aprovado' : 'aprovados'}.
+      ${tot.meta
+        ? `Ao todo a coordenação alocou <b>${tot.meta}</b> ${tot.meta === 1 ? 'item' : 'itens'} para você nas
+           ${provas.length} provas; você criou ${tot.criados} e ${tot.aprovados} ${tot.aprovados === 1 ? 'está aprovado' : 'estão aprovados'}.`
+        : `Você tem <b>${tot.criados}</b> ${tot.criados === 1 ? 'item' : 'itens'} nas ${provas.length} provas,
+           ${tot.aprovados} já ${tot.aprovados === 1 ? 'aprovado' : 'aprovados'}. A coordenação ainda não definiu metas.`}
       Clique numa linha para trabalhar naquela prova.</p>
+    ${recados.length ? `<div class="cartao aviso" style="margin:12px 0 0">
+      <h3>Recado da coordenação</h3>
+      ${recados.map(({ p, obs }) =>
+        `<p style="font-size:13px;margin:0 0 6px"><b>${esc(p.serie)}:</b> ${esc(obs)}</p>`).join('')}
+    </div>` : ''}
   </div>`;
 }
 ACOES['ir-para-prova'] = d => {
@@ -534,23 +634,29 @@ function painelDasProvas() {
     const sit = !b.totalQuestoes ? '<span class="chip info">tamanho a definir</span>'
       : falta === 0 ? '<span class="chip ok">Completa</span>'
       : `<span class="chip pend">faltam ${falta}</span>`;
+    const soma = somaDasMetas(p.id);
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b>${p.id === idProvaAtual() ? ' <span class="chip info">na tela</span>' : ''}</td>
       <td>${esc(p.etapa)}</td>
       <td>${dataBR(p.dataAplicacao)}</td>
       <td>${b.textos}</td>
+      <td>${soma || '<span style="color:var(--ink-2)">—</span>'}</td>
       <td>${b.criados}</td>
       <td>${b.aprovados}${b.totalQuestoes ? ` / ${b.totalQuestoes}` : ''}</td>
-      <td>${p.temRedacao === false ? '—' : '✓'}</td>
+      <td>${p.temRedacao === false ? '—' : propostaEscrita(p.id) ? '✓'
+        : '✓ <span class="red-alerta" title="A proposta de redação desta prova ainda não foi escrita">sem proposta</span>'}</td>
       <td>${sit}</td>
     </tr>`;
   }).join('');
+  const semAlocacao = provasOrdenadas().filter(p => !somaDasMetas(p.id)).length;
   return `<div class="cartao" style="margin-bottom:16px">
     <h3>As provas do simulado</h3>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Série</th><th>Etapa</th><th>Aplicação</th><th>Textos</th><th>Itens</th><th>Aprovados</th><th>Redação</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Série</th><th>Etapa</th><th>Aplicação</th><th>Textos</th><th>Alocado</th><th>Itens</th><th>Aprovados</th><th>Redação</th><th>Situação</th></tr></thead>
       <tbody>${linhas}</tbody></table></div>
-    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Clique numa linha para trabalhar naquela prova.</p>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Clique numa linha para trabalhar naquela prova.${
+      semAlocacao ? ` <b>${semAlocacao}</b> ${semAlocacao === 1 ? 'prova ainda não teve' : 'provas ainda não tiveram'} a produção
+      distribuída entre os docentes — use a tela <a href="#/alocacao">Alocação por docente</a>.` : ''}</p>
   </div>`;
 }
 
@@ -595,6 +701,11 @@ function telaPainel() {
       (doPapel ? ' — defina em “⚙ Configurar prova”' : ''));
   if (b.criados > b.slots && b.slots)
     conf.push(`há <b>${b.criados - b.slots}</b> ${b.criados - b.slots === 1 ? 'item' : 'itens'} além dos espaços dos textos-base`);
+  // A redação é parte da prova: prova com redação e sem proposta escrita é
+  // caderno incompleto, e isso precisa ser dito antes da impressão.
+  if (provaTemRedacao(p.id) && !propostaEscrita(p.id))
+    conf.push('esta prova tem redação, mas a <b>proposta</b> (tema, comando e textos motivadores) ainda não foi escrita' +
+      (doPapel ? ' — escreva em <a href="#/caderno">Caderno</a>, no botão “✍ Proposta de redação”' : ''));
 
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
@@ -690,6 +801,9 @@ function dlgProva(p, nova = false) {
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
         <input type="checkbox" id="cfg-red" ${p.imprimirRedacao !== false ? 'checked' : ''}> imprimir a folha de redação no cartão-resposta
         <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
+      <p style="font-size:12px;color:var(--ink-2);margin:10px 0 0">Sem redação, a prova não tem proposta, nem folha de
+        redação, nem lançamento de NC/NE/TL. A <b>proposta</b> — tema, comando e textos motivadores — é escrita na tela
+        <b>Caderno</b>, em “✍ Proposta de redação”, e sai nas últimas páginas do caderno.</p>
     </div>
     <div class="dlg-pe">
       ${!nova && provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
@@ -789,11 +903,13 @@ ACOES['importar-json'] = () => {
     f.text().then(txt => {
       try {
         const novo = JSON.parse(txt);
-        // Backups anteriores ao multi-prova ainda entram: viram a prova da
-        // série que estava configurada neles.
-        if (novo?.versao === 1) {
-          S = substituir(migrarV1paraV2(novo));
-          render(); PERS.tudo(); toast('Backup de formato antigo importado e convertido.');
+        // Backups de formatos anteriores ainda entram, convertidos: v1 (prova
+        // única) vira a prova da série que estava configurada nele; v2 só ganha
+        // as alocações vazias.
+        if (novo?.versao === 1 || novo?.versao === 2) {
+          S = substituir(migrarV2paraV3(novo.versao === 1 ? migrarDeV1(novo) : novo));
+          render(); PERS.tudo();
+          toast(`Backup no formato v${novo.versao} importado e convertido.`);
           return;
         }
         if (novo?.versao !== VERSAO_ESTADO) throw new Error('formato');
@@ -822,7 +938,7 @@ function dlgPerfil(papel) {
       <div class="dlg-corpo">
         <div class="campo"><label>Seu nome</label>
           <input class="caixa" id="pf-nome" value="${esc(ehRedacao() ? S.perfil.nome : '')}" placeholder="ex.: Helena"></div>
-        <p style="font-size:12.5px;color:var(--ink-2)">Este perfil vê, na tela de Correção, apenas o lançamento das informações de redação (NC, NE e TL) por estudante.</p>
+        <p style="font-size:12.5px;color:var(--ink-2)">Este perfil vê, na tela de Correção, a proposta de redação da prova e o lançamento das informações de redação (NC, NE e TL) por estudante — nada mais.</p>
       </div>
       <div class="dlg-pe"><button class="btn fantasma" data-acao="perfil-cancelar">Cancelar</button>
         <button class="btn" data-acao="perfil-redacao">Entrar</button></div>`);
@@ -864,7 +980,264 @@ ACOES['perfil-redacao'] = () => {
   $('#dlg').close(); commit(); toast('Perfil: ' + nomePerfil());
 };
 
-/* ================= TELA 2 · TEXTOS ================= */
+/* ================= TELA 2 · ALOCAÇÃO POR DOCENTE ================= */
+// Onde a coordenação distribui a prova entre quem escreve, e onde acompanha se
+// cada um está em dia. A meta é por (prova, docente): a mesma pessoa tem metas
+// diferentes em séries diferentes.
+function telaAlocacao() {
+  const p = provaAtual();
+  if (!p) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
+    return;
+  }
+  if (modoNuvem && !equipeCarregada) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Carregando equipe…</div></div></div>';
+    nuvem.carregarEquipe()
+      .then(l => { equipeCache = l; equipeCarregada = true; render(); })
+      .catch(e => { equipeCarregada = true; toast('Não foi possível carregar a equipe: ' + (e.message || e)); render(); });
+    return;
+  }
+
+  const pessoas = docentesAlocaveis();
+
+  // Agrupado por área do conhecimento: é assim que a coordenação distribui.
+  const porArea = {};
+  for (const d of pessoas) {
+    const area = areaDoComponente(d.componente) || 'Sem área definida';
+    (porArea[area] = porArea[area] || []).push(d);
+  }
+
+  const grupos = Object.entries(porArea).sort((a, b2) => a[0].localeCompare(b2[0], 'pt-BR'))
+    .map(([area, lista]) => {
+      const somaArea = lista.reduce((s, d) => s + (alocacaoDe(p.id, d.chave)?.meta || 0), 0);
+      const linhas = lista.map(d => {
+        const a = alocacaoDe(p.id, d.chave);
+        const prod = producaoDe(p.id, d.chave);
+        const meta = a?.meta || 0;
+        return `<tr>
+          <td><b>${esc(d.nome)}</b>${d.email ? `<br><span style="font-size:11px;color:var(--ink-2);font-family:var(--mono)">${esc(d.email)}</span>` : ''}</td>
+          <td>${d.componente ? discChip(d.componente) : '<span style="color:var(--ink-2)">—</span>'}</td>
+          <td><input class="caixa" type="number" min="0" max="90" style="width:88px"
+              value="${meta || ''}" placeholder="—"
+              data-mud="aloc-meta" data-chave="${esc(d.chave)}" aria-label="Meta de ${esc(d.nome)}"></td>
+          <td style="min-width:132px" data-barra="${esc(d.chave)}">${progressoDaMeta(prod.aprovados, meta)}</td>
+          <td>${prod.criados}</td>
+          <td>${prod.emRevisao || '—'}</td>
+          <td>${prod.devolvidos ? `<span class="chip falta">${prod.devolvidos}</span>` : '—'}</td>
+          <td><input class="caixa" style="min-width:150px" value="${esc(a?.observacao || '')}"
+              placeholder="recado (opcional)"
+              data-mud="aloc-obs" data-chave="${esc(d.chave)}" aria-label="Recado para ${esc(d.nome)}"></td>
+        </tr>`;
+      }).join('');
+      return `<tbody>
+        <tr class="aloc-area"><th colspan="2">${esc(area)}</th>
+          <th colspan="6" data-soma-area="${esc(area)}">${rotuloSomaArea(somaArea)}</th></tr>
+        ${linhas}</tbody>`;
+    }).join('');
+
+  $('#app').innerHTML = `
+  <div class="quadro"><div class="miolo">
+    <div class="cab-tela">
+      <div><h2>Alocação — ${esc(p.serie)}</h2>
+        <span class="sub">${esc(p.etapa)} · quantos itens cada docente deve entregar nesta prova</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn fantasma" data-acao="aloc-dividir">Dividir igualmente</button>
+        <button class="btn fantasma" data-acao="aloc-copiar">Copiar de outra prova</button>
+        <button class="btn vermelho fantasma" data-acao="aloc-limpar">Limpar metas</button>
+      </div>
+    </div>
+
+    <div id="aloc-resumo">${htmlResumoAlocacao(p)}</div>
+
+    ${pessoas.length ? `<div class="cartao" style="overflow-x:auto;padding-bottom:6px">
+      <table class="aloc-tab">
+        <thead><tr>
+          <th>Docente</th><th>Componente</th><th>Meta</th><th>Aprovados / meta</th>
+          <th>Criados</th><th>Em revisão</th><th>Devolv.</th><th>Recado</th>
+        </tr></thead>
+        ${grupos}
+      </table>
+    </div>` : `<div class="vazio">Nenhum docente para alocar.${modoNuvem ? ' Cadastre a equipe em Administração.' : ''}</div>`}
+  </div></div>
+  <p class="nota-tela"><strong>A meta é por prova.</strong> A mesma pessoa pode ter metas diferentes no 9º ano e na 3ª série — troque de prova no menu à esquerda para alocar cada uma. Campo em branco significa <em>sem meta</em>, que é diferente de meta zero: quem está sem meta não aparece cobrado no painel dele. O <strong>recado</strong> aparece no painel do docente, junto da meta. Cada campo é gravado ao sair dele, como no resto do sistema.</p>`;
+}
+
+// Resumo da alocação: os três cartões e a conferência. Fica numa função à
+// parte porque é a única coisa que muda quando uma meta é digitada — e a tela
+// atualiza só este pedaço, sem remontar a tabela.
+//
+// Remontar tudo custaria o foco: a coordenação digita meta, tecla Tab, e o
+// campo de destino deixaria de existir no meio do caminho. Com 22 docentes por
+// prova, isso torna a tela inutilizável para o uso que ela tem.
+function htmlResumoAlocacao(p) {
+  const soma = somaDasMetas(p.id);
+  const b = balancoDaProva(p.id);
+  const pessoas = docentesAlocaveis();
+  const semMeta = pessoas.filter(d => !alocacaoDe(p.id, d.chave)?.meta).length;
+
+  const conf = [];
+  if (!b.totalQuestoes)
+    conf.push('a quantidade de questões desta prova ainda não foi definida — defina no Painel, em “⚙ Configurar prova”, para a soma das metas ter com o que ser comparada');
+  else if (soma !== b.totalQuestoes)
+    conf.push(`as metas somam <b>${soma}</b> e a prova pede <b>${b.totalQuestoes}</b> — ${
+      soma < b.totalQuestoes ? `faltam <b>${b.totalQuestoes - soma}</b> por alocar` : `há <b>${soma - b.totalQuestoes}</b> além do tamanho da prova`}`);
+  if (b.slots && soma > b.slots)
+    conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, menos do que as metas somam`);
+  if (semMeta && pessoas.length)
+    conf.push(`${semMeta} ${semMeta === 1 ? 'docente está' : 'docentes estão'} sem meta nesta prova`);
+
+  return `
+    <div class="grade g3" style="margin-bottom:16px">
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Alocado</h3>
+        <div class="num">${soma}<small>${b.totalQuestoes ? ` / ${b.totalQuestoes} da prova` : ' de um total ainda a definir'}</small></div>
+        <div class="barra"><i style="width:${b.totalQuestoes ? Math.min(100, soma / b.totalQuestoes * 100) : 0}%"></i></div></div>
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--verde)"></span>Já aprovado</h3>
+        <div class="num">${b.aprovados}<small>${soma ? ` / ${soma} alocados` : ''}</small></div>
+        <div class="barra"><i style="width:${soma ? Math.min(100, b.aprovados / soma * 100) : 0}%"></i></div></div>
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Docentes com meta</h3>
+        <div class="num">${pessoas.length - semMeta}<small> / ${pessoas.length}</small></div></div>
+    </div>
+    ${conf.length ? `<div class="cartao aviso" style="margin-bottom:16px">
+      <h3>Conferência da alocação</h3>
+      <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7">${conf.map(c => `<li>${c}</li>`).join('')}</ul>
+    </div>` : ''}`;
+}
+
+const rotuloSomaArea = n => `${n} ${n === 1 ? 'item alocado' : 'itens alocados'}`;
+
+// Guarda e sincroniza sem remontar a tela, e atualiza à mão tudo o que depende
+// da meta: a barra daquela linha, o subtotal da área e o resumo do topo. Um
+// número que não acompanha é pior que número nenhum — a coordenação passa a
+// desconfiar da tela inteira.
+function alocacaoMudou(provaId, chave) {
+  save(S);
+  PERS.alocacao(provaId, chave);
+  const p = provaPorId(provaId);
+  if (!p) return;
+
+  $('#aloc-resumo').innerHTML = htmlResumoAlocacao(p);
+
+  const cel = document.querySelector(`[data-barra="${CSS.escape(chave)}"]`);
+  if (cel) cel.innerHTML = progressoDaMeta(producaoDe(provaId, chave).aprovados,
+                                           alocacaoDe(provaId, chave)?.meta || 0);
+
+  // Subtotais por área, recalculados dos dados — não incrementados a partir do
+  // que está na tela.
+  const porArea = {};
+  for (const d of docentesAlocaveis()) {
+    const area = areaDoComponente(d.componente) || 'Sem área definida';
+    porArea[area] = (porArea[area] || 0) + (alocacaoDe(provaId, d.chave)?.meta || 0);
+  }
+  for (const th of document.querySelectorAll('[data-soma-area]'))
+    th.textContent = rotuloSomaArea(porArea[th.dataset.somaArea] || 0);
+}
+
+// Meta vazia apaga a alocação em vez de gravar zero.
+function alocacaoParaEditar(provaId, chave) {
+  S.alocacoes[provaId] = S.alocacoes[provaId] || {};
+  const pessoa = docentesAlocaveis().find(d => d.chave === chave);
+  return S.alocacoes[provaId][chave] || (S.alocacoes[provaId][chave] = {
+    meta: 0, observacao: '',
+    nome: pessoa?.nome || chave, componente: pessoa?.componente || null
+  });
+}
+MUDS['aloc-meta'] = (d, el) => {
+  const provaId = idProvaAtual();
+  const n = parseInt(el.value, 10);
+  const a = alocacaoParaEditar(provaId, d.chave);
+  a.meta = Number.isFinite(n) && n > 0 ? n : 0;
+  if (!a.meta && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  alocacaoMudou(provaId, d.chave);
+};
+MUDS['aloc-obs'] = (d, el) => {
+  const provaId = idProvaAtual();
+  const a = alocacaoParaEditar(provaId, d.chave);
+  a.observacao = el.value.trim();
+  if (!a.meta && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  alocacaoMudou(provaId, d.chave);
+};
+
+ACOES['aloc-dividir'] = () => {
+  const p = provaAtual();
+  const pessoas = docentesAlocaveis();
+  if (!p || !pessoas.length) return;
+  if (!p.totalQuestoes) {
+    toast('Defina a quantidade de questões da prova primeiro, no Painel.');
+    return;
+  }
+  // Divisão inteira com o resto nas primeiras: a soma fecha exatamente com o
+  // tamanho da prova, sem sobra nem falta.
+  const base = Math.floor(p.totalQuestoes / pessoas.length);
+  const resto = p.totalQuestoes % pessoas.length;
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Dividir ${p.totalQuestoes} itens igualmente?</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo"><p style="margin-top:0">Cada um dos <b>${pessoas.length}</b> docentes fica com
+      <b>${base}</b> ${base === 1 ? 'item' : 'itens'}${resto ? `, e os ${resto} primeiros da lista recebem um a mais` : ''}.
+      Isto <b>substitui as metas já definidas</b> nesta prova; os recados são preservados.</p></div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="aloc-dividir-ok">Dividir</button></div>`);
+};
+ACOES['aloc-dividir-ok'] = () => {
+  const p = provaAtual();
+  const pessoas = docentesAlocaveis();
+  const base = Math.floor(p.totalQuestoes / pessoas.length);
+  const resto = p.totalQuestoes % pessoas.length;
+  pessoas.forEach((d, ix) => {
+    const a = alocacaoParaEditar(p.id, d.chave);
+    a.meta = base + (ix < resto ? 1 : 0);
+    if (!a.meta && !a.observacao) delete S.alocacoes[p.id][d.chave];
+  });
+  $('#dlg').close(); commit(); PERS.alocacoes(p.id);
+  toast(`${p.totalQuestoes} itens divididos entre ${pessoas.length} docentes.`);
+};
+
+ACOES['aloc-copiar'] = () => {
+  const p = provaAtual();
+  const outras = provasOrdenadas().filter(x => x.id !== p.id && somaDasMetas(x.id) > 0);
+  if (!outras.length) { toast('Nenhuma outra prova tem metas para copiar.'); return; }
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Copiar metas para ${esc(p.serie)}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <div class="campo"><label>Copiar as metas de</label>
+        <select class="caixa" id="aloc-de">${outras.map(x =>
+          `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(x.etapa)} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Substitui as metas desta prova pelas da prova
+        escolhida, docente por docente. Útil quando a distribuição entre as séries é a mesma. Os recados não são copiados.</p>
+    </div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="aloc-copiar-ok">Copiar</button></div>`);
+};
+ACOES['aloc-copiar-ok'] = () => {
+  const p = provaAtual();
+  const de = $('#aloc-de').value;
+  const origem = S.alocacoes?.[de] || {};
+  S.alocacoes[p.id] = {};
+  for (const [chave, a] of Object.entries(origem))
+    if (a.meta) S.alocacoes[p.id][chave] = { ...a, observacao: '' };
+  $('#dlg').close(); commit(); PERS.alocacoes(p.id);
+  toast(`Metas copiadas de ${provaPorId(de)?.serie}.`);
+};
+
+ACOES['aloc-limpar'] = () => {
+  const p = provaAtual();
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Limpar as metas de ${esc(p.serie)}?</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo"><p style="margin-top:0">Todos os docentes ficam <b>sem meta</b> nesta prova, e os recados
+      são apagados. Os itens já escritos não são tocados.</p></div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn vermelho" data-acao="aloc-limpar-ok">Limpar metas</button></div>`);
+};
+ACOES['aloc-limpar-ok'] = () => {
+  const p = provaAtual();
+  S.alocacoes[p.id] = {};
+  $('#dlg').close(); commit(); PERS.alocacoes(p.id);
+  toast('Metas limpas.');
+};
+
+/* ================= TELA 3 · TEXTOS ================= */
 function telaTextos() {
   const pAtiva = provaAtual();
   if (!pAtiva) {
@@ -877,7 +1250,7 @@ function telaTextos() {
     const livres = Math.max(0, (t.slots || 0) - itens.length);
     const chips = itens.map((i, ii) => `
       <span class="slot" data-acao="abrir-item" data-id="${i.id}" role="button" tabindex="0"
-        title="${esc(STATUS_ITEM[i.status].rot)}" style="cursor:pointer;${i.autor === S.perfil.nome ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
+        title="${esc(STATUS_ITEM[i.status].rot)}" style="cursor:pointer;${souEu(i) ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
         <span class="t t${i.tipo}">${i.tipo}</span>${discChip(i.componente)} ${esc(i.autor.split(' ')[0])}${i.status !== 'aprovado' ? ' ·⏳' : ''}
         ${ehCoord() ? `
           <button class="mv" data-acao="item-mover" data-id="${i.id}" data-dir="-1" title="Mover item para a esquerda" ${ii === 0 ? 'disabled' : ''}>◀</button>
@@ -1049,7 +1422,7 @@ ACOES['item-mover'] = d => {
   commit(); PERS.itens([S.itens[gi].id, S.itens[gj].id]);
 };
 
-/* ================= TELA 3 · ITENS ================= */
+/* ================= TELA 4 · ITENS ================= */
 let filtroStatus = 'todos', soMeus = false, soMinhaArea = false, todasAsProvas = false;
 function telaItens() {
   if (telaItens._primeiraVez === undefined) {
@@ -1063,7 +1436,7 @@ function telaItens() {
   const lista = S.itens.filter(i =>
     (todasAsProvas || i.provaId === pAtiva?.id) &&
     (filtroStatus === 'todos' || i.status === filtroStatus) &&
-    (!soMeus || i.autor === S.perfil.nome) &&
+    (!soMeus || souEu(i)) &&
     (!soMinhaArea || areaDoComponente(i.componente) === S.perfil.area));
   const linhas = lista.map(i => {
     const t = textoDe(i);
@@ -1072,6 +1445,7 @@ function telaItens() {
     return `<tr class="clic" data-acao="abrir-item" data-id="${i.id}">
       ${todasAsProvas ? `<td><b>${esc(pr?.serie || '—')}</b></td>` : ''}
       <td>Texto ${t?.numero ?? '—'}</td>
+      <td class="it-enun" title="${esc(simples(i.enunciado).slice(0, 300))}"><div>${rico(i.enunciado)}</div></td>
       <td><span class="t t${i.tipo}" style="display:inline-grid;width:22px;height:22px;place-items:center;border-radius:6px;color:#fff;font-size:11px;font-weight:800">${i.tipo}</span></td>
       <td>${discChip(i.componente)}<br><span style="font-size:11px;color:var(--ink-2)">${esc(areaDoComponente(i.componente) || '—')}</span></td>
       <td>${esc(i.autor)}</td>
@@ -1098,7 +1472,7 @@ function telaItens() {
         <button class="btn" data-acao="novo-item">+ Novo item</button>
       </div>
     </div>
-    ${linhas ? `<table><thead><tr>${todasAsProvas ? '<th>Prova</th>' : ''}<th>Texto</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
+    ${linhas ? `<table><thead><tr>${todasAsProvas ? '<th>Prova</th>' : ''}<th>Texto</th><th>Enunciado</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : '<div class="vazio">Nenhum item neste filtro. Crie um item pelos espaços livres em “Textos e alocação” ou pelo botão acima.</div>'}
   </div></div>
@@ -1120,7 +1494,8 @@ function novoRascunho(textoId) {
   return {
     id: null, provaId, textoId: textoId || textosAprovados(provaId)[0]?.id || null,
     tipo: 'A', componente: S.perfil.componente || 'Português',
-    autor: S.perfil.nome, habilidade: '', grupo: 'Interpretar', versao: 'ambas',
+    autor: S.perfil.nome, autorEmail: S.perfil.email || null,
+    habilidade: '', grupo: 'Interpretar', versao: 'ambas',
     linhasRef: '', gabarito: 'C', opcoes: ['', '', '', ''],
     enunciado: '', status: 'rascunho', comentarios: []
   };
@@ -1177,8 +1552,8 @@ function dlgItem() {
   } else if (rasc.tipo === 'D') {
     respostaHtml = `
       <div class="campo" style="margin-bottom:12px"><label>Resposta esperada (guia de correção)</label>
-        <textarea class="caixa" rows="3" data-mud="it-campo" data-campo="gabarito"
-          placeholder="O que se espera na resposta construída do estudante">${esc(rasc.gabarito || '')}</textarea></div>
+        ${editorRico({ campo: 'gabarito', valor: rasc.gabarito || '', linhas: 3,
+                       rotulo: 'O que se espera na resposta construída do estudante' })}</div>
       <div class="form-linha">
         <div class="campo" style="flex:0;min-width:160px"><label>Linhas de resposta</label>
           <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"></div>
@@ -1198,9 +1573,10 @@ function dlgItem() {
   const opcoesHtml = rasc.tipo === 'C' ? `
     <div class="campo" style="margin-bottom:12px"><label>Opções (A a D)</label>
       ${['A', 'B', 'C', 'D'].map((L, i) => `
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-          <b style="width:16px">${L}</b>
-          <input class="caixa" data-mud="it-opcao" data-i="${i}" value="${esc(rasc.opcoes[i] || '')}">
+        <div class="it-opcao">
+          <b>${L}</b>
+          ${editorRico({ campo: 'opcao', i, valor: rasc.opcoes[i] || '', linhas: 1,
+                         rotulo: 'Opção ' + L })}
         </div>`).join('')}
     </div>` : '';
 
@@ -1217,7 +1593,7 @@ function dlgItem() {
   // A barra diz para ONDE cada ação leva o item, não só o que ela faz: a
   // dúvida recorrente é se “Salvar” já manda para a revisão. Salvar guarda e
   // deixa o item onde está; quem move é sempre um botão colorido.
-  const meuItem = rasc.autor === S.perfil.nome;
+  const meuItem = souEu(rasc);
   const acoes = [];
   if ((meuItem || ehCoord()) && ['rascunho', 'devolvido'].includes(rasc.status))
     acoes.push({ cls: 'rosa', acao: 'it-enviar', rot: 'Enviar para revisão',
@@ -1279,7 +1655,12 @@ function dlgItem() {
               <div class="seg">${segGrupo}</div></div>
           </div>
           <div class="campo" style="margin-bottom:12px"><label>Enunciado</label>
-            <textarea class="caixa" rows="4" data-mud="it-campo" data-campo="enunciado">${esc(rasc.enunciado)}</textarea></div>
+            ${editorRico({ campo: 'enunciado', valor: rasc.enunciado, linhas: 4,
+                           rotulo: 'Enunciado do item' })}
+            <p class="rico-ajuda">Fórmula entre <code>$…$</code> na linha e <code>$$…$$</code> em
+              destaque, na notação do LaTeX — <code>$\\frac{1}{2}$</code>, <code>$x^2$</code>,
+              <code>$\\sqrt{3}$</code>, <code>$30^\\circ$</code>. A prévia mostra como sai impresso.
+              Valor em real não vira fórmula: “R$ 50,00” continua sendo R$ 50,00.</p></div>
           ${opcoesHtml}${respostaHtml}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -1300,8 +1681,17 @@ MUDS['it-campo'] = (d, el) => {
   rasc[el.dataset.campo] = el.value;
   if (el.dataset.campo === 'linhasRef') reabrirDlgItem();
 };
-MUDS['it-opcao'] = (d, el) => { rasc.opcoes[parseInt(el.dataset.i, 10)] = el.value; };
 MUDS['it-dlinhas'] = (d, el) => { rasc.dLinhas = Math.max(1, Math.min(40, parseInt(el.value, 10) || 10)); };
+
+// Enunciado, opções e resposta esperada são editores ricos (js/rico.js), não
+// <textarea>: recebem ênfase e notação matemática. O aviso de mudança NÃO
+// chama `commit()` nem remonta o diálogo — remontar destruiria o cursor a cada
+// tecla, o mesmo motivo já documentado em `alocacaoMudou()`.
+ligarEditoresRicos((campo, i, valor) => {
+  if (!rasc) return;
+  if (campo === 'opcao') rasc.opcoes[Number(i)] = valor;
+  else if (campo === 'enunciado' || campo === 'gabarito') rasc[campo] = valor;
+});
 ACOES['it-tipo'] = d => {
   rasc.tipo = d.v;
   if (d.v === 'B') rasc.gabarito = /^\d{1,3}$/.test(String(rasc.gabarito)) ? rasc.gabarito : '';
@@ -1320,7 +1710,9 @@ ACOES['it-versao'] = d => { rasc.versao = d.v; reabrirDlgItem(); };
 ACOES['it-gab'] = d => { rasc.gabarito = d.v; reabrirDlgItem(); };
 
 function persistirRascunho() {
-  if (!rasc.enunciado.trim()) { toast('Escreva o enunciado do item.'); return false; }
+  // Enunciado agora é HTML: “vazio” pode ser <br> ou espaço inquebrável, e
+  // `ricoVazio()` olha o texto por baixo da marcação.
+  if (ricoVazio(rasc.enunciado)) { toast('Escreva o enunciado do item.'); return false; }
   if (rasc.tipo === 'B' && !/^\d{1,3}$/.test(String(rasc.gabarito).trim())) { toast('Gabarito do tipo B: número de 0 a 999.'); return false; }
   if (rasc.tipo === 'D' && !(rasc.dLinhas >= 1)) { toast('Informe a quantidade de linhas de resposta do item discursivo.'); return false; }
   if (!rasc.id) { rasc.id = uid(); S.itens.push(rasc); }
@@ -1382,7 +1774,7 @@ ACOES['it-excluir'] = () => {
   $('#dlg').close(); commit(); PERS.removerItem(rasc.id); toast('Item excluído.');
 };
 
-/* ================= TELA 4 · CADERNO ================= */
+/* ================= TELA 5 · CADERNO ================= */
 // Diagramação calibrada contra os cadernos reais do PAS/CEBRASPE (edital 2025):
 // A4, duas colunas de 266pt com fio central, corpo 10pt/13,3pt, número do item
 // em 9pt recuado 18pt para fora da coluna e crédito da fonte em 6pt à direita.
@@ -1412,6 +1804,30 @@ function instrucoes(provaId = idProvaAtual()) {
   return INSTRUCOES_PADRAO;
 }
 
+// Arranjos da capa. A folha é sempre A4 (595×842pt) — o que muda é como a arte
+// e as instruções a dividem. É escolha de cada prova porque a arte muda a cada
+// edição: a imagem que remete a um texto vertical não é a que remete a uma
+// paisagem panorâmica, e forçar uma na moldura da outra a deforma.
+// As medidas de cada arranjo vivem em css/estilo.css, bloco “arranjos de capa”.
+const ARRANJOS_CAPA = {
+  vertical: {
+    rot: 'Vertical — arte na faixa esquerda',
+    desc: 'Arte em 44% da largura, do topo ao pé da folha, e as instruções nos 56% restantes. É o desenho do caderno do PAS e o padrão do sistema.'
+  },
+  horizontal: {
+    rot: 'Horizontal — arte na metade de cima',
+    desc: 'Arte na metade superior da folha (421pt de 842pt) e instruções na metade inferior, em duas colunas da largura das do miolo. Para imagem panorâmica.'
+  }
+};
+const ARRANJO_CAPA_PADRAO = 'vertical';
+
+// A prova gravada antes deste campo existir não tem `capaArranjo` — e capa
+// nenhuma deve mudar de forma por causa de uma atualização do sistema.
+function arranjoCapa(provaId = idProvaAtual()) {
+  const a = provaPorId(provaId)?.capaArranjo;
+  return ARRANJOS_CAPA[a] ? a : ARRANJO_CAPA_PADRAO;
+}
+
 function htmlCapa(provaId, versao, totalItens) {
   const c = provaPorId(provaId);
   if (!c) return '';
@@ -1419,7 +1835,7 @@ function htmlCapa(provaId, versao, totalItens) {
     ? `<img src="${esc(c.capaImagem)}" alt="">`
     : '';
   return `
-  <div class="pas-capa">
+  <div class="pas-capa capa-${arranjoCapa(provaId)}">
     <div class="pas-capa-arte">
       ${arte}
       <div class="pas-capa-marca">PAS<small>Simulado — Programa de Avaliação Seriada</small></div>
@@ -1479,11 +1895,16 @@ function comandoDoBloco(itens, texto) {
   return `${abertura}, ${acoes}.`;
 }
 
+// O enunciado e as opções são texto rico: `rico()` poda a marcação pela lista
+// de `js/limpar.js` e só então renderiza as fórmulas — o HTML do KaTeX nasce
+// aqui, na hora de imprimir, e nunca esteve no banco. A altura de cada peça é
+// medida depois (`medirPecas`), com a fórmula já desenhada, então a paginação
+// continua certa mesmo quando uma fração estica a linha.
 function htmlItem({ item, numero }) {
-  const enun = esc(item.enunciado);
+  const enun = rico(item.enunciado);
   if (item.tipo === 'C') {
     const ops = (item.opcoes || []).map((o, i) =>
-      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${esc(o)}</p>`).join('');
+      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}</p>`).join('');
     return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${ops}</div>`;
   }
   if (item.tipo === 'D') {
@@ -1531,9 +1952,11 @@ const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
 const PX_POR_PT = 4 / 3;
 
 // Mede cada peça numa régua com a largura exata da coluna.
-function medirPecas(pecas) {
+// `larga` mede na largura da coluna única (541,1pt) em vez da coluna do miolo
+// (266,05pt) — é o que a proposta de redação usa.
+function medirPecas(pecas, larga = false) {
   const regua = document.createElement('div');
-  regua.className = 'pas pas-regua';
+  regua.className = 'pas pas-regua' + (larga ? ' larga' : '');
   document.body.appendChild(regua);
   const alturas = pecas.map(html => {
     regua.innerHTML = html;
@@ -1561,39 +1984,84 @@ function distribuir(pecas, alturas) {
   return paginas;
 }
 
-function htmlPagina(colunas, ident, numero, total) {
+// Peças que anunciam o que vem depois. Título no pé de uma página com o texto
+// na seguinte é título que não serve para nada — quem lê já virou a folha.
+const ehTitulo = html => /class="pas-red-(mot|tema)"/.test(html);
+
+// Paginação de coluna única: uma coluna por folha, na largura cheia. A altura
+// útil é a mesma — o que muda é a largura, e ela já entrou na medição.
+function distribuirEmUmaColuna(pecas, alturas) {
+  const paginas = [];
+  let atual = [], altura = 0;
+  const virar = () => { paginas.push([atual, []]); atual = []; altura = 0; };
+
+  pecas.forEach((html, i) => {
+    // Um título só começa página onde couber também o primeiro pedaço do que
+    // ele anuncia; senão, vira a folha antes dele.
+    const junto = ehTitulo(html) && i + 1 < pecas.length ? alturas[i + 1] : 0;
+    if (altura > 0 && altura + alturas[i] + junto > ALTURA_COLUNA) virar();
+    atual.push(html);
+    altura += alturas[i];
+  });
+  if (atual.length) virar();
+  return paginas;
+}
+
+// `parte` é o rótulo centralizado do alto da página. Os itens saem em “PARTE 2”,
+// como nos cadernos do PAS; a proposta de redação tem o seu próprio.
+function htmlPagina(colunas, ident, numero, total, parte = '-- PARTE 2 --', umaColuna = false) {
+  // Coluna única (proposta de redação): uma coluna na largura cheia e sem fio
+  // central. O fio separa duas colunas; sem elas, seria um risco no meio do
+  // texto.
+  const corpo = umaColuna
+    ? `<div class="pas-col pas-col-larga">${colunas[0].join('')}</div>`
+    : `<div class="pas-col">${colunas[0].join('')}</div>
+       <div class="pas-col">${colunas[1].join('')}</div>`;
   return `
-  <div class="pas-pagina">
+  <div class="pas-pagina${umaColuna ? ' pas-uma-col' : ''}">
     <div class="pas-ident">${ident}</div>
     <div class="pas-fio-topo"></div>
-    <div class="pas-parte">-- PARTE 2 --</div>
+    <div class="pas-parte">${esc(parte)}</div>
     <div class="pas-fio-vert"></div>
-    <div class="pas-corpo">
-      <div class="pas-col">${colunas[0].join('')}</div>
-      <div class="pas-col">${colunas[1].join('')}</div>
-    </div>
+    <div class="pas-corpo">${corpo}</div>
     <div class="pas-fio-base"></div>
     <div class="pas-fol">${numero} / ${total}</div>
   </div>`;
 }
 
 // Monta o caderno inteiro já paginado. Precisa do DOM para medir as peças.
+//
+// A redação entra aqui como parte do caderno, e não como anexo: quando a prova
+// tem redação e a proposta está escrita, ela é paginada à parte — as suas peças
+// não dividem coluna com item nenhum — e vai depois dos itens, nas últimas
+// páginas. Prova sem redação (ou com a proposta ainda em branco) não ganha
+// página nenhuma a mais.
 function htmlCaderno(provaId, versao, comCapa = true) {
   const pv = prova(provaId, versao);
-  if (!pv.length) return '';
+  const comRedacao = propostaEscrita(provaId);
+  if (!pv.length && !comRedacao) return '';
   const porTexto = new Map();
   for (const e of pv) {
     if (!porTexto.has(e.texto.id)) porTexto.set(e.texto.id, { texto: e.texto, itens: [] });
     porTexto.get(e.texto.id).itens.push(e);
   }
   const pecas = [...porTexto.values()].flatMap(({ texto, itens }) => pecasDoBloco(texto, itens));
-  const paginas = distribuir(pecas, medirPecas(pecas));
+  const paginas = pecas.length ? distribuir(pecas, medirPecas(pecas)) : [];
+  // A proposta vai em coluna única, como no caderno do PAS: medida e paginada
+  // na largura cheia, não na coluna do miolo.
+  const pecasRed = comRedacao ? pecasDaProposta(provaId) : [];
+  const paginasRed = pecasRed.length
+    ? distribuirEmUmaColuna(pecasRed, medirPecas(pecasRed, true)) : [];
   const p = provaPorId(provaId);
   const ident = `${esc(p?.nome || '')} — ${esc(p?.serie || '')} · ${esc(p?.etapa || '')}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
   const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(provaId, versao, pv.length)}</div>` : '';
-  const total = paginas.length + (comCapa ? 1 : 0);
-  return `<div class="pas">${capa}${paginas
-    .map((c, i) => htmlPagina(c, ident, i + 1 + (comCapa ? 1 : 0), total)).join('')}</div>`;
+  const total = paginas.length + paginasRed.length + (comCapa ? 1 : 0);
+  let n = comCapa ? 1 : 0;
+  const folhas = [
+    ...paginas.map(c => htmlPagina(c, ident, ++n, total)),
+    ...paginasRed.map(c => htmlPagina(c, ident, ++n, total, PARTE_REDACAO, true))
+  ].join('');
+  return `<div class="pas">${capa}${folhas}</div>`;
 }
 
 function telaCaderno() {
@@ -1603,26 +2071,32 @@ function telaCaderno() {
     return;
   }
   const pv = prova(pAtiva.id, cadVersao);
+  // A proposta de redação é conteúdo do caderno: ela sozinha já justifica gerar
+  // o documento, e a sua falta é avisada em vez de ficar em silêncio.
+  const comRedacao = propostaEscrita(pAtiva.id);
+  const temConteudo = pv.length > 0 || comRedacao;
   $('#app').innerHTML = `
   <div class="quadro">
     <div class="miolo" style="padding-bottom:0">
       <div class="cab-tela">
         <div><h2>Caderno de provas — ${esc(pAtiva.serie)}</h2>
-          <span class="sub">${esc(pAtiva.etapa)} · ${pv.length} itens aprovados nesta versão · numeração contínua · diagramação no padrão PAS</span></div>
+          <span class="sub">${esc(pAtiva.etapa)} · ${pv.length} itens aprovados nesta versão · numeração contínua · diagramação no padrão PAS${
+            provaTemRedacao(pAtiva.id) ? (comRedacao ? ' · com a proposta de redação' : ' · proposta de redação ainda em branco') : ' · sem redação'}</span></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="seg">
             <button class="${cadVersao === 'regular' ? 'sel' : ''}" data-acao="cad-versao" data-v="regular">Regular</button>
             <button class="${cadVersao === 'adaptada' ? 'sel' : ''}" data-acao="cad-versao" data-v="adaptada">Adaptada</button>
           </div>
           ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-capa">⚙ Capa e instruções</button>' : ''}
-          <button class="btn rosa" data-acao="cad-imprimir" ${pv.length ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
+          ${ehCoord() && provaTemRedacao(pAtiva.id) ? '<button class="btn fantasma" data-acao="cad-redacao">✍ Proposta de redação</button>' : ''}
+          <button class="btn rosa" data-acao="cad-imprimir" ${temConteudo ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
         </div>
       </div>
     </div>
-    ${pv.length ? `<div class="pas-previa">${htmlCaderno(pAtiva.id, cadVersao)}</div>`
+    ${temConteudo ? `<div class="pas-previa">${htmlCaderno(pAtiva.id, cadVersao)}</div>`
       : '<div class="miolo"><div class="vazio">Nenhum item aprovado para esta versão ainda. Aprove itens na tela “Itens e revisão”.</div></div>'}
   </div>
-  <p class="nota-tela"><strong>Diagramação calibrada</strong> contra os cadernos do PAS/CEBRASPE de 2025: A4 com duas colunas de 266pt e fio central, corpo de 10pt, número do item recuado para fora da coluna e crédito da fonte em 6pt. O <strong>comando de cada bloco é montado automaticamente</strong> a partir dos tipos de item — “julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C” —, e o texto de abertura é editável em cada texto-base. A quebra de páginas acontece na impressão: use “Imprimir” e escolha “Salvar como PDF”.</p>`;
+  <p class="nota-tela"><strong>Diagramação calibrada</strong> contra os cadernos do PAS/CEBRASPE de 2025: A4 com duas colunas de 266pt e fio central, corpo de 10pt, número do item recuado para fora da coluna e crédito da fonte em 6pt. O <strong>comando de cada bloco é montado automaticamente</strong> a partir dos tipos de item — “julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C” —, e o texto de abertura é editável em cada texto-base. A <strong>proposta de redação</strong> fecha o caderno, nas últimas páginas, quando a prova tem redação e a proposta está escrita. A quebra de páginas acontece na impressão: use “Imprimir” e escolha “Salvar como PDF”.</p>`;
 }
 ACOES['cad-versao'] = d => { cadVersao = d.v; render(); };
 ACOES['cad-imprimir'] = () => {
@@ -1633,12 +2107,22 @@ ACOES['cad-imprimir'] = () => {
 ACOES['cad-capa'] = () => {
   const p = provaAtual();
   if (!p) return;
+  const atual = arranjoCapa(p.id);
+  const opsArranjo = Object.entries(ARRANJOS_CAPA).map(([k, a]) => `
+        <label class="capa-arranjo-op${k === atual ? ' sel' : ''}">
+          <input type="radio" name="cp-arranjo" value="${k}" data-mud="cp-arranjo"
+            ${k === atual ? 'checked' : ''}>
+          <span class="capa-mini capa-mini-${k}" aria-hidden="true"><i></i><b></b></span>
+          <span class="capa-arranjo-txt"><strong>${esc(a.rot)}</strong>${esc(a.desc)}</span>
+        </label>`).join('');
   abrirDlg(`
     <div class="dlg-cab"><h2>Capa e instruções — ${esc(p.serie)}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo">
       <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 12px">A capa e as instruções são <b>desta prova</b>.
         Cada série tem as suas.</p>
+      <div class="campo" style="margin-bottom:12px"><label>Arranjo da capa</label>
+        <div class="capa-arranjos">${opsArranjo}</div></div>
       <div class="campo" style="margin-bottom:12px"><label>Imagem da capa (endereço)</label>
         <input class="caixa" id="cp-img" value="${esc(p.capaImagem || '')}"
           placeholder="https://… — imagem inspirada nos textos ou no tema da redação"></div>
@@ -1652,15 +2136,249 @@ ACOES['cad-capa'] = () => {
       <button class="btn" data-acao="cad-capa-salvar" data-id="${esc(p.id)}">Salvar</button></div>`);
 };
 ACOES['cad-capa-padrao'] = () => { $('#cp-instr').value = INSTRUCOES_PADRAO.join('\n'); };
+// Só destaca o cartão escolhido: quem clica no arranjo precisa ver que clicou
+// antes de salvar, e remontar o diálogo aqui apagaria as instruções em edição.
+MUDS['cp-arranjo'] = (d, el) => {
+  for (const op of $$('.capa-arranjo-op'))
+    op.classList.toggle('sel', op.contains(el));
+};
 ACOES['cad-capa-salvar'] = d => {
   const p = provaPorId(d.id);
   if (!p) return;
+  const arr = $('input[name="cp-arranjo"]:checked')?.value;
+  p.capaArranjo = ARRANJOS_CAPA[arr] ? arr : ARRANJO_CAPA_PADRAO;
   p.capaImagem = $('#cp-img').value.trim();
   p.instrucoes = $('#cp-instr').value.split('\n').map(l => l.trim()).filter(Boolean);
   $('#dlg').close(); commit(); PERS.prova(p); toast('Capa atualizada.');
 };
 
-/* ================= TELA 5 · CARTÕES ================= */
+/* ---------------- proposta de redação ----------------
+   Até aqui a redação era só uma nota: a prova dizia `temRedacao`, o cartão
+   imprimia uma pauta de linhas e a correção lançava NC, NE e TL. Faltava a
+   proposta — tema, comando, textos motivadores —, isto é, faltava a prova de
+   redação em si, que é o que o estudante lê.
+
+   Onde ela mora: no próprio registro da prova (`prova.redacao`), ao lado de
+   `temRedacao`, das instruções e da imagem da capa. Prova é uma linha
+   {id, dados jsonb} em `public.provas` (migração 0007), então isto não pede
+   coluna nem tabela nova, e a proposta acompanha a prova de graça no backup
+   JSON, na exclusão em cascata e na sincronização linha a linha do PERS. Ela é
+   de cada prova, como a capa: o 9º ano não escreve sobre o tema da 3ª série.
+
+   O texto vai à tela e ao papel por `limpar()` (js/limpar.js), como as
+   instruções da capa: a coordenação usa <b> e <i> para citar títulos e marcar
+   ênfases do original, e nada além de ênfase tipográfica passa. */
+const PARTE_REDACAO = '-- PROVA DE REDAÇÃO --';
+
+const provaTemRedacao = (provaId = idProvaAtual()) => provaPorId(provaId)?.temRedacao !== false;
+
+// Devolve sempre a forma completa, mesmo para prova que nunca teve proposta:
+// quem lê não precisa saber se o campo existe nem em que formato foi gravado.
+function proposta(provaId = idProvaAtual()) {
+  const r = provaPorId(provaId)?.redacao || {};
+  return {
+    tema: r.tema || '',
+    comando: r.comando || '',
+    tipoTexto: r.tipoTexto || '',
+    motivadores: (Array.isArray(r.motivadores) ? r.motivadores : [])
+      .map(m => ({ titulo: m?.titulo || '', texto: m?.texto || '', fonte: m?.fonte || '' }))
+  };
+}
+
+// Motivador sem texto é linha em branco de formulário, não material de prova.
+const motivadoresDe = p => p.motivadores.filter(m => m.texto.trim());
+
+// Proposta “escrita” é a que tem ao menos tema, comando ou um motivador — só
+// então há o que imprimir no caderno e o que mostrar a quem corrige. Prova sem
+// redação nunca tem proposta, mesmo que sobre texto gravado de antes: quem
+// manda é `temRedacao`.
+function propostaEscrita(provaId = idProvaAtual()) {
+  if (!provaTemRedacao(provaId)) return false;
+  const p = proposta(provaId);
+  return !!(p.tema.trim() || p.comando.trim() || motivadoresDe(p).length);
+}
+
+// Parágrafos do motivador, com a mesma convenção do texto-base em prosa: linha
+// em branco separa parágrafos, quebra simples é só quebra de digitação.
+function paragrafosDoMotivador(texto) {
+  return String(texto || '').split(/\n\s*\n/)
+    .map(b => b.split('\n').map(l => l.trim()).filter(Boolean).join(' '))
+    .filter(Boolean);
+}
+
+// Peças da proposta para o paginador do caderno, na largura da coluna e na
+// ordem em que o estudante lê: tema, motivadores (cada um com a sua fonte),
+// comando e, por fim, as observações. Cada parágrafo é peça própria, para que
+// um motivador longo reflua entre colunas em vez de ser cortado no pé da
+// página — é o mesmo tratamento que os itens recebem.
+function pecasDaProposta(provaId) {
+  const p = proposta(provaId);
+  // Sem título dentro da coluna: quem anuncia a parte é o rótulo do alto da
+  // página (`PARTE_REDACAO`), como “-- PARTE 2 --” anuncia os itens. Repetir
+  // seria dizer duas vezes a mesma coisa em dois corpos diferentes.
+  const pecas = [];
+  if (p.tema.trim())
+    pecas.push(`<p class="pas-red-tema"><span>TEMA</span>${limpar(p.tema)}</p>`);
+  motivadoresDe(p).forEach((m, i) => {
+    pecas.push(`<p class="pas-red-mot">TEXTO MOTIVADOR ${i + 1}${
+      m.titulo.trim() ? ' — ' + limpar(m.titulo) : ''}</p>`);
+    for (const par of paragrafosDoMotivador(m.texto))
+      pecas.push(`<div class="pas-texto"><p>${limpar(par)}</p></div>`);
+    if (m.fonte.trim()) pecas.push(`<p class="pas-fonte">${limpar(m.fonte)}</p>`);
+  });
+  if (p.comando.trim())
+    pecas.push(`<p class="pas-comando pas-red-comando">${limpar(p.comando)}</p>`);
+  const obs = [];
+  if (p.tipoTexto.trim()) obs.push(`Tipo de texto esperado: <b>${limpar(p.tipoTexto)}</b>.`);
+  obs.push(`Escreva a versão definitiva na folha de redação, respeitando o limite de
+    <b>${LINHAS_REDACAO} linhas</b>. Texto escrito a lápis não é considerado, e
+    qualquer marca de identificação na folha anula a redação.`);
+  pecas.push(`<p class="pas-red-obs">${obs.join(' ')}</p>`);
+  return pecas;
+}
+
+// A proposta como quem corrige precisa vê-la, ao lado do lançamento: tema e
+// comando abertos, cada motivador num <details> — a professora abre o que
+// precisa reler sem que o texto empurre a tabela para fora da tela.
+function htmlPropostaTela(provaId) {
+  const p = proposta(provaId);
+  const mots = motivadoresDe(p);
+  if (!propostaEscrita(provaId))
+    return `<div class="vazio">A proposta desta prova ainda não foi escrita.${
+      ehCoord() ? ' Escreva-a na tela <a href="#/caderno">Caderno</a>, em “✍ Proposta de redação”.'
+                : ' A coordenação a escreve na tela do Caderno.'}</div>`;
+  return `
+    <div class="red-proposta">
+      ${p.tema.trim() ? `<p class="red-tema"><span>Tema</span>${limpar(p.tema)}</p>` : ''}
+      ${p.comando.trim() ? `<p class="red-comando">${limpar(p.comando)}</p>` : ''}
+      ${p.tipoTexto.trim() ? `<p class="red-tipo">Tipo de texto esperado: <b>${limpar(p.tipoTexto)}</b></p>` : ''}
+      ${mots.map((m, i) => `
+        <details class="red-mot" ${i === 0 ? 'open' : ''}>
+          <summary>Texto motivador ${i + 1}${m.titulo.trim() ? ' — ' + limpar(m.titulo) : ''}</summary>
+          ${paragrafosDoMotivador(m.texto).map(par => `<p>${limpar(par)}</p>`).join('')}
+          ${m.fonte.trim() ? `<p class="fonte">${limpar(m.fonte)}</p>` : ''}
+        </details>`).join('')}
+    </div>`;
+}
+
+/* ---------------- edição da proposta (coordenação) ---------------- */
+// Cópia de trabalho, como no editor de item: o que está no formulário só chega
+// à prova quando alguém salva. Os campos são colhidos do DOM na hora de somar
+// ou remover motivador, para que texto digitado e ainda não “mudado” não se
+// perca ao remontar o diálogo.
+let rascRed = null;
+
+function dlgRedacao(provaId) {
+  const p = provaPorId(provaId);
+  if (!p || !rascRed) return;
+  const mots = rascRed.motivadores.length ? rascRed.motivadores : [{ titulo: '', texto: '', fonte: '' }];
+  rascRed.motivadores = mots;
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Proposta de redação — ${esc(p.serie)}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 14px">A proposta é <b>desta prova</b> e sai nas
+        últimas páginas do caderno, depois dos itens. Cada série tem a sua.</p>
+      <div class="campo" style="margin-bottom:14px"><label>Tema</label>
+        <input class="caixa" id="rd-tema" value="${esc(rascRed.tema)}"
+          placeholder="ex.: A água do Cerrado como patrimônio de todos"></div>
+      <div class="campo" style="margin-bottom:14px"><label>Comando — o que se pede ao estudante</label>
+        <textarea class="caixa" id="rd-comando" rows="3"
+          placeholder="A partir dos textos motivadores e de outras leituras que você tenha feito, redija…">${esc(rascRed.comando)}</textarea></div>
+      <div class="campo" style="margin-bottom:16px"><label>Tipo de texto esperado (opcional)</label>
+        <input class="caixa" id="rd-tipo" value="${esc(rascRed.tipoTexto)}"
+          placeholder="ex.: texto argumentativo em prosa"></div>
+
+      <h3 class="rd-sec">Textos motivadores</h3>
+      ${mots.map((m, i) => `
+        <div class="rd-mot" data-mot="${i}">
+          <div class="rd-mot-cab">
+            <b>Texto motivador ${i + 1}</b>
+            <button class="btn mini vermelho fantasma" data-acao="rd-mot-remover" data-i="${i}"
+              title="Remover este texto motivador">Remover</button>
+          </div>
+          <div class="form-linha" style="margin-bottom:8px">
+            <div class="campo"><label>Título (opcional)</label>
+              <input class="caixa rd-mot-titulo" value="${esc(m.titulo)}" placeholder="ex.: Trecho de reportagem"></div>
+          </div>
+          <div class="campo" style="margin-bottom:8px"><label>Texto</label>
+            <textarea class="caixa rd-mot-texto" rows="5"
+              placeholder="Cole o texto motivador. Uma linha em branco separa parágrafos.">${esc(m.texto)}</textarea></div>
+          <div class="campo"><label>Fonte</label>
+            <input class="caixa rd-mot-fonte" value="${esc(m.fonte)}" placeholder="autor / obra / veículo, ano"></div>
+        </div>`).join('')}
+      <button class="btn fantasma" data-acao="rd-mot-somar">+ Texto motivador</button>
+      <p style="font-size:12px;color:var(--ink-2);margin:12px 0 0">No corpo dos textos, uma <b>linha em branco</b>
+        separa parágrafos; quebras simples são só quebras de digitação, como nos textos-base em prosa.
+        Aceita <code>&lt;b&gt;</code> e <code>&lt;i&gt;</code> para destacar termos.</p>
+    </div>
+    <div class="dlg-pe">
+      ${provaPorId(provaId)?.redacao ? `<button class="btn vermelho fantasma" style="margin-right:auto"
+        data-acao="rd-apagar" data-id="${esc(provaId)}">Apagar a proposta</button>` : ''}
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="rd-salvar" data-id="${esc(provaId)}">Salvar</button></div>`);
+}
+
+// Lê o formulário para a cópia de trabalho. Vale para salvar e para remontar o
+// diálogo: sem isto, somar um motivador apagaria o que ainda não teve `change`.
+function colherProposta() {
+  if (!rascRed) return null;
+  const val = sel => ($(sel)?.value ?? '');
+  rascRed.tema = val('#rd-tema').trim();
+  rascRed.comando = val('#rd-comando').trim();
+  rascRed.tipoTexto = val('#rd-tipo').trim();
+  rascRed.motivadores = $$('[data-mot]').map(bloco => ({
+    titulo: $('.rd-mot-titulo', bloco).value.trim(),
+    texto: $('.rd-mot-texto', bloco).value.trim(),
+    fonte: $('.rd-mot-fonte', bloco).value.trim()
+  }));
+  return rascRed;
+}
+
+ACOES['cad-redacao'] = () => {
+  const p = provaAtual();
+  if (!p) return;
+  rascRed = { provaId: p.id, ...proposta(p.id) };
+  dlgRedacao(p.id);
+};
+ACOES['rd-mot-somar'] = () => {
+  const r = colherProposta();
+  if (!r) return;
+  r.motivadores.push({ titulo: '', texto: '', fonte: '' });
+  dlgRedacao(r.provaId);
+};
+ACOES['rd-mot-remover'] = d => {
+  const r = colherProposta();
+  if (!r) return;
+  r.motivadores.splice(parseInt(d.i, 10), 1);
+  dlgRedacao(r.provaId);
+};
+ACOES['rd-salvar'] = d => {
+  const r = colherProposta();
+  const p = provaPorId(d.id);
+  if (!r || !p) return;
+  if (!r.tema || !r.comando) { toast('Tema e comando são o mínimo de uma proposta.'); return; }
+  // Motivador com título ou fonte e sem texto é engano de digitação, não uma
+  // decisão: avisa em vez de descartar em silêncio o que a pessoa escreveu.
+  const meio = r.motivadores.findIndex(m => !m.texto && (m.titulo || m.fonte));
+  if (meio >= 0) { toast(`O texto motivador ${meio + 1} está sem texto.`); return; }
+  p.redacao = {
+    tema: r.tema, comando: r.comando, tipoTexto: r.tipoTexto,
+    motivadores: r.motivadores.filter(m => m.texto)
+  };
+  rascRed = null;
+  $('#dlg').close(); commit(); PERS.prova(p); toast('Proposta de redação salva.');
+};
+ACOES['rd-apagar'] = d => {
+  const p = provaPorId(d.id);
+  if (!p) return;
+  delete p.redacao;
+  rascRed = null;
+  $('#dlg').close(); commit(); PERS.prova(p);
+  toast('Proposta apagada — o caderno volta a sair sem a página de redação.');
+};
+
+/* ================= TELA 6 · CARTÕES ================= */
 // Conjunto de folhas por estudante, no desenho do caderno de respostas do PAS:
 //   folha 1 — objetiva: todos os itens em ordem numérica ocupando 4/5 da folha
 //             (só A e C recebem bolhas; B e D ficam rotulados) e uma coluna à
@@ -1831,8 +2549,11 @@ function corposDiscursivos(pv) {
   }));
 }
 
-// Folha da redação, com a pauta do rascunho oficial (30 linhas de 17pt).
-function corpoRedacao() {
+// Folha da redação, com a pauta do rascunho oficial (30 linhas de 17pt). O tema
+// da proposta vem impresso quando existe: é esta folha que a professora corrige,
+// e ela precisa ver, sem o caderno na mão, sobre o que era para escrever.
+function corpoRedacao(provaId = idProvaAtual()) {
+  const tema = proposta(provaId).tema.trim();
   return {
     faixa: 'Caderno de respostas — redação em língua portuguesa',
     html: `
@@ -1843,6 +2564,7 @@ function corpoRedacao() {
           qualquer marca de identificação anula a redação.
         </div>
       </div>
+      ${tema ? `<div class="cr-red-tema"><span>TEMA</span>${limpar(tema)}</div>` : ''}
       <div class="cr-red-pauta">${Array.from({ length: LINHAS_REDACAO }, () => '<i></i>').join('')}</div>
       <div style="flex:1"></div>`
   };
@@ -1855,7 +2577,7 @@ function corposDoCartao(provaId, est) {
   const corpos = [...corposObjetivos(pv), ...corposDiscursivos(pv)];
   // A folha de redação só sai se a prova tiver redação e a coordenação optar
   // por imprimi-la.
-  if (p?.temRedacao !== false && p?.imprimirRedacao !== false) corpos.push(corpoRedacao());
+  if (p?.temRedacao !== false && p?.imprimirRedacao !== false) corpos.push(corpoRedacao(provaId));
   return corpos;
 }
 
@@ -2024,7 +2746,7 @@ ACOES['cart-template'] = () => {
   toast(`Gabarito da prova de ${pAtiva.serie} exportado.`);
 };
 
-/* ================= TELA 6 · CORREÇÃO ================= */
+/* ================= TELA 7 · CORREÇÃO ================= */
 let corrEstId = null, corrTurmaBol = 'todas';
 
 // Ordenados dentro do elenco da prova — a correção é sempre de uma prova.
@@ -2033,29 +2755,109 @@ function estudantesOrdenados(provaId = idProvaAtual()) {
     .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
 }
 
-// Tabela de lançamento da redação (NC, NE, TL → NR calculado).
+/* ---------------- redação: lançamento ----------------
+   O que se lança continua sendo o da planilha oficial do PAS — NC (nota de
+   conteúdo, 0 a 10), NE (número de erros) e TL (total de linhas), com
+   NR = NC − 2·NE/TL. O que mudou é a tabela dizer de onde a nota vem: a mesma
+   NC dá notas diferentes conforme o tamanho do texto, e sem ver o desconto
+   quem lança não tem como desconfiar de um TL digitado errado.               */
+
+// A redação de um estudante nesta prova, ou null.
+const redacaoDe = (provaId, estId) => S.respostas[provaId]?.[estId]?.redacao || null;
+
+// Lançada é a que tem total de linhas: sem TL a fórmula não fecha, e uma linha
+// com NC e sem TL não é nota — é lançamento pela metade.
+const redLancada = red => !!red && Number(red.tl) > 0;
+
+// A conta que forma NR, com os números daquele estudante no lugar das letras.
+function contaDoNR(red) {
+  if (!redLancada(red)) return null;
+  const nc = Number(red.nc) || 0, ne = Number(red.ne) || 0, tl = Number(red.tl) || 0;
+  const desconto = 2 * ne / tl;
+  return {
+    desconto, nr: Math.max(0, nc - desconto),
+    formula: `${num(nc, 1)} − 2·${ne}/${tl}`,
+    // A fórmula pode passar do zero; a nota não. Quando isso acontece é o piso
+    // que está valendo, e não a conta — dizê-lo evita a impressão de erro.
+    noPiso: nc - desconto < 0
+  };
+}
+
+// Quantas redações já foram lançadas nesta prova.
+function htmlResumoRedacao(provaId) {
+  const lista = estudantesOrdenados(provaId);
+  const lancadas = lista.filter(e => redLancada(redacaoDe(provaId, e.id))).length;
+  const pct = lista.length ? Math.round(lancadas / lista.length * 100) : 0;
+  return `<div class="red-resumo">
+    <div><b>${lancadas}</b> de ${lista.length} ${lista.length === 1 ? 'redação lançada' : 'redações lançadas'}</div>
+    <div class="barra" style="flex:1;min-width:120px;margin:0"><i style="width:${pct}%"></i></div>
+    <span class="red-formula">NR = NC − 2·NE/TL</span>
+  </div>`;
+}
+
+// Tabela de lançamento da redação. `data-red-*` marca as células recalculadas
+// sem remontar a tela — ver `redacaoMudou()`.
 function tabelaRedacao(provaId = idProvaAtual()) {
   const lista = estudantesOrdenados(provaId);
   if (!lista.length) return '<div class="vazio">Nenhum estudante no elenco desta prova ainda.</div>';
   const linhas = lista.map(e => {
-    const red = S.respostas[provaId]?.[e.id]?.redacao || { nc: '', ne: '', tl: '' };
-    const r = corrigir(e, provaId);
+    const red = redacaoDe(provaId, e.id) || { nc: '', ne: '', tl: '' };
     return `<tr><td>${esc(e.nome)}</td><td>${esc(e.turma)}</td>
-      <td><input class="caixa" style="width:84px" type="number" step="0.1" min="0" max="10" value="${red.nc}" data-mud="red" data-campo="nc" data-est="${e.id}"></td>
-      <td><input class="caixa" style="width:74px" type="number" min="0" value="${red.ne}" data-mud="red" data-campo="ne" data-est="${e.id}"></td>
-      <td><input class="caixa" style="width:74px" type="number" min="0" value="${red.tl}" data-mud="red" data-campo="tl" data-est="${e.id}"></td>
-      <td><b>${num(r.nr, 1)}</b></td></tr>`;
+      <td><input class="caixa" style="width:84px" type="number" step="0.1" min="0" max="10" value="${red.nc}"
+        data-mud="red" data-campo="nc" data-est="${e.id}" aria-label="NC de ${esc(e.nome)}"></td>
+      <td><input class="caixa" style="width:74px" type="number" min="0" value="${red.ne}"
+        data-mud="red" data-campo="ne" data-est="${e.id}" aria-label="Erros de ${esc(e.nome)}"></td>
+      <td><input class="caixa" style="width:74px" type="number" min="0" max="${LINHAS_REDACAO}" value="${red.tl}"
+        data-mud="red" data-campo="tl" data-est="${e.id}" aria-label="Linhas de ${esc(e.nome)}"></td>
+      <td class="red-conta" data-red-conta="${e.id}">${celulaConta(red)}</td>
+      <td data-red-nr="${e.id}">${celulaNR(red)}</td></tr>`;
   }).join('');
-  return `<div style="overflow-x:auto"><table>
-    <thead><tr><th>Estudante</th><th>Turma</th><th>NC (0–10)</th><th>Erros (NE)</th><th>Linhas (TL)</th><th>NR</th></tr></thead>
+  return `<div style="overflow-x:auto"><table class="red-tab">
+    <thead><tr><th>Estudante</th><th>Turma</th><th>NC (0–10)</th><th>Erros (NE)</th>
+      <th>Linhas (TL)</th><th>Como a nota se forma</th><th>NR</th></tr></thead>
     <tbody>${linhas}</tbody></table></div>`;
+}
+
+// A conta em duas linhas curtas: a substituição na primeira, o desconto na
+// segunda. Numa linha só, a coluna empurrava a NR para fora da tela — e a nota
+// é justamente o que não pode precisar de rolagem.
+function celulaConta(red) {
+  const c = contaDoNR(red);
+  if (!c) return '<span class="red-falta">falta TL</span>';
+  return `<span class="conta">${esc(c.formula)}</span>
+    <small>desconto ${num(c.desconto)}</small>${
+    c.noPiso ? '<small class="red-piso">passa do zero: vale 0</small>' : ''}`;
+}
+
+function celulaNR(red) {
+  const c = contaDoNR(red);
+  const tl = Number(red?.tl) || 0;
+  if (!c) return '<span style="color:var(--ink-2)">—</span>';
+  return `<b>${num(c.nr)}</b>${tl > LINHAS_REDACAO
+    ? `<br><span class="red-alerta">TL acima da pauta de ${LINHAS_REDACAO} linhas</span>` : ''}`;
+}
+
+// Guarda, sincroniza e atualiza à mão só o que depende do lançamento: a conta e
+// a nota daquela linha, e o contador do topo. Remontar a tela a cada campo
+// custaria o foco — a professora digita NC, tecla Tab e o campo de destino
+// deixaria de existir no caminho, como já acontecia na tela de alocação.
+function redacaoMudou(provaId, estId) {
+  save(S);
+  PERS.resposta(provaId, estId);
+  const red = redacaoDe(provaId, estId);
+  const conta = document.querySelector(`[data-red-conta="${CSS.escape(estId)}"]`);
+  const nr = document.querySelector(`[data-red-nr="${CSS.escape(estId)}"]`);
+  if (conta) conta.innerHTML = celulaConta(red);
+  if (nr) nr.innerHTML = celulaNR(red);
+  const resumo = $('#red-resumo');
+  if (resumo) resumo.innerHTML = htmlResumoRedacao(provaId);
 }
 
 // Tabela de notas dos itens discursivos (tipo D). Coordenação vê todos;
 // docente vê apenas os itens aprovados de sua autoria.
 function tabelaDiscursivos(provaId = idProvaAtual()) {
   const meus = itensDaProva(provaId).filter(i => i.status === 'aprovado' && i.tipo === 'D' &&
-    (ehCoord() || i.autor === S.perfil.nome));
+    (ehCoord() || souEu(i)));
   if (!meus.length) return null;
   const numeros = {};
   for (const v of ['regular', 'adaptada'])
@@ -2065,7 +2867,9 @@ function tabelaDiscursivos(provaId = idProvaAtual()) {
     const n = numeros[i.id] || {};
     const rot = ['regular', 'adaptada'].filter(v => n[v])
       .map(v => (v === 'regular' ? 'R-' : 'A-') + n[v]).join(' / ');
-    return `<th title="${esc(i.enunciado.slice(0, 100))}">Item ${rot || '—'}<br>
+    // Atributo não renderiza HTML: aqui vai o texto por baixo da marcação, com
+    // o código da fórmula à vista — é o que quem escreveu digitou.
+    return `<th title="${esc(simples(i.enunciado).slice(0, 140))}">Item ${rot || '—'}<br>
       <span style="font-weight:400;text-transform:none">${esc(i.componente)} · ${esc(i.autor.split(' ')[0])}</span></th>`;
   }).join('');
   const linhas = estudantesOrdenados(provaId).map(e => {
@@ -2086,15 +2890,44 @@ function tabelaDiscursivos(provaId = idProvaAtual()) {
     <thead><tr><th>Estudante</th><th>Turma</th>${cab}</tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 
-// Visão restrita: professora de redação lança NC/NE/TL de todos.
+// Visão restrita: professora de redação lança NC/NE/TL de todos, com a proposta
+// desta prova ao lado — corrigir conteúdo sem o tema e o comando na frente é
+// corrigir de memória.
 function telaCorrecaoRedacao() {
+  const pAtiva = provaAtual();
+  if (!pAtiva) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada ainda.</div></div></div>';
+    return;
+  }
+  // Prova sem redação não tem o que lançar: a tabela some inteira, em vez de
+  // oferecer campos que não valem nada.
+  if (!provaTemRedacao(pAtiva.id)) {
+    $('#app').innerHTML = `
+    <div class="quadro"><div class="miolo">
+      <div class="cab-tela"><div><h2>Redação — lançamento</h2>
+        <span class="sub">${esc(pAtiva.serie)} · ${esc(pAtiva.etapa)}</span></div></div>
+      <div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(pAtiva.etapa)}) <b>não tem redação</b>.
+        Se você corrige a redação de outra série, troque de prova no seletor do menu à esquerda.</div>
+    </div></div>`;
+    return;
+  }
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
-    <div class="cab-tela"><div><h2>Redação — lançamento</h2>
-      <span class="sub">NR = NC − 2·NE/TL, pela planilha oficial · salvo automaticamente a cada campo</span></div></div>
-    <div class="cartao">${tabelaRedacao()}</div>
+    <div class="cab-tela"><div><h2>Redação — lançamento · ${esc(pAtiva.serie)}</h2>
+      <span class="sub">${esc(pAtiva.etapa)} · NR = NC − 2·NE/TL, pela planilha oficial · cada campo é salvo ao sair dele</span></div></div>
+    <div id="red-resumo">${htmlResumoRedacao(pAtiva.id)}</div>
+    <div class="red-corr">
+      <div class="cartao">
+        <h3>A proposta desta prova</h3>
+        ${htmlPropostaTela(pAtiva.id)}
+      </div>
+      <div class="cartao">
+        <h3>Lançamento por estudante</h3>
+        ${tabelaRedacao(pAtiva.id)}
+      </div>
+    </div>
   </div></div>
-  <p class="nota-tela"><strong>Perfil de redação:</strong> esta visualização mostra apenas o lançamento das informações de redação. NC = nota de conteúdo (0 a 10) · NE = número de erros · TL = total de linhas escritas.</p>`;
+  <p class="nota-tela"><strong>Perfil de redação:</strong> esta tela mostra a proposta desta prova e o lançamento da redação de cada estudante. <strong>NC</strong> = nota de conteúdo, de 0 a 10 · <strong>NE</strong> = número de erros · <strong>TL</strong> = total de linhas escritas. A nota sai da planilha oficial, <strong>NR = NC − 2·NE/TL</strong>: o desconto por erro depende do tamanho do texto, por isso a coluna “como a nota se forma” mostra a conta com os seus números. Sem TL não há NR — a linha fica marcada como não lançada. NR não fica abaixo de zero.</p>`;
 }
 
 // Visão restrita: docente lança notas dos próprios itens discursivos.
@@ -2108,6 +2941,19 @@ function telaCorrecaoDiscursivos() {
       : '<div class="vazio">Você não tem itens discursivos (tipo D) aprovados neste simulado.</div>'}
   </div></div>
   <p class="nota-tela"><strong>Como conta no escore:</strong> no MVP cada item discursivo vale 1 ponto no escore bruto — a nota lançada (0 a 10) entra como nota/10. Os pesos oficiais entram na fase de calibração.</p>`;
+}
+
+// Os números do estudante selecionado. Ficam à parte porque o lançamento da
+// redação os atualiza sem remontar a tela.
+function chipsDoEstudante(est, provaId) {
+  const r = corrigir(est, provaId);
+  const red = redacaoDe(provaId, est.id);
+  const c = contaDoNR(red);
+  return `${provaTemRedacao(provaId)
+      ? `<span class="chip info" title="Nota da redação pela planilha oficial">NR ${
+          c ? '= ' + esc(c.formula) + ' =' : '='} <b>&nbsp;${num(r.nr)}</b></span>` : ''}
+    <span class="chip ${r.eb >= 0 ? 'ok' : 'falta'}" style="margin-left:6px">Escore bruto: ${num(r.eb, 2)}</span>
+    <span class="chip pend" style="margin-left:6px">${r.ac} certas · ${r.er} erradas · ${r.br} em branco</span>`;
 }
 
 function telaCorrecao() {
@@ -2148,26 +2994,29 @@ function telaCorrecao() {
     }).join('');
     const r = corrigir(est, provaId);
     const red = resp.redacao || { nc: '', ne: '', tl: '' };
-    lancamento = `
-      <div class="cartao" style="margin-bottom:16px">
-        <h3>Lançamento de marcações — ${esc(est.nome)} (${est.versao})</h3>
-        ${pv.length ? `<div class="lanc-grid">${grade}</div>` : '<div class="vazio">A prova desta versão ainda não tem itens aprovados.</div>'}
-        <div class="form-linha" style="margin-top:14px;align-items:flex-end">
+    // Os campos de redação só existem se a prova tiver redação — do contrário
+    // seriam três caixas que não entram em nota nenhuma.
+    const camposRedacao = provaTemRedacao(provaId) ? `
           <div class="campo" style="flex:0;min-width:130px"><label>Redação · NC (0–10)</label>
             <input class="caixa" type="number" step="0.1" min="0" max="10" value="${red.nc}" data-mud="red" data-campo="nc" data-est="${est.id}"></div>
           <div class="campo" style="flex:0;min-width:130px"><label>Nº de erros (NE)</label>
             <input class="caixa" type="number" min="0" value="${red.ne}" data-mud="red" data-campo="ne" data-est="${est.id}"></div>
           <div class="campo" style="flex:0;min-width:130px"><label>Total de linhas (TL)</label>
-            <input class="caixa" type="number" min="0" value="${red.tl}" data-mud="red" data-campo="tl" data-est="${est.id}"></div>
-          <div class="campo" style="flex:1">
-            <span class="chip info">NR = NC − 2·NE/TL = <b>&nbsp;${num(r.nr)}</b></span>
-            <span class="chip ${r.eb >= 0 ? 'ok' : 'falta'}" style="margin-left:6px">Escore bruto: ${num(r.eb, 2)}</span>
-            <span class="chip pend" style="margin-left:6px">${r.ac} certas · ${r.er} erradas · ${r.br} em branco</span>
-          </div>
+            <input class="caixa" type="number" min="0" max="${LINHAS_REDACAO}" value="${red.tl}" data-mud="red" data-campo="tl" data-est="${est.id}"></div>` : '';
+    lancamento = `
+      <div class="cartao" style="margin-bottom:16px">
+        <h3>Lançamento de marcações — ${esc(est.nome)} (${est.versao})</h3>
+        ${pv.length ? `<div class="lanc-grid">${grade}</div>` : '<div class="vazio">A prova desta versão ainda não tem itens aprovados.</div>'}
+        <div class="form-linha" style="margin-top:14px;align-items:flex-end">
+          ${camposRedacao}
+          <div class="campo" style="flex:1" id="corr-chips">${chipsDoEstudante(est, provaId)}</div>
         </div>
       </div>`;
   }
 
+  // A coluna da redação só existe se a prova tiver redação: uma coluna inteira
+  // de travessões afirmaria que ninguém lançou, e não que não há o que lançar.
+  const comRed = provaTemRedacao(provaId);
   const relatorio = turmas.map(t => {
     const alunos = elenco.filter(e => e.turma === t).map(e => ({ e, r: corrigir(e, provaId) })).filter(x => x.r.temResp);
     if (!alunos.length) return '';
@@ -2179,7 +3028,8 @@ function telaCorrecao() {
       const vals = alunos.map(x => x.r.porGrupo[g]).filter(x => x.tot > 0);
       return vals.length ? med(vals.map(x => x.ac / x.tot)) : null;
     };
-    return `<tr><td>${esc(t)}</td><td>${alunos.length}</td><td>${num(mEB)}</td><td>${num(mNR, 1)}</td>
+    return `<tr><td>${esc(t)}</td><td>${alunos.length}</td><td>${num(mEB)}</td>${
+      comRed ? `<td>${num(mNR, 1)}</td>` : ''}
       <td>${num(prop('Interpretar'))}</td><td>${num(prop('Executar'))}</td></tr>`;
   }).join('');
 
@@ -2214,7 +3064,8 @@ function telaCorrecao() {
     <div class="grade g2">
       <div class="cartao">
         <h3>Desempenho por turma</h3>
-        ${relatorio ? `<table><thead><tr><th>Turma</th><th>Lançados</th><th>Média EB</th><th>Redação</th><th>Interpretar</th><th>Executar</th></tr></thead>
+        ${relatorio ? `<table><thead><tr><th>Turma</th><th>Lançados</th><th>Média EB</th>${
+          comRed ? '<th>Redação</th>' : ''}<th>Interpretar</th><th>Executar</th></tr></thead>
           <tbody>${relatorio}</tbody></table>` : '<div class="vazio">Sem respostas lançadas ainda.</div>'}
       </div>
       <div class="cartao">
@@ -2227,16 +3078,21 @@ function telaCorrecao() {
       </div>
     </div>
 
-    <div class="cartao" style="margin-top:16px">
-      <h3>Redação — lançamento por estudante (a professora de redação vê só esta tabela)</h3>
+    ${provaTemRedacao(provaId) ? `<div class="cartao" style="margin-top:16px">
+      <h3>Redação — lançamento por estudante (a professora de redação vê só esta tabela, com a proposta ao lado)</h3>
+      <div id="red-resumo">${htmlResumoRedacao(provaId)}</div>
+      ${propostaEscrita(provaId) ? '' : `<p style="font-size:12.5px;color:var(--ink-2);margin:0 0 10px">
+        A proposta desta prova ainda não foi escrita — escreva-a em <a href="#/caderno">Caderno</a>,
+        em “✍ Proposta de redação”, para que ela saia no caderno e apareça a quem corrige.</p>`}
       ${tabelaRedacao()}
-    </div>
+    </div>` : ''}
     ${(() => { const t = tabelaDiscursivos(); return t ? `<div class="cartao" style="margin-top:16px">
       <h3>Itens discursivos (tipo D) — notas de 0 a 10 (cada docente vê só os seus)</h3>
       ${t}
     </div>` : ''; })()}
   </div></div>
-  <p class="nota-tela"><strong>Pontuação do MVP:</strong> tipo A: certo +1, errado −1 · tipo B: certo +1 · tipos C e D: certo +1, errado −1 · em branco 0. Redação pela planilha oficial: NR = NC − 2·NE/TL. Os pesos finais do PAS (parâmetro x) entram na fase de calibração.</p>`;
+  <p class="nota-tela"><strong>Pontuação do MVP:</strong> tipo A: certo +1, errado −1 · tipo B: certo +1 · tipos C e D: certo +1, errado −1 · em branco 0.${
+    comRed ? ' Redação pela planilha oficial: NR = NC − 2·NE/TL.' : ''} Os pesos finais do PAS (parâmetro x) entram na fase de calibração.</p>`;
 }
 MUDS['corr-est'] = (d, el) => { corrEstId = el.value || null; render(); };
 MUDS['corr-turma-bol'] = (d, el) => { corrTurmaBol = el.value; };
@@ -2257,7 +3113,16 @@ MUDS['red'] = (d, el) => {
   const provaId = idProvaAtual();
   const r = respostaParaEditar(d.est, provaId);
   r.redacao = r.redacao || { nc: 0, ne: 0, tl: 0 };
-  r.redacao[d.campo] = parseFloat(el.value) || 0;
+  // NC é nota de 0 a 10; NE e TL são contagens — 2,5 erros não existem, e um
+  // NC de 90 digitado sem ponto viraria nota impossível no boletim.
+  const v = Math.max(0, parseFloat(el.value) || 0);
+  r.redacao[d.campo] = d.campo === 'nc' ? Math.min(10, v) : Math.round(v);
+  if (String(r.redacao[d.campo]) !== el.value.trim()) el.value = r.redacao[d.campo];
+  // A tela da professora é só a tabela: nada mais depende do lançamento, e
+  // atualizar as células no lugar preserva o foco de quem está digitando. A da
+  // coordenação cruza o mesmo número em outros quadros, então continua
+  // remontando — número que não acompanha é pior do que número nenhum.
+  if (ehRedacao()) { redacaoMudou(provaId, d.est); return; }
   commit(); PERS.resposta(provaId, d.est);
 };
 MUDS['dnota'] = (d, el) => {
@@ -2349,9 +3214,9 @@ function htmlBoletim(provaId, est, r, pos, total, mediasTurma) {
       ${barras}
       <div style="font-size:7px;color:#777;margin-top:5px">Barra azul: estudante · traço rosa: média da turma</div>
     </div>
-    <div class="bol-notas">
+    <div class="bol-notas${provaTemRedacao(provaId) ? '' : ' sem-red'}">
       <div class="bol-nota"><b>${num(r.eb)}</b><span>Escore bruto</span></div>
-      <div class="bol-nota"><b>${num(r.nr, 1)}</b><span>Redação (NR)</span></div>
+      ${provaTemRedacao(provaId) ? `<div class="bol-nota"><b>${num(r.nr, 1)}</b><span>Redação (NR)</span></div>` : ''}
       <div class="bol-nota"><b>${pos}º</b><span>de ${total}</span></div>
     </div>
     <div class="bol-sec" style="border-top:1px solid #eee;border-bottom:none">
@@ -2386,7 +3251,7 @@ ACOES['bol-imprimir'] = () => {
   window.print();
 };
 
-/* ================= TELA 7 · EQUIPE (contas de acesso) ================= */
+/* ================= TELA 8 · ADMINISTRAÇÃO (contas e estudantes) ================= */
 // Quem entra no sistema e com qual papel vem da tabela `equipe` no banco —
 // não do que a pessoa declara ao entrar. A coordenação cria as contas aqui
 // (a Edge Function `equipe` é a única que conhece a chave de serviço).
@@ -2797,59 +3662,59 @@ ACOES['ps-salvar'] = async (d, botao) => {
 /* ---------------- tutorial de boas-vindas ---------------- */
 // Um passo por tela, com uma miniatura animada do sistema. O roteiro muda
 // conforme o papel: cada pessoa vê só o que ela mesma faz.
-// Rótulos curtos do menu no simulacro do tutorial — a coluna é estreita.
-const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Admin.'];
 
 const TUTORIAL = {
   coordenacao: [
     { cena: 'ola', titulo: 'Você coordena o simulado inteiro',
-      texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as sete telas.' },
-    { cena: 'painel', aba: 0, titulo: 'Painel',
+      texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as oito telas.' },
+    { cena: 'painel', tela: 'painel', titulo: 'Painel',
       texto: 'A visão geral de cada prova: quantos itens já foram aprovados, o que está parado em revisão e o que cada componente entregou. O seletor no topo troca a prova — 9º ano, 1ª, 2ª e 3ª série —, e a tabela “As provas do simulado” mostra as quatro de uma vez.' },
-    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+    { cena: 'alocacao', tela: 'alocacao', titulo: 'Alocação por docente',
+      texto: 'Antes de alguém escrever, você distribui a prova: quantos itens cada docente entrega em cada série. “Dividir igualmente” reparte o total sem sobra, e a conferência avisa quando a soma das metas não fecha com o tamanho da prova. O recado que você escrever aparece no painel daquele docente.' },
+    { cena: 'textos', tela: 'textos', titulo: 'Textos e alocação',
       texto: 'Você cadastra os textos-base e diz quantos itens cada um comporta. Os docentes ocupam esses espaços livres. As sugestões de texto que eles enviarem aparecem aqui para você aprovar.' },
-    { cena: 'revisao', aba: 2, titulo: 'Itens e revisão',
+    { cena: 'revisao', tela: 'itens', titulo: 'Itens e revisão',
       texto: 'O item nasce como rascunho, passa pela coordenação de área e chega a você. Só o que você aprovar entra no caderno, no cartão e na correção. Tudo é conversado dentro do próprio item.' },
-    { cena: 'caderno', aba: 3, titulo: 'Caderno',
+    { cena: 'caderno', tela: 'caderno', titulo: 'Caderno',
       texto: 'O caderno se monta sozinho com os itens aprovados, na diagramação do PAS: duas colunas, numeração contínua e o comando de cada bloco escrito automaticamente. Imprima ou salve em PDF.' },
-    { cena: 'cartoes', aba: 4, titulo: 'Cartões-resposta',
+    { cena: 'cartoes', tela: 'cartoes', titulo: 'Cartões-resposta',
       texto: 'Cada estudante recebe as folhas nominais: objetiva, discursiva e — se você quiser — redação. As âncoras nos cantos permitem ler tudo digitalizado em lote.' },
-    { cena: 'correcao', aba: 5, titulo: 'Correção e boletins',
+    { cena: 'correcao', tela: 'correcao', titulo: 'Correção e boletins',
       texto: 'Lance as marcações à mão ou importe o arquivo do leitor óptico. Daí saem os boletins individuais, os relatórios por turma e a planilha de notas.' },
-    { cena: 'equipe', aba: 6, titulo: 'Administração',
+    { cena: 'equipe', tela: 'administracao', titulo: 'Administração',
       texto: 'Aqui você cria os acessos e sobe a lista de estudantes por CSV. Cada pessoa recebe uma senha provisória e troca no primeiro login, como você acabou de fazer. A série de cada estudante é o que o liga à prova que ele vai fazer.' }
   ],
   coordenacao_area: [
     { cena: 'ola', titulo: 'Você escreve itens e revisa a sua área',
       texto: 'Neste sistema você tem dois papéis: produz itens como docente e é a primeira revisão dos itens da sua área. Veja onde cada coisa acontece.' },
-    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+    { cena: 'textos', tela: 'textos', titulo: 'Textos e alocação',
       texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Se quiser propor um texto novo, use “Sugerir novo texto” — a coordenação aprova.' },
-    { cena: 'itens', aba: 2, titulo: 'Escrever um item',
+    { cena: 'itens', tela: 'itens', titulo: 'Escrever um item',
       texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo (A, B, C ou D), a habilidade e o gabarito. Ao terminar, envie para revisão.' },
-    { cena: 'revisao', aba: 2, titulo: 'Revisar a sua área',
+    { cena: 'revisao', tela: 'itens', titulo: 'Revisar a sua área',
       texto: 'Os itens da sua área chegam a você antes da coordenação geral. Comente dentro do item, devolva com ajustes ou aprove — o que você aprovar segue para a etapa final. Use o filtro “só a minha área” para ver o que está na sua mão.' },
-    { cena: 'correcao', aba: 5, titulo: 'Correção',
+    { cena: 'correcao', tela: 'correcao', titulo: 'Correção',
       texto: 'Depois da aplicação, você lança aqui a nota dos seus itens discursivos, nos mesmos percentuais do cartão: 0, 25, 50, 75 ou 100%.' }
   ],
   docente: [
     { cena: 'ola', titulo: 'Bem-vindo ao Sistema PAS',
       texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. O menu à esquerda leva às telas; no alto dele fica a prova em que você está trabalhando.' },
-    { cena: 'painel', aba: 0, titulo: 'O que você tem para entregar',
+    { cena: 'painel', tela: 'painel', titulo: 'O que você tem para entregar',
       texto: 'O Painel abre com a sua lista: quanto você já escreveu em cada prova — 9º ano, 1ª, 2ª e 3ª série — e o que está em revisão. Clique numa linha para trabalhar naquela prova; o seletor no topo troca a prova a qualquer momento.' },
-    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+    { cena: 'textos', tela: 'textos', titulo: 'Textos e alocação',
       texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Também dá para sugerir um texto novo à coordenação.' },
-    { cena: 'itens', aba: 2, titulo: 'Meus itens',
+    { cena: 'itens', tela: 'itens', titulo: 'Meus itens',
       texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo, a habilidade e o gabarito, e envie para revisão. Se voltar com ajustes, a conversa fica registrada dentro do item.' },
-    { cena: 'correcao', aba: 5, titulo: 'Correção',
+    { cena: 'correcao', tela: 'correcao', titulo: 'Correção',
       texto: 'Se você tiver itens discursivos aprovados, é aqui que lança a nota de cada estudante — nos mesmos percentuais do cartão-resposta.' }
   ],
   redacao: [
     { cena: 'ola', titulo: 'Bem-vinda ao Sistema PAS',
       texto: 'Seu acesso é focado: você lança as informações da redação de cada estudante.' },
-    { cena: 'redacao', aba: 5, titulo: 'Correção da redação',
-      texto: 'A tela de correção mostra a tabela de lançamento: nota de conteúdo (NC), número de erros (NE) e total de linhas (TL) de cada estudante.' },
-    { cena: 'formula', aba: 5, titulo: 'A nota sai sozinha',
-      texto: 'O sistema calcula NR = NC − 2·NE/TL, pela planilha oficial, e leva o resultado para o boletim. Cada campo é salvo assim que você digita.' }
+    { cena: 'redacao', tela: 'correcao', titulo: 'A proposta e o lançamento',
+      texto: 'A tela de correção mostra, de um lado, a proposta daquela prova — tema, comando e os textos motivadores que o estudante leu — e, do outro, a tabela de lançamento: nota de conteúdo (NC), número de erros (NE) e total de linhas (TL) de cada estudante. Troque de prova no seletor do menu à esquerda: cada série tem a sua proposta.' },
+    { cena: 'formula', tela: 'correcao', titulo: 'A nota sai sozinha',
+      texto: 'O sistema calcula NR = NC − 2·NE/TL, pela planilha oficial, e leva o resultado para o boletim. A coluna “como a nota se forma” mostra a conta com os seus números, porque o desconto por erro depende do tamanho do texto. Cada campo é salvo ao sair dele.' }
   ]
 };
 
@@ -2857,9 +3722,10 @@ const passosTutorial = () => TUTORIAL[S.perfil.papel] || TUTORIAL.docente;
 
 // Miniatura animada: a casca do sistema com a aba do passo em destaque.
 function cenaTutorial(passo) {
-  const abas = ABAS_TUTORIAL
-    .slice(0, S.perfil.papel === 'coordenacao' ? 7 : 6)
-    .map((a, i) => `<i class="${i === passo.aba ? 'on' : ''}">${a}</i>`).join('');
+  // As abas vêm das telas que esta pessoa realmente vê: o simulacro não pode
+  // mostrar um menu diferente do que ela vai encontrar.
+  const abas = telasVisiveis()
+    .map(([k, v]) => `<i class="${k === passo.tela ? 'on' : ''}">${esc(v.curto)}</i>`).join('');
   const cenas = {
     ola: `<div class="tut-ola"><span>PAS</span><b>Marista</b></div>`,
     painel: `<div class="tut-cartoes">
@@ -2994,6 +3860,7 @@ function aplicarDados(dados) {
   S.estudantes = dados.estudantes;
   S.elencos = dados.elencos;
   S.respostas = dados.respostas;
+  S.alocacoes = dados.alocacoes || {};
   // A prova escolhida por esta pessoa continua valendo, desde que ainda exista.
   const salva = lerProvaSalva();
   if (salva && dados.provas.some(p => p.id === salva)) S.provaAtiva = salva;
@@ -3009,6 +3876,8 @@ async function aposLogin() {
     S.perfil = {
       papel: eu?.papel || 'docente',
       nome: eu?.nome || u.email,
+      // Identidade estável: é por ela que item e meta se ligam à pessoa.
+      email: (eu?.email || u.email || '').toLowerCase(),
       componente: eu?.componente || null,
       area: eu?.area || null,
       trocarSenha: !!eu?.trocar_senha,
@@ -3016,8 +3885,8 @@ async function aposLogin() {
     };
   } catch {
     // Sem a lista da equipe, entra com o perfil mais restrito.
-    S.perfil = { papel: 'docente', nome: u.email, componente: null, area: null,
-                 trocarSenha: false, tutorialVisto: true };
+    S.perfil = { papel: 'docente', nome: u.email, email: (u.email || '').toLowerCase(),
+                 componente: null, area: null, trocarSenha: false, tutorialVisto: true };
   }
   tutorialAberto = false;
   try {
@@ -3054,6 +3923,14 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------------- inicialização ---------------- */
 (async function iniciarApp() {
+  // O KaTeX entra antes da primeira tela porque daí em diante a renderização é
+  // síncrona em todo o sistema — o caderno mede a altura de cada peça de HTML
+  // já pronta para paginar, e não teria como esperar por uma promessa no meio
+  // disso. Se a carga falhar, `rico()` mostra o código da fórmula como está
+  // escrito, e o sistema segue: item nenhum fica em branco por causa disso.
+  try { await carregarKatex(); }
+  catch { toast('Notação matemática indisponível — as fórmulas aparecem como código.'); }
+
   if (NUVEM.ativa && NUVEM.chave && !NUVEM.chave.startsWith('PREENCHER')) {
     try {
       await nuvem.iniciar(NUVEM.url, NUVEM.chave);
