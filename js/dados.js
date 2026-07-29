@@ -120,7 +120,37 @@ function seed() {
   s.provaAtiva = PROVA_EXEMPLO;
   Object.assign(s.provas.find(p => p.id === PROVA_EXEMPLO), {
     nome: 'Simulado PAS 2026', etapa: '1ª Etapa',
-    dataAplicacao: '2026-09-12', duracao: '4h30'
+    dataAplicacao: '2026-09-12', duracao: '4h30',
+    // A proposta de redação é da prova, como a capa e as instruções: tema,
+    // comando, tipo de texto esperado e os textos motivadores. Fica no próprio
+    // registro da prova, que é uma linha {id, dados jsonb} em `public.provas` —
+    // não há esquema novo a criar. Prova com `temRedacao: false` simplesmente
+    // não tem este campo, e nada de redação aparece em lugar nenhum.
+    redacao: {
+      tema: 'A água do Cerrado como patrimônio de todos',
+      tipoTexto: 'texto argumentativo em prosa',
+      comando: 'A partir dos textos motivadores e das leituras feitas ao longo da etapa, ' +
+        'redija um texto argumentativo em prosa defendendo uma posição sobre a proteção das ' +
+        'nascentes do Cerrado. Apresente pelo menos dois argumentos e uma proposta de ação ' +
+        'que envolva a comunidade escolar.',
+      motivadores: [
+        {
+          titulo: 'Trecho de reportagem',
+          texto: 'Das doze grandes bacias hidrográficas brasileiras, oito nascem no Cerrado. ' +
+            'A vegetação de raízes profundas funciona como uma esponja: infiltra a água da ' +
+            'chuva e a devolve devagar às nascentes.\n\n' +
+            'Onde a vereda é drenada para plantio, a devolução para de acontecer. O rio não ' +
+            'seca de uma vez — ele perde a vazão de base, aquela que o sustenta na estiagem.',
+          fonte: 'Agência Brasil, 2025 (adaptado)'
+        },
+        {
+          titulo: 'Do texto de Guimarães Rosa lido nesta prova',
+          texto: 'Mas a caixa-d’água racha: onde a vereda seca, o buriti tomba, e com ele ' +
+            'vai-se a memória da água.',
+          fonte: 'Guimarães Rosa (adaptado)'
+        }
+      ]
+    }
   });
   s.perfil = { papel: 'coordenacao', nome: 'Raul', componente: null };
 
