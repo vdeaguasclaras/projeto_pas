@@ -6,7 +6,7 @@ import { NUVEM } from './config-supabase.js';
 import {
   COMPONENTES, TODOS_COMPONENTES, ehComponenteLegado, SUCESSORAS_DE_ARTES,
   GRUPOS, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
-  uid, blank, seed, load, save, substituir, provaNova, migrarV1paraV2
+  uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 } from './dados.js';
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
@@ -74,6 +74,12 @@ const PERS = {
   provasTodas() { if (modoNuvem) nuvem.gravarLinhas('provas', S.provas).catch(PERS.falha); },
   elenco(provaId) {
     if (modoNuvem) nuvem.gravarElenco(provaId, S.elencos[provaId] || []).catch(PERS.falha);
+  },
+  alocacao(provaId, chave) {
+    if (modoNuvem) nuvem.gravarAlocacao(provaId, chave, S.alocacoes[provaId]?.[chave]).catch(PERS.falha);
+  },
+  alocacoes(provaId) {
+    if (modoNuvem) nuvem.gravarAlocacoes(provaId, S.alocacoes[provaId] || {}).catch(PERS.falha);
   },
   texto(t) { if (modoNuvem) nuvem.gravarLinha('textos', t).catch(PERS.falha); },
   textosTodos() { if (modoNuvem) nuvem.gravarLinhas('textos', S.textos).catch(PERS.falha); },
@@ -275,20 +281,30 @@ function ranking(provaId, versao) {
 /* ---------------- casca / navegação ---------------- */
 // `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
 // que também vira o título do cabeçalho.
+// `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
+// que também vira o título do cabeçalho. A ordem é a do trabalho: distribuir a
+// prova entre os docentes vem antes de escrever item.
+//
+// Só o número mudou quando a Alocação entrou — as rotas são por nome
+// (`#/textos`), então nenhum endereço salvo quebrou.
+// `curto` é o rótulo do simulacro do tutorial, onde a coluna é estreita.
 const TELAS = {
-  painel:        { n: 1, rot: 'Painel' },
-  textos:        { n: 2, rot: 'Textos e alocação' },
-  itens:         { n: 3, rot: 'Itens e revisão' },
-  caderno:       { n: 4, rot: 'Caderno' },
-  cartoes:       { n: 5, rot: 'Cartões-resposta' },
-  correcao:      { n: 6, rot: 'Correção e boletins' },
-  administracao: { n: 7, rot: 'Administração', soCoordenacaoNaNuvem: true }
+  painel:        { n: 1, rot: 'Painel',               curto: 'Painel' },
+  alocacao:      { n: 2, rot: 'Alocação por docente', curto: 'Alocação', soCoordenacao: true },
+  textos:        { n: 3, rot: 'Textos e alocação',    curto: 'Textos' },
+  itens:         { n: 4, rot: 'Itens e revisão',      curto: 'Itens' },
+  caderno:       { n: 5, rot: 'Caderno',              curto: 'Caderno' },
+  cartoes:       { n: 6, rot: 'Cartões-resposta',     curto: 'Cartões' },
+  correcao:      { n: 7, rot: 'Correção e boletins',  curto: 'Correção' },
+  administracao: { n: 8, rot: 'Administração',        curto: 'Admin.', soCoordenacaoNaNuvem: true }
 };
-// A tela de Administração cuida de contas e da lista de estudantes — só
-// aparece para a coordenação e só com o sistema ligado ao banco on-line.
+// Administração cuida de contas e da lista de estudantes — só aparece para a
+// coordenação e só com o sistema ligado ao banco. Alocação é da coordenação em
+// qualquer modo: quem recebe meta não a define.
 function telasVisiveis() {
-  return Object.entries(TELAS)
-    .filter(([, v]) => !v.soCoordenacaoNaNuvem || (modoNuvem && ehCoord()));
+  return Object.entries(TELAS).filter(([, v]) =>
+    (!v.soCoordenacaoNaNuvem || (modoNuvem && ehCoord())) &&
+    (!v.soCoordenacao || ehCoord()));
 }
 function telaAtual() {
   const h = location.hash.replace('#/', '');
@@ -382,8 +398,9 @@ function render() {
     .map(([k, v]) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>
       <span class="n">${v.n}</span>${esc(v.rot)}</a>`).join('');
   ({
-    painel: telaPainel, textos: telaTextos, itens: telaItens, caderno: telaCaderno,
-    cartoes: telaCartoes, correcao: telaCorrecao, administracao: telaAdministracao
+    painel: telaPainel, alocacao: telaAlocacao, textos: telaTextos, itens: telaItens,
+    caderno: telaCaderno, cartoes: telaCartoes, correcao: telaCorrecao,
+    administracao: telaAdministracao
   }[atual])();
 
   // Estreia: o tutorial do papel abre sozinho, uma única vez.
@@ -469,52 +486,130 @@ function balancoDaProva(provaId) {
   };
 }
 
-// O que a pessoa que está logada produziu numa prova.
-function minhaProducao(provaId) {
-  const meus = itensDaProva(provaId).filter(i => i.autor === S.perfil.nome);
+/* ---------------- quem escreveu o quê ---------------- */
+// Identidade de quem escreve. Na nuvem é o e-mail — chave primária de `equipe`,
+// estável e única. Sem nuvem é o nome, que é tudo que existe ali. Nome sozinho
+// não serve para fechar conta: é editável e a lista tem Paulo Leite e Paulo
+// Eduardo, que a interface mostrava como "Paulo" nos dois casos.
+const idDocente = p => (p?.email || p?.nome || '').toLowerCase();
+const idAutorDoItem = i => (i.autorEmail || i.autor || '').toLowerCase();
+const souEu = i => idAutorDoItem(i) === idDocente(S.perfil);
+
+// O que uma pessoa produziu numa prova. Sem argumento, quem está logado.
+function producaoDe(provaId, chave = idDocente(S.perfil)) {
+  const meus = itensDaProva(provaId).filter(i => idAutorDoItem(i) === chave);
   return {
+    itens: meus,
     criados: meus.length,
     aprovados: meus.filter(i => i.status === 'aprovado').length,
     emRevisao: meus.filter(i => ['area', 'geral'].includes(i.status)).length,
     devolvidos: meus.filter(i => i.status === 'devolvido').length,
-    rascunhos: meus.filter(i => i.status === 'rascunho').length
+    rascunhos: meus.filter(i => i.status === 'rascunho').length,
+    // Por tipo, para conferir contra a divisão da meta quando ela existir.
+    porTipo: Object.fromEntries(Object.keys(TIPOS).map(t =>
+      [t, meus.filter(i => i.tipo === t).length]))
   };
+}
+const minhaProducao = provaId => producaoDe(provaId);
+
+/* ---------------- alocação: a meta de cada docente ---------------- */
+const alocacaoDe = (provaId, chave) => S.alocacoes?.[provaId]?.[chave] || null;
+const minhaAlocacao = provaId => alocacaoDe(provaId, idDocente(S.perfil));
+
+// Quem pode receber meta. Na nuvem, a equipe cadastrada, menos a coordenação
+// geral (que não escreve item) e a professora de redação. Sem nuvem, quem já
+// aparece como autor — é o que dá para saber.
+function docentesAlocaveis() {
+  if (modoNuvem) {
+    return equipeCache
+      .filter(m => ['docente', 'coordenacao_area'].includes(m.papel))
+      .map(m => ({ chave: idDocente(m), nome: m.nome || m.email, email: m.email, componente: m.componente }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }
+  const vistos = new Map();
+  for (const i of S.itens) {
+    const chave = idAutorDoItem(i);
+    if (chave && !vistos.has(chave))
+      vistos.set(chave, { chave, nome: i.autor, email: i.autorEmail || null, componente: i.componente });
+  }
+  const eu = idDocente(S.perfil);
+  if (eu && !vistos.has(eu))
+    vistos.set(eu, { chave: eu, nome: S.perfil.nome, email: S.perfil.email || null, componente: S.perfil.componente });
+  return [...vistos.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+// Soma das metas de uma prova, para comparar com o tamanho dela.
+function somaDasMetas(provaId) {
+  const m = S.alocacoes?.[provaId] || {};
+  return Object.values(m).reduce((s, a) => s + (a.meta || 0), 0);
+}
+
+// Barrinha de progresso contra a meta. Sem meta não desenha barra: "sem meta"
+// e "meta zero" dizem coisas diferentes, e uma barra vazia afirmaria a segunda.
+function progressoDaMeta(feito, meta) {
+  if (!meta) return '<span style="font-size:11.5px;color:var(--ink-2)">sem meta definida</span>';
+  const pct = Math.min(100, Math.round(feito / meta * 100));
+  const cls = feito >= meta ? 'ok' : feito > 0 ? 'pend' : 'falta';
+  return `<div class="meta-barra ${cls}" title="${feito} de ${meta}">
+    <i style="width:${pct}%"></i><b>${feito}/${meta}</b></div>`;
 }
 
 // Visão do docente: o que ele deve entregar em CADA prova, não só na ativa.
-// A meta por tipo de item entra aqui quando a tela de Administração passar a
-// alocá-la; por ora a linha mostra a produção e o estágio de cada item.
 function painelDoDocente() {
-  const linhas = provasOrdenadas().map(p => {
+  const provas = provasOrdenadas();
+  const linhas = provas.map(p => {
     const m = minhaProducao(p.id);
-    const b = balancoDaProva(p.id);
+    const a = minhaAlocacao(p.id);
+    const meta = a?.meta || 0;
+    // A situação responde "estou em dia?" — e isso só tem resposta contra a
+    // meta. Sem meta, o mais honesto é relatar o estágio do que existe.
     const situacao = m.devolvidos ? '<span class="chip falta">Devolvido — ajustar</span>'
+      : meta && m.aprovados >= meta ? '<span class="chip ok">Meta cumprida</span>'
+      : meta && m.criados >= meta ? '<span class="chip pend">Entregue, em revisão</span>'
+      : meta ? `<span class="chip falta">Faltam ${meta - m.criados}</span>`
       : m.emRevisao ? '<span class="chip pend">Em revisão</span>'
       : m.rascunhos ? '<span class="chip info">Rascunho pendente</span>'
       : m.criados ? '<span class="chip ok">Tudo aprovado</span>'
       : '<span class="chip">Nada entregue</span>';
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td>${progressoDaMeta(m.aprovados, meta)}</td>
       <td>${m.criados}</td><td>${m.aprovados}</td><td>${m.emRevisao}</td>
       <td>${situacao}</td>
-      <td style="font-size:11.5px;color:var(--ink-2)">${b.totalQuestoes
-        ? `${b.aprovados} de ${b.totalQuestoes} na prova`
-        : `${b.aprovados} aprovado${b.aprovados === 1 ? '' : 's'} na prova`}</td>
     </tr>`;
   }).join('');
-  const tot = provasOrdenadas().reduce((s, p) => {
+
+  const tot = provas.reduce((s, p) => {
     const m = minhaProducao(p.id);
-    return { criados: s.criados + m.criados, aprovados: s.aprovados + m.aprovados };
-  }, { criados: 0, aprovados: 0 });
+    return {
+      criados: s.criados + m.criados,
+      aprovados: s.aprovados + m.aprovados,
+      meta: s.meta + (minhaAlocacao(p.id)?.meta || 0)
+    };
+  }, { criados: 0, aprovados: 0, meta: 0 });
+
+  // Observações que a coordenação anexou à meta — ditas aqui, onde interessam.
+  const recados = provas
+    .map(p => ({ p, obs: minhaAlocacao(p.id)?.observacao }))
+    .filter(x => x.obs);
 
   return `<div class="cartao" style="margin-bottom:16px">
     <h3>O que você tem para entregar</h3>
-    <table><thead><tr><th>Prova</th><th>Criados</th><th>Aprovados</th><th>Em revisão</th><th>Situação</th><th></th></tr></thead>
-      <tbody>${linhas}</tbody></table>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Prova</th><th>Aprovados / meta</th><th>Criados</th><th>Aprovados</th><th>Em revisão</th><th>Situação</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>
     <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">
-      No total você tem <b>${tot.criados}</b> ${tot.criados === 1 ? 'item' : 'itens'} nas quatro provas,
-      ${tot.aprovados} já ${tot.aprovados === 1 ? 'aprovado' : 'aprovados'}.
+      ${tot.meta
+        ? `Ao todo a coordenação alocou <b>${tot.meta}</b> ${tot.meta === 1 ? 'item' : 'itens'} para você nas
+           ${provas.length} provas; você criou ${tot.criados} e ${tot.aprovados} ${tot.aprovados === 1 ? 'está aprovado' : 'estão aprovados'}.`
+        : `Você tem <b>${tot.criados}</b> ${tot.criados === 1 ? 'item' : 'itens'} nas ${provas.length} provas,
+           ${tot.aprovados} já ${tot.aprovados === 1 ? 'aprovado' : 'aprovados'}. A coordenação ainda não definiu metas.`}
       Clique numa linha para trabalhar naquela prova.</p>
+    ${recados.length ? `<div class="cartao aviso" style="margin:12px 0 0">
+      <h3>Recado da coordenação</h3>
+      ${recados.map(({ p, obs }) =>
+        `<p style="font-size:13px;margin:0 0 6px"><b>${esc(p.serie)}:</b> ${esc(obs)}</p>`).join('')}
+    </div>` : ''}
   </div>`;
 }
 ACOES['ir-para-prova'] = d => {
@@ -534,23 +629,28 @@ function painelDasProvas() {
     const sit = !b.totalQuestoes ? '<span class="chip info">tamanho a definir</span>'
       : falta === 0 ? '<span class="chip ok">Completa</span>'
       : `<span class="chip pend">faltam ${falta}</span>`;
+    const soma = somaDasMetas(p.id);
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b>${p.id === idProvaAtual() ? ' <span class="chip info">na tela</span>' : ''}</td>
       <td>${esc(p.etapa)}</td>
       <td>${dataBR(p.dataAplicacao)}</td>
       <td>${b.textos}</td>
+      <td>${soma || '<span style="color:var(--ink-2)">—</span>'}</td>
       <td>${b.criados}</td>
       <td>${b.aprovados}${b.totalQuestoes ? ` / ${b.totalQuestoes}` : ''}</td>
       <td>${p.temRedacao === false ? '—' : '✓'}</td>
       <td>${sit}</td>
     </tr>`;
   }).join('');
+  const semAlocacao = provasOrdenadas().filter(p => !somaDasMetas(p.id)).length;
   return `<div class="cartao" style="margin-bottom:16px">
     <h3>As provas do simulado</h3>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Série</th><th>Etapa</th><th>Aplicação</th><th>Textos</th><th>Itens</th><th>Aprovados</th><th>Redação</th><th>Situação</th></tr></thead>
+      <thead><tr><th>Série</th><th>Etapa</th><th>Aplicação</th><th>Textos</th><th>Alocado</th><th>Itens</th><th>Aprovados</th><th>Redação</th><th>Situação</th></tr></thead>
       <tbody>${linhas}</tbody></table></div>
-    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Clique numa linha para trabalhar naquela prova.</p>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Clique numa linha para trabalhar naquela prova.${
+      semAlocacao ? ` <b>${semAlocacao}</b> ${semAlocacao === 1 ? 'prova ainda não teve' : 'provas ainda não tiveram'} a produção
+      distribuída entre os docentes — use a tela <a href="#/alocacao">Alocação por docente</a>.` : ''}</p>
   </div>`;
 }
 
@@ -789,11 +889,13 @@ ACOES['importar-json'] = () => {
     f.text().then(txt => {
       try {
         const novo = JSON.parse(txt);
-        // Backups anteriores ao multi-prova ainda entram: viram a prova da
-        // série que estava configurada neles.
-        if (novo?.versao === 1) {
-          S = substituir(migrarV1paraV2(novo));
-          render(); PERS.tudo(); toast('Backup de formato antigo importado e convertido.');
+        // Backups de formatos anteriores ainda entram, convertidos: v1 (prova
+        // única) vira a prova da série que estava configurada nele; v2 só ganha
+        // as alocações vazias.
+        if (novo?.versao === 1 || novo?.versao === 2) {
+          S = substituir(migrarV2paraV3(novo.versao === 1 ? migrarDeV1(novo) : novo));
+          render(); PERS.tudo();
+          toast(`Backup no formato v${novo.versao} importado e convertido.`);
           return;
         }
         if (novo?.versao !== VERSAO_ESTADO) throw new Error('formato');
@@ -864,7 +966,264 @@ ACOES['perfil-redacao'] = () => {
   $('#dlg').close(); commit(); toast('Perfil: ' + nomePerfil());
 };
 
-/* ================= TELA 2 · TEXTOS ================= */
+/* ================= TELA 2 · ALOCAÇÃO POR DOCENTE ================= */
+// Onde a coordenação distribui a prova entre quem escreve, e onde acompanha se
+// cada um está em dia. A meta é por (prova, docente): a mesma pessoa tem metas
+// diferentes em séries diferentes.
+function telaAlocacao() {
+  const p = provaAtual();
+  if (!p) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
+    return;
+  }
+  if (modoNuvem && !equipeCarregada) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Carregando equipe…</div></div></div>';
+    nuvem.carregarEquipe()
+      .then(l => { equipeCache = l; equipeCarregada = true; render(); })
+      .catch(e => { equipeCarregada = true; toast('Não foi possível carregar a equipe: ' + (e.message || e)); render(); });
+    return;
+  }
+
+  const pessoas = docentesAlocaveis();
+
+  // Agrupado por área do conhecimento: é assim que a coordenação distribui.
+  const porArea = {};
+  for (const d of pessoas) {
+    const area = areaDoComponente(d.componente) || 'Sem área definida';
+    (porArea[area] = porArea[area] || []).push(d);
+  }
+
+  const grupos = Object.entries(porArea).sort((a, b2) => a[0].localeCompare(b2[0], 'pt-BR'))
+    .map(([area, lista]) => {
+      const somaArea = lista.reduce((s, d) => s + (alocacaoDe(p.id, d.chave)?.meta || 0), 0);
+      const linhas = lista.map(d => {
+        const a = alocacaoDe(p.id, d.chave);
+        const prod = producaoDe(p.id, d.chave);
+        const meta = a?.meta || 0;
+        return `<tr>
+          <td><b>${esc(d.nome)}</b>${d.email ? `<br><span style="font-size:11px;color:var(--ink-2);font-family:var(--mono)">${esc(d.email)}</span>` : ''}</td>
+          <td>${d.componente ? discChip(d.componente) : '<span style="color:var(--ink-2)">—</span>'}</td>
+          <td><input class="caixa" type="number" min="0" max="90" style="width:88px"
+              value="${meta || ''}" placeholder="—"
+              data-mud="aloc-meta" data-chave="${esc(d.chave)}" aria-label="Meta de ${esc(d.nome)}"></td>
+          <td style="min-width:132px" data-barra="${esc(d.chave)}">${progressoDaMeta(prod.aprovados, meta)}</td>
+          <td>${prod.criados}</td>
+          <td>${prod.emRevisao || '—'}</td>
+          <td>${prod.devolvidos ? `<span class="chip falta">${prod.devolvidos}</span>` : '—'}</td>
+          <td><input class="caixa" style="min-width:150px" value="${esc(a?.observacao || '')}"
+              placeholder="recado (opcional)"
+              data-mud="aloc-obs" data-chave="${esc(d.chave)}" aria-label="Recado para ${esc(d.nome)}"></td>
+        </tr>`;
+      }).join('');
+      return `<tbody>
+        <tr class="aloc-area"><th colspan="2">${esc(area)}</th>
+          <th colspan="6" data-soma-area="${esc(area)}">${rotuloSomaArea(somaArea)}</th></tr>
+        ${linhas}</tbody>`;
+    }).join('');
+
+  $('#app').innerHTML = `
+  <div class="quadro"><div class="miolo">
+    <div class="cab-tela">
+      <div><h2>Alocação — ${esc(p.serie)}</h2>
+        <span class="sub">${esc(p.etapa)} · quantos itens cada docente deve entregar nesta prova</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn fantasma" data-acao="aloc-dividir">Dividir igualmente</button>
+        <button class="btn fantasma" data-acao="aloc-copiar">Copiar de outra prova</button>
+        <button class="btn vermelho fantasma" data-acao="aloc-limpar">Limpar metas</button>
+      </div>
+    </div>
+
+    <div id="aloc-resumo">${htmlResumoAlocacao(p)}</div>
+
+    ${pessoas.length ? `<div class="cartao" style="overflow-x:auto;padding-bottom:6px">
+      <table class="aloc-tab">
+        <thead><tr>
+          <th>Docente</th><th>Componente</th><th>Meta</th><th>Aprovados / meta</th>
+          <th>Criados</th><th>Em revisão</th><th>Devolv.</th><th>Recado</th>
+        </tr></thead>
+        ${grupos}
+      </table>
+    </div>` : `<div class="vazio">Nenhum docente para alocar.${modoNuvem ? ' Cadastre a equipe em Administração.' : ''}</div>`}
+  </div></div>
+  <p class="nota-tela"><strong>A meta é por prova.</strong> A mesma pessoa pode ter metas diferentes no 9º ano e na 3ª série — troque de prova no menu à esquerda para alocar cada uma. Campo em branco significa <em>sem meta</em>, que é diferente de meta zero: quem está sem meta não aparece cobrado no painel dele. O <strong>recado</strong> aparece no painel do docente, junto da meta. Cada campo é gravado ao sair dele, como no resto do sistema.</p>`;
+}
+
+// Resumo da alocação: os três cartões e a conferência. Fica numa função à
+// parte porque é a única coisa que muda quando uma meta é digitada — e a tela
+// atualiza só este pedaço, sem remontar a tabela.
+//
+// Remontar tudo custaria o foco: a coordenação digita meta, tecla Tab, e o
+// campo de destino deixaria de existir no meio do caminho. Com 22 docentes por
+// prova, isso torna a tela inutilizável para o uso que ela tem.
+function htmlResumoAlocacao(p) {
+  const soma = somaDasMetas(p.id);
+  const b = balancoDaProva(p.id);
+  const pessoas = docentesAlocaveis();
+  const semMeta = pessoas.filter(d => !alocacaoDe(p.id, d.chave)?.meta).length;
+
+  const conf = [];
+  if (!b.totalQuestoes)
+    conf.push('a quantidade de questões desta prova ainda não foi definida — defina no Painel, em “⚙ Configurar prova”, para a soma das metas ter com o que ser comparada');
+  else if (soma !== b.totalQuestoes)
+    conf.push(`as metas somam <b>${soma}</b> e a prova pede <b>${b.totalQuestoes}</b> — ${
+      soma < b.totalQuestoes ? `faltam <b>${b.totalQuestoes - soma}</b> por alocar` : `há <b>${soma - b.totalQuestoes}</b> além do tamanho da prova`}`);
+  if (b.slots && soma > b.slots)
+    conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, menos do que as metas somam`);
+  if (semMeta && pessoas.length)
+    conf.push(`${semMeta} ${semMeta === 1 ? 'docente está' : 'docentes estão'} sem meta nesta prova`);
+
+  return `
+    <div class="grade g3" style="margin-bottom:16px">
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Alocado</h3>
+        <div class="num">${soma}<small>${b.totalQuestoes ? ` / ${b.totalQuestoes} da prova` : ' de um total ainda a definir'}</small></div>
+        <div class="barra"><i style="width:${b.totalQuestoes ? Math.min(100, soma / b.totalQuestoes * 100) : 0}%"></i></div></div>
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--verde)"></span>Já aprovado</h3>
+        <div class="num">${b.aprovados}<small>${soma ? ` / ${soma} alocados` : ''}</small></div>
+        <div class="barra"><i style="width:${soma ? Math.min(100, b.aprovados / soma * 100) : 0}%"></i></div></div>
+      <div class="cartao vivo"><h3><span class="pingo" style="background:var(--rosa)"></span>Docentes com meta</h3>
+        <div class="num">${pessoas.length - semMeta}<small> / ${pessoas.length}</small></div></div>
+    </div>
+    ${conf.length ? `<div class="cartao aviso" style="margin-bottom:16px">
+      <h3>Conferência da alocação</h3>
+      <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7">${conf.map(c => `<li>${c}</li>`).join('')}</ul>
+    </div>` : ''}`;
+}
+
+const rotuloSomaArea = n => `${n} ${n === 1 ? 'item alocado' : 'itens alocados'}`;
+
+// Guarda e sincroniza sem remontar a tela, e atualiza à mão tudo o que depende
+// da meta: a barra daquela linha, o subtotal da área e o resumo do topo. Um
+// número que não acompanha é pior que número nenhum — a coordenação passa a
+// desconfiar da tela inteira.
+function alocacaoMudou(provaId, chave) {
+  save(S);
+  PERS.alocacao(provaId, chave);
+  const p = provaPorId(provaId);
+  if (!p) return;
+
+  $('#aloc-resumo').innerHTML = htmlResumoAlocacao(p);
+
+  const cel = document.querySelector(`[data-barra="${CSS.escape(chave)}"]`);
+  if (cel) cel.innerHTML = progressoDaMeta(producaoDe(provaId, chave).aprovados,
+                                           alocacaoDe(provaId, chave)?.meta || 0);
+
+  // Subtotais por área, recalculados dos dados — não incrementados a partir do
+  // que está na tela.
+  const porArea = {};
+  for (const d of docentesAlocaveis()) {
+    const area = areaDoComponente(d.componente) || 'Sem área definida';
+    porArea[area] = (porArea[area] || 0) + (alocacaoDe(provaId, d.chave)?.meta || 0);
+  }
+  for (const th of document.querySelectorAll('[data-soma-area]'))
+    th.textContent = rotuloSomaArea(porArea[th.dataset.somaArea] || 0);
+}
+
+// Meta vazia apaga a alocação em vez de gravar zero.
+function alocacaoParaEditar(provaId, chave) {
+  S.alocacoes[provaId] = S.alocacoes[provaId] || {};
+  const pessoa = docentesAlocaveis().find(d => d.chave === chave);
+  return S.alocacoes[provaId][chave] || (S.alocacoes[provaId][chave] = {
+    meta: 0, observacao: '',
+    nome: pessoa?.nome || chave, componente: pessoa?.componente || null
+  });
+}
+MUDS['aloc-meta'] = (d, el) => {
+  const provaId = idProvaAtual();
+  const n = parseInt(el.value, 10);
+  const a = alocacaoParaEditar(provaId, d.chave);
+  a.meta = Number.isFinite(n) && n > 0 ? n : 0;
+  if (!a.meta && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  alocacaoMudou(provaId, d.chave);
+};
+MUDS['aloc-obs'] = (d, el) => {
+  const provaId = idProvaAtual();
+  const a = alocacaoParaEditar(provaId, d.chave);
+  a.observacao = el.value.trim();
+  if (!a.meta && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  alocacaoMudou(provaId, d.chave);
+};
+
+ACOES['aloc-dividir'] = () => {
+  const p = provaAtual();
+  const pessoas = docentesAlocaveis();
+  if (!p || !pessoas.length) return;
+  if (!p.totalQuestoes) {
+    toast('Defina a quantidade de questões da prova primeiro, no Painel.');
+    return;
+  }
+  // Divisão inteira com o resto nas primeiras: a soma fecha exatamente com o
+  // tamanho da prova, sem sobra nem falta.
+  const base = Math.floor(p.totalQuestoes / pessoas.length);
+  const resto = p.totalQuestoes % pessoas.length;
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Dividir ${p.totalQuestoes} itens igualmente?</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo"><p style="margin-top:0">Cada um dos <b>${pessoas.length}</b> docentes fica com
+      <b>${base}</b> ${base === 1 ? 'item' : 'itens'}${resto ? `, e os ${resto} primeiros da lista recebem um a mais` : ''}.
+      Isto <b>substitui as metas já definidas</b> nesta prova; os recados são preservados.</p></div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="aloc-dividir-ok">Dividir</button></div>`);
+};
+ACOES['aloc-dividir-ok'] = () => {
+  const p = provaAtual();
+  const pessoas = docentesAlocaveis();
+  const base = Math.floor(p.totalQuestoes / pessoas.length);
+  const resto = p.totalQuestoes % pessoas.length;
+  pessoas.forEach((d, ix) => {
+    const a = alocacaoParaEditar(p.id, d.chave);
+    a.meta = base + (ix < resto ? 1 : 0);
+    if (!a.meta && !a.observacao) delete S.alocacoes[p.id][d.chave];
+  });
+  $('#dlg').close(); commit(); PERS.alocacoes(p.id);
+  toast(`${p.totalQuestoes} itens divididos entre ${pessoas.length} docentes.`);
+};
+
+ACOES['aloc-copiar'] = () => {
+  const p = provaAtual();
+  const outras = provasOrdenadas().filter(x => x.id !== p.id && somaDasMetas(x.id) > 0);
+  if (!outras.length) { toast('Nenhuma outra prova tem metas para copiar.'); return; }
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Copiar metas para ${esc(p.serie)}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <div class="campo"><label>Copiar as metas de</label>
+        <select class="caixa" id="aloc-de">${outras.map(x =>
+          `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(x.etapa)} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Substitui as metas desta prova pelas da prova
+        escolhida, docente por docente. Útil quando a distribuição entre as séries é a mesma. Os recados não são copiados.</p>
+    </div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="aloc-copiar-ok">Copiar</button></div>`);
+};
+ACOES['aloc-copiar-ok'] = () => {
+  const p = provaAtual();
+  const de = $('#aloc-de').value;
+  const origem = S.alocacoes?.[de] || {};
+  S.alocacoes[p.id] = {};
+  for (const [chave, a] of Object.entries(origem))
+    if (a.meta) S.alocacoes[p.id][chave] = { ...a, observacao: '' };
+  $('#dlg').close(); commit(); PERS.alocacoes(p.id);
+  toast(`Metas copiadas de ${provaPorId(de)?.serie}.`);
+};
+
+ACOES['aloc-limpar'] = () => {
+  const p = provaAtual();
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Limpar as metas de ${esc(p.serie)}?</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo"><p style="margin-top:0">Todos os docentes ficam <b>sem meta</b> nesta prova, e os recados
+      são apagados. Os itens já escritos não são tocados.</p></div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn vermelho" data-acao="aloc-limpar-ok">Limpar metas</button></div>`);
+};
+ACOES['aloc-limpar-ok'] = () => {
+  const p = provaAtual();
+  S.alocacoes[p.id] = {};
+  $('#dlg').close(); commit(); PERS.alocacoes(p.id);
+  toast('Metas limpas.');
+};
+
+/* ================= TELA 3 · TEXTOS ================= */
 function telaTextos() {
   const pAtiva = provaAtual();
   if (!pAtiva) {
@@ -877,7 +1236,7 @@ function telaTextos() {
     const livres = Math.max(0, (t.slots || 0) - itens.length);
     const chips = itens.map((i, ii) => `
       <span class="slot" data-acao="abrir-item" data-id="${i.id}" role="button" tabindex="0"
-        title="${esc(STATUS_ITEM[i.status].rot)}" style="cursor:pointer;${i.autor === S.perfil.nome ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
+        title="${esc(STATUS_ITEM[i.status].rot)}" style="cursor:pointer;${souEu(i) ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
         <span class="t t${i.tipo}">${i.tipo}</span>${discChip(i.componente)} ${esc(i.autor.split(' ')[0])}${i.status !== 'aprovado' ? ' ·⏳' : ''}
         ${ehCoord() ? `
           <button class="mv" data-acao="item-mover" data-id="${i.id}" data-dir="-1" title="Mover item para a esquerda" ${ii === 0 ? 'disabled' : ''}>◀</button>
@@ -1049,7 +1408,7 @@ ACOES['item-mover'] = d => {
   commit(); PERS.itens([S.itens[gi].id, S.itens[gj].id]);
 };
 
-/* ================= TELA 3 · ITENS ================= */
+/* ================= TELA 4 · ITENS ================= */
 let filtroStatus = 'todos', soMeus = false, soMinhaArea = false, todasAsProvas = false;
 function telaItens() {
   if (telaItens._primeiraVez === undefined) {
@@ -1063,7 +1422,7 @@ function telaItens() {
   const lista = S.itens.filter(i =>
     (todasAsProvas || i.provaId === pAtiva?.id) &&
     (filtroStatus === 'todos' || i.status === filtroStatus) &&
-    (!soMeus || i.autor === S.perfil.nome) &&
+    (!soMeus || souEu(i)) &&
     (!soMinhaArea || areaDoComponente(i.componente) === S.perfil.area));
   const linhas = lista.map(i => {
     const t = textoDe(i);
@@ -1120,7 +1479,8 @@ function novoRascunho(textoId) {
   return {
     id: null, provaId, textoId: textoId || textosAprovados(provaId)[0]?.id || null,
     tipo: 'A', componente: S.perfil.componente || 'Português',
-    autor: S.perfil.nome, habilidade: '', grupo: 'Interpretar', versao: 'ambas',
+    autor: S.perfil.nome, autorEmail: S.perfil.email || null,
+    habilidade: '', grupo: 'Interpretar', versao: 'ambas',
     linhasRef: '', gabarito: 'C', opcoes: ['', '', '', ''],
     enunciado: '', status: 'rascunho', comentarios: []
   };
@@ -1217,7 +1577,7 @@ function dlgItem() {
   // A barra diz para ONDE cada ação leva o item, não só o que ela faz: a
   // dúvida recorrente é se “Salvar” já manda para a revisão. Salvar guarda e
   // deixa o item onde está; quem move é sempre um botão colorido.
-  const meuItem = rasc.autor === S.perfil.nome;
+  const meuItem = souEu(rasc);
   const acoes = [];
   if ((meuItem || ehCoord()) && ['rascunho', 'devolvido'].includes(rasc.status))
     acoes.push({ cls: 'rosa', acao: 'it-enviar', rot: 'Enviar para revisão',
@@ -1382,7 +1742,7 @@ ACOES['it-excluir'] = () => {
   $('#dlg').close(); commit(); PERS.removerItem(rasc.id); toast('Item excluído.');
 };
 
-/* ================= TELA 4 · CADERNO ================= */
+/* ================= TELA 5 · CADERNO ================= */
 // Diagramação calibrada contra os cadernos reais do PAS/CEBRASPE (edital 2025):
 // A4, duas colunas de 266pt com fio central, corpo 10pt/13,3pt, número do item
 // em 9pt recuado 18pt para fora da coluna e crédito da fonte em 6pt à direita.
@@ -1660,7 +2020,7 @@ ACOES['cad-capa-salvar'] = d => {
   $('#dlg').close(); commit(); PERS.prova(p); toast('Capa atualizada.');
 };
 
-/* ================= TELA 5 · CARTÕES ================= */
+/* ================= TELA 6 · CARTÕES ================= */
 // Conjunto de folhas por estudante, no desenho do caderno de respostas do PAS:
 //   folha 1 — objetiva: todos os itens em ordem numérica ocupando 4/5 da folha
 //             (só A e C recebem bolhas; B e D ficam rotulados) e uma coluna à
@@ -2024,7 +2384,7 @@ ACOES['cart-template'] = () => {
   toast(`Gabarito da prova de ${pAtiva.serie} exportado.`);
 };
 
-/* ================= TELA 6 · CORREÇÃO ================= */
+/* ================= TELA 7 · CORREÇÃO ================= */
 let corrEstId = null, corrTurmaBol = 'todas';
 
 // Ordenados dentro do elenco da prova — a correção é sempre de uma prova.
@@ -2055,7 +2415,7 @@ function tabelaRedacao(provaId = idProvaAtual()) {
 // docente vê apenas os itens aprovados de sua autoria.
 function tabelaDiscursivos(provaId = idProvaAtual()) {
   const meus = itensDaProva(provaId).filter(i => i.status === 'aprovado' && i.tipo === 'D' &&
-    (ehCoord() || i.autor === S.perfil.nome));
+    (ehCoord() || souEu(i)));
   if (!meus.length) return null;
   const numeros = {};
   for (const v of ['regular', 'adaptada'])
@@ -2386,7 +2746,7 @@ ACOES['bol-imprimir'] = () => {
   window.print();
 };
 
-/* ================= TELA 7 · EQUIPE (contas de acesso) ================= */
+/* ================= TELA 8 · ADMINISTRAÇÃO (contas e estudantes) ================= */
 // Quem entra no sistema e com qual papel vem da tabela `equipe` no banco —
 // não do que a pessoa declara ao entrar. A coordenação cria as contas aqui
 // (a Edge Function `equipe` é a única que conhece a chave de serviço).
@@ -2797,58 +3157,58 @@ ACOES['ps-salvar'] = async (d, botao) => {
 /* ---------------- tutorial de boas-vindas ---------------- */
 // Um passo por tela, com uma miniatura animada do sistema. O roteiro muda
 // conforme o papel: cada pessoa vê só o que ela mesma faz.
-// Rótulos curtos do menu no simulacro do tutorial — a coluna é estreita.
-const ABAS_TUTORIAL = ['Painel', 'Textos', 'Itens', 'Caderno', 'Cartões', 'Correção', 'Admin.'];
 
 const TUTORIAL = {
   coordenacao: [
     { cena: 'ola', titulo: 'Você coordena o simulado inteiro',
-      texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as sete telas.' },
-    { cena: 'painel', aba: 0, titulo: 'Painel',
+      texto: 'Este é o sistema do simulado PAS. Ele acompanha a prova do primeiro texto-base até o boletim do estudante. Em um minuto você conhece as oito telas.' },
+    { cena: 'painel', tela: 'painel', titulo: 'Painel',
       texto: 'A visão geral de cada prova: quantos itens já foram aprovados, o que está parado em revisão e o que cada componente entregou. O seletor no topo troca a prova — 9º ano, 1ª, 2ª e 3ª série —, e a tabela “As provas do simulado” mostra as quatro de uma vez.' },
-    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+    { cena: 'alocacao', tela: 'alocacao', titulo: 'Alocação por docente',
+      texto: 'Antes de alguém escrever, você distribui a prova: quantos itens cada docente entrega em cada série. “Dividir igualmente” reparte o total sem sobra, e a conferência avisa quando a soma das metas não fecha com o tamanho da prova. O recado que você escrever aparece no painel daquele docente.' },
+    { cena: 'textos', tela: 'textos', titulo: 'Textos e alocação',
       texto: 'Você cadastra os textos-base e diz quantos itens cada um comporta. Os docentes ocupam esses espaços livres. As sugestões de texto que eles enviarem aparecem aqui para você aprovar.' },
-    { cena: 'revisao', aba: 2, titulo: 'Itens e revisão',
+    { cena: 'revisao', tela: 'itens', titulo: 'Itens e revisão',
       texto: 'O item nasce como rascunho, passa pela coordenação de área e chega a você. Só o que você aprovar entra no caderno, no cartão e na correção. Tudo é conversado dentro do próprio item.' },
-    { cena: 'caderno', aba: 3, titulo: 'Caderno',
+    { cena: 'caderno', tela: 'caderno', titulo: 'Caderno',
       texto: 'O caderno se monta sozinho com os itens aprovados, na diagramação do PAS: duas colunas, numeração contínua e o comando de cada bloco escrito automaticamente. Imprima ou salve em PDF.' },
-    { cena: 'cartoes', aba: 4, titulo: 'Cartões-resposta',
+    { cena: 'cartoes', tela: 'cartoes', titulo: 'Cartões-resposta',
       texto: 'Cada estudante recebe as folhas nominais: objetiva, discursiva e — se você quiser — redação. As âncoras nos cantos permitem ler tudo digitalizado em lote.' },
-    { cena: 'correcao', aba: 5, titulo: 'Correção e boletins',
+    { cena: 'correcao', tela: 'correcao', titulo: 'Correção e boletins',
       texto: 'Lance as marcações à mão ou importe o arquivo do leitor óptico. Daí saem os boletins individuais, os relatórios por turma e a planilha de notas.' },
-    { cena: 'equipe', aba: 6, titulo: 'Administração',
+    { cena: 'equipe', tela: 'administracao', titulo: 'Administração',
       texto: 'Aqui você cria os acessos e sobe a lista de estudantes por CSV. Cada pessoa recebe uma senha provisória e troca no primeiro login, como você acabou de fazer. A série de cada estudante é o que o liga à prova que ele vai fazer.' }
   ],
   coordenacao_area: [
     { cena: 'ola', titulo: 'Você escreve itens e revisa a sua área',
       texto: 'Neste sistema você tem dois papéis: produz itens como docente e é a primeira revisão dos itens da sua área. Veja onde cada coisa acontece.' },
-    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+    { cena: 'textos', tela: 'textos', titulo: 'Textos e alocação',
       texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Se quiser propor um texto novo, use “Sugerir novo texto” — a coordenação aprova.' },
-    { cena: 'itens', aba: 2, titulo: 'Escrever um item',
+    { cena: 'itens', tela: 'itens', titulo: 'Escrever um item',
       texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo (A, B, C ou D), a habilidade e o gabarito. Ao terminar, envie para revisão.' },
-    { cena: 'revisao', aba: 2, titulo: 'Revisar a sua área',
+    { cena: 'revisao', tela: 'itens', titulo: 'Revisar a sua área',
       texto: 'Os itens da sua área chegam a você antes da coordenação geral. Comente dentro do item, devolva com ajustes ou aprove — o que você aprovar segue para a etapa final. Use o filtro “só a minha área” para ver o que está na sua mão.' },
-    { cena: 'correcao', aba: 5, titulo: 'Correção',
+    { cena: 'correcao', tela: 'correcao', titulo: 'Correção',
       texto: 'Depois da aplicação, você lança aqui a nota dos seus itens discursivos, nos mesmos percentuais do cartão: 0, 25, 50, 75 ou 100%.' }
   ],
   docente: [
     { cena: 'ola', titulo: 'Bem-vindo ao Sistema PAS',
       texto: 'Aqui você escreve os itens do simulado e acompanha a revisão deles. O menu à esquerda leva às telas; no alto dele fica a prova em que você está trabalhando.' },
-    { cena: 'painel', aba: 0, titulo: 'O que você tem para entregar',
+    { cena: 'painel', tela: 'painel', titulo: 'O que você tem para entregar',
       texto: 'O Painel abre com a sua lista: quanto você já escreveu em cada prova — 9º ano, 1ª, 2ª e 3ª série — e o que está em revisão. Clique numa linha para trabalhar naquela prova; o seletor no topo troca a prova a qualquer momento.' },
-    { cena: 'textos', aba: 1, titulo: 'Textos e alocação',
+    { cena: 'textos', tela: 'textos', titulo: 'Textos e alocação',
       texto: 'Cada texto-base tem um número de vagas. Clique em um espaço livre para escrever um item seu naquele texto. Também dá para sugerir um texto novo à coordenação.' },
-    { cena: 'itens', aba: 2, titulo: 'Meus itens',
+    { cena: 'itens', tela: 'itens', titulo: 'Meus itens',
       texto: 'O texto-base fica ao lado enquanto você escreve. Escolha o tipo, a habilidade e o gabarito, e envie para revisão. Se voltar com ajustes, a conversa fica registrada dentro do item.' },
-    { cena: 'correcao', aba: 5, titulo: 'Correção',
+    { cena: 'correcao', tela: 'correcao', titulo: 'Correção',
       texto: 'Se você tiver itens discursivos aprovados, é aqui que lança a nota de cada estudante — nos mesmos percentuais do cartão-resposta.' }
   ],
   redacao: [
     { cena: 'ola', titulo: 'Bem-vinda ao Sistema PAS',
       texto: 'Seu acesso é focado: você lança as informações da redação de cada estudante.' },
-    { cena: 'redacao', aba: 5, titulo: 'Correção da redação',
+    { cena: 'redacao', tela: 'correcao', titulo: 'Correção da redação',
       texto: 'A tela de correção mostra a tabela de lançamento: nota de conteúdo (NC), número de erros (NE) e total de linhas (TL) de cada estudante.' },
-    { cena: 'formula', aba: 5, titulo: 'A nota sai sozinha',
+    { cena: 'formula', tela: 'correcao', titulo: 'A nota sai sozinha',
       texto: 'O sistema calcula NR = NC − 2·NE/TL, pela planilha oficial, e leva o resultado para o boletim. Cada campo é salvo assim que você digita.' }
   ]
 };
@@ -2857,9 +3217,10 @@ const passosTutorial = () => TUTORIAL[S.perfil.papel] || TUTORIAL.docente;
 
 // Miniatura animada: a casca do sistema com a aba do passo em destaque.
 function cenaTutorial(passo) {
-  const abas = ABAS_TUTORIAL
-    .slice(0, S.perfil.papel === 'coordenacao' ? 7 : 6)
-    .map((a, i) => `<i class="${i === passo.aba ? 'on' : ''}">${a}</i>`).join('');
+  // As abas vêm das telas que esta pessoa realmente vê: o simulacro não pode
+  // mostrar um menu diferente do que ela vai encontrar.
+  const abas = telasVisiveis()
+    .map(([k, v]) => `<i class="${k === passo.tela ? 'on' : ''}">${esc(v.curto)}</i>`).join('');
   const cenas = {
     ola: `<div class="tut-ola"><span>PAS</span><b>Marista</b></div>`,
     painel: `<div class="tut-cartoes">
@@ -2994,6 +3355,7 @@ function aplicarDados(dados) {
   S.estudantes = dados.estudantes;
   S.elencos = dados.elencos;
   S.respostas = dados.respostas;
+  S.alocacoes = dados.alocacoes || {};
   // A prova escolhida por esta pessoa continua valendo, desde que ainda exista.
   const salva = lerProvaSalva();
   if (salva && dados.provas.some(p => p.id === salva)) S.provaAtiva = salva;
@@ -3009,6 +3371,8 @@ async function aposLogin() {
     S.perfil = {
       papel: eu?.papel || 'docente',
       nome: eu?.nome || u.email,
+      // Identidade estável: é por ela que item e meta se ligam à pessoa.
+      email: (eu?.email || u.email || '').toLowerCase(),
       componente: eu?.componente || null,
       area: eu?.area || null,
       trocarSenha: !!eu?.trocar_senha,
@@ -3016,8 +3380,8 @@ async function aposLogin() {
     };
   } catch {
     // Sem a lista da equipe, entra com o perfil mais restrito.
-    S.perfil = { papel: 'docente', nome: u.email, componente: null, area: null,
-                 trocarSenha: false, tutorialVisto: true };
+    S.perfil = { papel: 'docente', nome: u.email, email: (u.email || '').toLowerCase(),
+                 componente: null, area: null, trocarSenha: false, tutorialVisto: true };
   }
   tutorialAberto = false;
   try {

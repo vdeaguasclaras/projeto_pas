@@ -52,6 +52,29 @@ Matemática, Ciências da Natureza (Biologia, Física, Química) e Inglês.
 `revisaArea(item)` compara a área do componente do item com a área de quem está
 logado.
 
+## Alocação por docente
+
+A meta de cada docente vive em `public.alocacoes`, com chave `(prova_id, email)`
+— a mesma pessoa tem metas diferentes em séries diferentes. `dados` traz `meta`,
+`observacao` (o recado que aparece no painel do docente) e o `nome`/`componente`
+do momento em que a meta foi definida, só para exibição.
+
+Meta e produção se cruzam pelo **e-mail**, não pelo nome. O item passou a gravar
+`autorEmail` além do `autor` de exibição, e a migração 0009 acrescentou a coluna
+gerada `itens.autor_email` com índice. `idAutorDoItem()` e `idDocente()` (js/app.js)
+resolvem a chave preferindo o e-mail e caindo no nome — é o que permite o modo
+sem nuvem, onde e-mail não existe, continuar funcionando.
+
+Meta ausente e meta zero são estados distintos: o campo em branco **apaga** a
+linha de alocação, e o painel do docente diz “sem meta definida” em vez de
+mostrar uma barra vazia, que afirmaria uma cobrança que ninguém fez.
+
+A tela de alocação **não** usa `commit()` nos campos de meta e recado. `commit()`
+remonta a tela inteira, e com ~22 docentes por prova isso destruiria o campo de
+destino a cada `Tab`, perdendo o foco. Em vez disso `alocacaoMudou()` grava,
+sincroniza e atualiza à mão os três lugares que dependem da meta: a barra da
+linha, o subtotal da área e o resumo do topo (`#aloc-resumo`).
+
 Componentes em `COMPONENTES` (js/dados.js). A “Artes” genérica saiu da lista e
 vive em `COMPONENTES_LEGADOS`: continua válida e colorida onde já está gravada,
 mas não é oferecida para escolhas novas. `opcoesComponente(atual)` acrescenta o

@@ -3,9 +3,10 @@
 Sistema de elaboração, revisão, aplicação e correção dos simulados no formato
 PAS/UnB do Colégio Marista Águas Claras.
 
-Sete telas: painel de coordenação, textos-base com alocação de itens por vagas,
-editor de itens com revisão comentada em dois níveis, caderno de provas, cartões-resposta
-nominais, correção com boletins, e administração da equipe e dos estudantes.
+Oito telas: painel de coordenação, alocação da produção entre os docentes,
+textos-base com alocação de itens por vagas, editor de itens com revisão
+comentada em dois níveis, caderno de provas, cartões-resposta nominais, correção
+com boletins, e administração da equipe e dos estudantes.
 
 Atende quatro provas — **9º ano, 1ª, 2ª e 3ª série** —, cada uma com os seus
 textos, itens, capa, instruções e elenco. O seletor no menu lateral diz em qual
@@ -13,6 +14,10 @@ se está trabalhando. O estudante pertence a uma **série**, e é ela que o liga
 prova.
 
 A navegação é por **menu lateral**, que vira gaveta em tela estreita.
+
+A coordenação **aloca** quantos itens cada docente deve entregar em cada prova, e
+o docente vê a sua meta e o seu progresso no painel. Item e meta se ligam pelo
+**e-mail** de quem escreve, não pelo nome — nome é rótulo, e-mail é identidade.
 
 - **Manual da equipe:** [`docs/manual-da-equipe.md`](docs/manual-da-equipe.md)
 - **Plano de implantação e arquitetura:** [`docs/plano-implantacao.md`](docs/plano-implantacao.md)

@@ -6,7 +6,7 @@ Abra o endereço do sistema e entre com o seu e-mail e a **senha provisória** q
 a coordenação entregou. O sistema pede, na hora, que você **crie a sua própria
 senha** — só depois disso o resto aparece. Em seguida, um **tutorial rápido**
 mostra as telas do seu perfil; ele abre uma vez só, e você pode revê-lo quando
-quiser no botão 🔑 → “Rever o tutorial”.
+quiser no botão 🔑 do menu → “Rever o tutorial”.
 
 Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 
@@ -41,15 +41,36 @@ aberta pelo botão **☰** ao lado do título.
 ## As telas
 
 **1 · Painel** — quanto já foi produzido, o que está em revisão e a entrega de
-cada componente curricular. A coordenação também configura aqui o nome, a
-etapa, a série e a data de aplicação do simulado.
+cada componente curricular. A coordenação também configura aqui a prova — nome,
+etapa, série, data, duração e **quantidade de questões** — e vê as quatro provas
+lado a lado. O docente abre esta tela com a sua lista do que tem para entregar.
 
-**2 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
+**2 · Alocação por docente** (só coordenação) — quantos itens cada docente deve
+entregar em **cada prova**. É onde a coordenação distribui a prova antes de
+qualquer um começar a escrever.
+
+- A meta é por prova: a mesma pessoa pode ter 6 itens no 9º ano e 3 na 3ª série.
+  Troque de prova no menu à esquerda para alocar cada uma.
+- **Campo em branco = sem meta**, que não é a mesma coisa que meta zero: quem
+  está sem meta não aparece cobrado no painel dele.
+- O **recado** que você escrever na linha aparece no painel daquele docente,
+  junto da meta.
+- **Dividir igualmente** reparte a quantidade de questões da prova entre todos,
+  fechando a conta exatamente (o resto vai para os primeiros da lista).
+  **Copiar de outra prova** repete a distribuição de uma série em outra.
+- A **conferência** no topo compara a soma das metas com o tamanho da prova e
+  com o espaço dos textos-base. Ela avisa, nunca corrige sozinha — quem decide é
+  você.
+
+Os docentes veem a sua meta no Painel, em “O que você tem para entregar”, com
+uma barra de *aprovados / meta* por prova.
+
+**3 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
 Clique num *espaço livre* para escrever um item seu naquele texto. Docentes
 podem **sugerir** textos novos; a coordenação aprova e define quantos itens o
 texto comporta.
 
-**3 · Itens e revisão** — a lista de todos os itens e o fluxo de aprovação:
+**4 · Itens e revisão** — a lista de todos os itens e o fluxo de aprovação:
 rascunho → coordenação de área → coordenação geral → aprovado. Quem revisa
 comenta dentro do item; quem escreveu responde ali mesmo. **Só item aprovado
 entra no caderno, no cartão e na correção.**
@@ -77,7 +98,7 @@ Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar e
 Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múltipla
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
-**4 · Caderno** — o caderno montado com os itens aprovados, em numeração
+**5 · Caderno** — o caderno montado com os itens aprovados, em numeração
 contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
 PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
 e escolha “Salvar como PDF”.
@@ -96,8 +117,9 @@ precisa citar linhas; o PAS não numera).
 A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
 uma imagem temática e o texto das instruções ao estudante.
 
-**5 · Cartões-resposta** — cadastro de estudantes (um a um ou colando a lista no
-formato `nome;matrícula;turma;versão`) e impressão dos cartões nominais.
+**6 · Cartões-resposta** — impressão dos cartões nominais do elenco da prova. A
+lista de estudantes sobe em **8 · Administração**; aqui você confere quem está na
+prova e imprime.
 
 Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
 
@@ -107,13 +129,13 @@ Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
 - **discursiva** — uma pauta por item tipo D, com as bolhas de percentual de
   acerto (0, 25, 50, 75 e 100%) que **quem corrige** preenche;
 - **redação** — pauta de 30 linhas. A coordenação decide se imprime, em
-  “Configurar simulado”.
+  “⚙ Configurar prova”, no Painel.
 
 Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos e
 “folha N de M”, para a digitalização em lote saber a que estudante e a que parte
 da prova cada imagem pertence.
 
-**6 · Correção e boletins** — lançamento das marcações (à mão ou importando o
+**7 · Correção e boletins** — lançamento das marcações (à mão ou importando o
 CSV do leitor óptico), notas dos itens discursivos, redação (NC, NE e TL) e
 impressão dos boletins por turma.
 
@@ -121,13 +143,13 @@ impressão dos boletins por turma.
 - Cada **docente** vê apenas as notas dos próprios itens discursivos.
 - A **coordenação** vê tudo.
 
-**7 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
+**8 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
 a **lista de estudantes**.
 
 ## Trocar de prova
 
-O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no topo
-diz em qual você está trabalhando, e ele manda em todas as telas — os textos, os
+O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no alto
+do menu à esquerda diz em qual você está trabalhando, e ele manda em todas as telas — os textos, os
 itens, o caderno, os cartões e a correção são sempre os daquela prova. A escolha
 fica guardada no seu navegador; a do colega é independente da sua.
 
@@ -148,7 +170,7 @@ do caderno também são de cada prova.
 
 ## Coordenação: subir a lista de estudantes
 
-Tela **7 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
+Tela **8 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
 estudante, colunas separadas por `;`, `,` ou tabulação (colar direto de uma
 planilha funciona):
 
@@ -177,12 +199,12 @@ O simulado é o mesmo para toda a equipe: o que você salva aparece para os
 outros. Cada alteração é gravada na hora, item por item — duas pessoas mexendo
 em coisas diferentes não se atrapalham.
 
-Para ver o que os colegas fizeram agora, clique em 🔄 no topo (o sistema também
+Para ver o que os colegas fizeram agora, clique em 🔄 no pé do menu à esquerda (o sistema também
 atualiza sozinho quando você volta para a aba).
 
 ## Coordenação: criar o acesso de alguém
 
-1. Tela **7 · Administração** → **+ Adicionar pessoa**.
+1. Tela **8 · Administração** → **+ Adicionar pessoa**.
 2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
    que a pessoa coordena e, se quiser, o componente que ela leciona.
 3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar

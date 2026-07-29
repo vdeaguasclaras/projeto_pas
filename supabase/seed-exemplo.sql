@@ -5,6 +5,7 @@
 
 -- Ordem de exclusão: o que aponta por chave estrangeira sai primeiro.
 delete from public.respostas;
+delete from public.alocacoes;
 delete from public.prova_estudantes;
 delete from public.itens;
 delete from public.textos;

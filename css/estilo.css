@@ -204,6 +204,23 @@ button.slot{cursor:pointer}
 .caixa{border:1.5px solid var(--borda);border-radius:10px;padding:9px 12px;background:var(--fundo);font-size:14px;font-family:inherit;color:var(--ink);width:100%}
 .caixa:focus{outline:2px solid var(--azul);outline-offset:1px}
 textarea.caixa{resize:vertical;min-height:80px;line-height:1.55}
+/* alocação: barra de progresso contra a meta do docente */
+.meta-barra{position:relative;height:22px;border-radius:7px;background:var(--fundo);
+  border:1px solid var(--borda);overflow:hidden;display:flex;align-items:center;min-width:110px}
+.meta-barra i{position:absolute;left:0;top:0;bottom:0;border-radius:6px 0 0 6px;transition:width .3s}
+.meta-barra b{position:relative;z-index:1;font-size:11.5px;font-weight:800;padding:0 8px;
+  font-family:var(--mono)}
+.meta-barra.ok i{background:color-mix(in srgb,var(--verde) 42%,transparent)}
+.meta-barra.pend i{background:color-mix(in srgb,var(--amarelo) 52%,transparent)}
+.meta-barra.falta i{background:color-mix(in srgb,var(--erro) 26%,transparent)}
+
+/* linha de área na tabela de alocação */
+.aloc-tab tr.aloc-area th{background:var(--azul-claro);color:var(--ink);font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.06em;padding:7px 12px}
+.aloc-tab tr.aloc-area th:last-child{text-align:right;text-transform:none;letter-spacing:0}
+.aloc-tab td{vertical-align:middle}
+.aloc-tab tbody tr:not(.aloc-area):hover{background:var(--azul-claro)}
+
 /* cartão de conferência: o painel avisa quando os números da prova discordam */
 .cartao.aviso{border-left:4px solid var(--amarelo)}
 
