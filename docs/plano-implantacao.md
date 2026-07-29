@@ -189,11 +189,33 @@ coisa.
 
 ### Capa
 
-A capa reproduz a estrutura do caderno original: arte temática à esquerda com a
-faixa de subprograma e etapa, instruções numeradas à direita e as observações no
-rodapé. Tanto a imagem quanto o texto das instruções são editáveis na tela do
-caderno (“Capa e instruções”), já que a arte muda a cada edição e costuma
-remeter aos textos da prova ou ao tema da redação.
+A capa reproduz a estrutura do caderno original: arte temática com a faixa de
+subprograma e etapa, instruções numeradas e as observações no rodapé. A imagem,
+o texto das instruções e o **arranjo** são editáveis na tela do caderno (“Capa e
+instruções”), já que a arte muda a cada edição e costuma remeter aos textos da
+prova ou ao tema da redação.
+
+Dois arranjos, escolhidos **por prova** (`capaArranjo` no `dados` da prova —
+campo novo dentro do jsonb, sem mudança de esquema; prova sem o campo é
+vertical):
+
+| Arranjo | Arte | Instruções |
+|---|---|---|
+| **Vertical — arte na faixa esquerda** (padrão) | 261,8pt de largura (44%), folha inteira | 333,2pt (56%), coluna única |
+| **Horizontal — arte na metade de cima** | 595×421pt, a metade superior | 595×421pt, duas colunas de ~260pt |
+
+As duas colunas do arranjo horizontal não são enfeite: a largura cheia daria
+linhas de ~540pt, e 260pt é a medida das colunas do miolo do caderno.
+
+Cabem 15 instruções do tamanho médio das padrão no vertical e 13 no horizontal
+(o padrão tem 10). Passando disso, o que é aparado é o **fim da lista**, não as
+observações — que dizem quantos itens o caderno tem —, e o corte aparece igual
+na prévia e no papel.
+
+A arte é fundo (`background`), e o Chrome só imprime fundo com “Gráficos de
+plano de fundo” marcado, o que não é o padrão do diálogo de impressão; por isso
+`print-color-adjust:exact` na arte, sem o qual a faixa sairia branca e a marca
+PAS, que é branca, desapareceria junto.
 
 ## Fase 5 — pontuação
 

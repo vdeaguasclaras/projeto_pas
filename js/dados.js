@@ -81,7 +81,12 @@ function provaNova(serie, ordem) {
     duracao: '4h30',
     totalQuestoes: QUESTOES_DA_SERIE[serie] ?? null,
     temRedacao: true,
-    imprimirRedacao: true
+    imprimirRedacao: true,
+    // Arranjo da capa: 'vertical' (arte na faixa esquerda, como no caderno do
+    // PAS) ou 'horizontal' (arte na metade de cima da folha). Mora no `dados`
+    // jsonb da prova, então não pede mudança de esquema; a prova antiga, que
+    // não tem o campo, cai no vertical em `arranjoCapa()` (js/app.js).
+    capaArranjo: 'vertical'
   };
 }
 
