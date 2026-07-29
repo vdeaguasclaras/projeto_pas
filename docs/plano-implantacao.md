@@ -23,8 +23,9 @@ js/config-supabase.js endereço e chave publicável do banco
 js/dados.js           modelo de dados, dados de exemplo, cache local
 js/nuvem.js           driver do Supabase (auth, tabelas, Edge Function)
 js/limpar.js          poda do HTML escrito pela equipe (lista de permissão curta)
+js/planilha.js        leitura da lista de estudantes colada pela coordenação
 js/rico.js            texto rico do item: ênfase e notação matemática
-js/app.js             as 7 telas, regras de prova e correção
+js/app.js             as 8 telas, regras de prova e correção
 js/vendor/supabase.js biblioteca supabase-js (cópia versionada — sem CDN)
 js/vendor/katex/      KaTeX 0.18.1 + fontes woff2 (cópia versionada — sem CDN)
 supabase/migrations/  esquema e regras de acesso do banco
