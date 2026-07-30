@@ -66,9 +66,19 @@ const ID_DA_SERIE = {
   '2ª série EM': 'pr-2em', '3ª série EM': 'pr-3em'
 };
 
-// A quantidade de questões do 9º ano veio da coordenação; as do ensino médio
-// ficam em aberto até ela definir, e a interface mostra "a definir".
-const QUESTOES_DA_SERIE = { '9º ano': 90 };
+// Quantidade de questões, por série e por versão da prova. Os números da versão
+// regular vieram da coordenação; os da adaptada são diferentes e ainda não
+// foram definidos — ficam nulos, e a interface mostra "a definir" em vez de
+// inventar denominador.
+//
+// São dois números, não um: a prova adaptada (de inclusão) não tem o tamanho da
+// regular, e comparar a entrega de uma com a meta da outra daria conta errada.
+const QUESTOES_DA_SERIE = {
+  '9º ano':       { regular: 90,  adaptada: null },
+  '1ª série EM':  { regular: 100, adaptada: null },
+  '2ª série EM':  { regular: 110, adaptada: null },
+  '3ª série EM':  { regular: 120, adaptada: null }
+};
 
 function provaNova(serie, ordem) {
   return {
@@ -79,7 +89,7 @@ function provaNova(serie, ordem) {
     etapa: '1ª Etapa',
     dataAplicacao: '',
     duracao: '4h30',
-    totalQuestoes: QUESTOES_DA_SERIE[serie] ?? null,
+    totalQuestoes: { ...(QUESTOES_DA_SERIE[serie] || { regular: null, adaptada: null }) },
     temRedacao: true,
     imprimirRedacao: true,
     // Arranjo da capa: 'vertical' (arte na faixa esquerda, como no caderno do

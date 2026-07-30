@@ -24,6 +24,7 @@ js/dados.js           modelo de dados, dados de exemplo, cache local
 js/nuvem.js           driver do Supabase (auth, tabelas, Edge Function)
 js/limpar.js          poda do HTML escrito pela equipe (lista de permissão curta)
 js/planilha.js        leitura da lista de estudantes colada pela coordenação
+js/imagens.js         figuras: envio, URL assinada, medida e impressão
 js/rico.js            texto rico do item: ênfase e notação matemática
 js/app.js             as 8 telas, regras de prova e correção
 js/vendor/supabase.js biblioteca supabase-js (cópia versionada — sem CDN)
@@ -55,6 +56,34 @@ Dança, Música, Teatro), Humanas (História, Geografia, Filosofia, Sociologia),
 Matemática, Ciências da Natureza (Biologia, Física, Química) e Inglês.
 `revisaArea(item)` compara a área do componente do item com a área de quem está
 logado.
+
+## Figuras em texto-base e item
+
+Ficam no bucket **privado** `imagens` (migração 0011), não no `dados` jsonb: uma
+imagem de 300 kB viraria ~400 kB de base64 numa linha lida a cada carregamento
+de tela, e vinte textos ilustrados levariam a abertura do sistema a dezenas de
+megabytes. O `dados` guarda `{origem, caminho, largura, altura, mime, legenda,
+fonte, escala}`.
+
+O bucket é privado porque conteúdo de prova é sigiloso até a aplicação — todas as
+tabelas exigem `eh_equipe()`, e um bucket público seria o único lugar por onde o
+infográfico de uma prova não aplicada sairia, bastando a URL. A exibição usa URL
+assinada de validade curta, criada **em lote** (`assinarImagens`) e guardada num
+cache de sessão.
+
+**As dimensões são gravadas, e isso não é enfeite.** `medirPecas` mede a altura
+de cada bloco numa régua síncrona; uma `<img>` cujos bytes ainda não chegaram
+mede zero, e a página quebraria no lugar errado — erro que só apareceria no
+papel. Com largura e altura gravadas, a figura ocupa o espaço certo desde o
+primeiro quadro. `prepararFigurasDaProva()` assina e pré-carrega antes de montar
+o caderno, e remonta uma vez quando os endereços chegam.
+
+Cada figura é **peça própria** na paginação (`pecasDeImagens`): assim ela muda de
+coluna sozinha em vez de arrastar o texto inteiro.
+
+Sem nuvem (“usar sem conexão”) não há Storage, e a figura vira data URI com teto
+de 400 kB — o depósito ali é o localStorage. É o que permite demonstrar e testar
+o recurso sem banco.
 
 ## Alocação por docente
 

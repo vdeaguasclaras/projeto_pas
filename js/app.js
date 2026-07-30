@@ -11,6 +11,10 @@ import {
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
 import {
+  guardarImagem, descartarImagem, prepararImagens, todasAsImagens,
+  htmlImagens, pecasDeImagens, htmlEditorImagens
+} from './imagens.js';
+import {
   carregarKatex, rico, simples, vazio as ricoVazio, editorRico, ligarEditoresRicos
 } from './rico.js';
 import { lerLinhasEstudantes } from './planilha.js';
@@ -168,6 +172,23 @@ function lerProvaSalva() {
 function salvarProvaAtiva(id) {
   try { localStorage.setItem(CHAVE_PROVA, id); } catch { /* segue sem lembrar */ }
 }
+
+// Quantidade de questões de uma versão da prova. Aceita os dois formatos: o
+// atual, `{regular, adaptada}`, e o antigo, um número só — que era o tamanho da
+// regular, a única definida na época. Devolve null quando não há número, e null
+// é diferente de zero: "a definir" não é "nenhuma questão".
+function totalDeQuestoes(prova, versao = 'regular') {
+  const t = prova?.totalQuestoes;
+  if (t == null) return null;
+  if (typeof t === 'number') return versao === 'regular' ? t : null;
+  const n = t[versao];
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+// Normaliza para o formato atual, para gravar e para editar no formulário.
+const questoesDaProva = p => ({
+  regular: totalDeQuestoes(p, 'regular'),
+  adaptada: totalDeQuestoes(p, 'adaptada')
+});
 
 const provasOrdenadas = () => (S.provas || []).slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
 
@@ -480,12 +501,19 @@ function balancoDaProva(provaId) {
     aprovados,
     emArea: itens.filter(i => i.status === 'area').length,
     emGeral: itens.filter(i => i.status === 'geral').length,
-    // Três grandezas distintas, cada uma com a sua fonte: o tamanho que a
-    // prova deve ter, o espaço que os textos-base comportam, e o que já existe.
-    totalQuestoes: p?.totalQuestoes ?? null,
+    // Grandezas distintas, cada uma com a sua fonte: o tamanho que cada versão
+    // da prova deve ter, o espaço que os textos-base comportam, e o que existe.
+    //
+    // `totalQuestoes` continua aqui como o tamanho da versão REGULAR, porque é
+    // ela a prova completa — a adaptada é derivada dela, e é contra a regular
+    // que se mede o quanto falta escrever.
+    totalQuestoes: totalDeQuestoes(p, 'regular'),
+    totalAdaptada: totalDeQuestoes(p, 'adaptada'),
     slots: textosAprovados(provaId).reduce((s, t) => s + (t.slots || 0), 0),
     textos: textosAprovados(provaId).length,
     sugestoes: textosDaProva(provaId).filter(t => t.status === 'sugestao').length,
+    // Itens aprovados em cada caderno. Item de versão "ambas" conta nos dois,
+    // e é por isso que a soma dos dois não é `aprovados`.
     nReg: prova(provaId, 'regular').length,
     nAda: prova(provaId, 'adaptada').length
   };
@@ -695,10 +723,16 @@ function telaPainel() {
   // decide é a coordenação.
   const conf = [];
   if (b.totalQuestoes && b.slots && b.slots !== b.totalQuestoes)
-    conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, e a prova pede <b>${b.totalQuestoes}</b>`);
+    conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, e a prova regular pede <b>${b.totalQuestoes}</b>`);
   if (!b.totalQuestoes)
-    conf.push('a quantidade de questões desta prova ainda não foi definida' +
+    conf.push('a quantidade de questões da prova regular ainda não foi definida' +
       (doPapel ? ' — defina em “⚙ Configurar prova”' : ''));
+  // A adaptada tem tamanho próprio; sem ele, a barra dela não tem denominador.
+  if (!b.totalAdaptada && b.nAda)
+    conf.push(`a prova adaptada já tem <b>${b.nAda}</b> ${b.nAda === 1 ? 'item aprovado' : 'itens aprovados'}, mas o tamanho dela ainda não foi definido` +
+      (doPapel ? ' — é um campo separado em “⚙ Configurar prova”' : ''));
+  if (b.totalAdaptada && b.totalQuestoes && b.totalAdaptada > b.totalQuestoes)
+    conf.push(`a prova adaptada está maior que a regular (<b>${b.totalAdaptada}</b> contra <b>${b.totalQuestoes}</b>) — confira se não houve troca dos números`);
   if (b.criados > b.slots && b.slots)
     conf.push(`há <b>${b.criados - b.slots}</b> ${b.criados - b.slots === 1 ? 'item' : 'itens'} além dos espaços dos textos-base`);
   // A redação é parte da prova: prova com redação e sem proposta escrita é
@@ -725,9 +759,11 @@ function telaPainel() {
 
     <div class="versoes">
       <div class="versao sel"><div class="ic" style="background:var(--azul)">📘</div>
-        <div><b>Prova Regular</b><span>${b.nReg} itens aprovados${p.temRedacao === false ? '' : ' + redação'} · ${estReg} estudantes</span></div></div>
+        <div><b>Prova Regular</b><span>${b.nReg}${b.totalQuestoes ? ` de ${b.totalQuestoes}` : ''} ${b.nReg === 1 ? 'item aprovado' : 'itens aprovados'}${
+          b.totalQuestoes ? '' : ' · tamanho a definir'}${p.temRedacao === false ? '' : ' + redação'} · ${estReg} estudantes</span></div></div>
       <div class="versao"><div class="ic" style="background:var(--verde)">📗</div>
-        <div><b>Prova Adaptada (inclusão)</b><span>${b.nAda} itens aprovados${p.temRedacao === false ? '' : ' + redação'} · ${estAda} estudantes</span></div></div>
+        <div><b>Prova Adaptada (inclusão)</b><span>${b.nAda}${b.totalAdaptada ? ` de ${b.totalAdaptada}` : ''} ${b.nAda === 1 ? 'item aprovado' : 'itens aprovados'}${
+          b.totalAdaptada ? '' : ' · tamanho a definir'}${p.temRedacao === false ? '' : ' + redação'} · ${estAda} estudantes</span></div></div>
     </div>
 
     <div class="grade g3" style="margin-bottom:16px">
@@ -790,12 +826,19 @@ function dlgProva(p, nova = false) {
           <input class="caixa" type="date" id="cfg-data" value="${esc(p.dataAplicacao || '')}"></div>
         <div class="campo"><label>Duração</label>
           <input class="caixa" id="cfg-dur" value="${esc(p.duracao || '')}"></div>
-        <div class="campo"><label>Quantidade de questões</label>
-          <input class="caixa" type="number" min="1" max="200" id="cfg-qtd"
-            value="${p.totalQuestoes ?? ''}" placeholder="a definir"></div>
       </div>
-      <p style="font-size:12px;color:var(--ink-2);margin:-4px 0 12px">A quantidade de questões é o tamanho que a prova
-        deve ter. O painel compara esse número com os itens já aprovados e com os espaços dos textos-base.</p>
+      <div class="form-linha">
+        <div class="campo"><label>Questões — prova regular</label>
+          <input class="caixa" type="number" min="1" max="300" id="cfg-qtd"
+            value="${totalDeQuestoes(p, 'regular') ?? ''}" placeholder="a definir"></div>
+        <div class="campo"><label>Questões — prova adaptada</label>
+          <input class="caixa" type="number" min="1" max="300" id="cfg-qtd-ada"
+            value="${totalDeQuestoes(p, 'adaptada') ?? ''}" placeholder="a definir"></div>
+      </div>
+      <p style="font-size:12px;color:var(--ink-2);margin:-4px 0 12px">São <b>dois</b> números porque a prova adaptada
+        (de inclusão) tem tamanho próprio. O painel compara cada versão com os itens já aprovados nela, e a regular
+        também com os espaços dos textos-base. Campo em branco significa <em>a definir</em> — a barra fica sem
+        denominador em vez de mostrar zero.</p>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:8px">
         <input type="checkbox" id="cfg-tem-red" ${p.temRedacao !== false ? 'checked' : ''}> esta prova tem redação</label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
@@ -819,14 +862,17 @@ ACOES['prova-nova'] = () => {
 };
 
 ACOES['cfg-salvar'] = d => {
-  const qtd = parseInt($('#cfg-qtd').value, 10);
+  const numero = sel => {
+    const n = parseInt($(sel).value, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
   const dados = {
     nome: $('#cfg-nome').value.trim(),
     serie: $('#cfg-serie').value,
     etapa: $('#cfg-etapa').value.trim(),
     dataAplicacao: $('#cfg-data').value,
     duracao: $('#cfg-dur').value.trim(),
-    totalQuestoes: Number.isFinite(qtd) && qtd > 0 ? qtd : null,
+    totalQuestoes: { regular: numero('#cfg-qtd'), adaptada: numero('#cfg-qtd-ada') },
     temRedacao: $('#cfg-tem-red').checked,
     imprimirRedacao: $('#cfg-red').checked
   };
@@ -1161,16 +1207,19 @@ ACOES['aloc-dividir'] = () => {
   const p = provaAtual();
   const pessoas = docentesAlocaveis();
   if (!p || !pessoas.length) return;
-  if (!p.totalQuestoes) {
-    toast('Defina a quantidade de questões da prova primeiro, no Painel.');
+  // A referência é a prova REGULAR: é o caderno completo, e a adaptada deriva
+  // dele. Dividir pela adaptada deixaria a regular sem quem escrevesse.
+  const alvo = totalDeQuestoes(p, 'regular');
+  if (!alvo) {
+    toast('Defina a quantidade de questões da prova regular primeiro, no Painel.');
     return;
   }
   // Divisão inteira com o resto nas primeiras: a soma fecha exatamente com o
   // tamanho da prova, sem sobra nem falta.
-  const base = Math.floor(p.totalQuestoes / pessoas.length);
-  const resto = p.totalQuestoes % pessoas.length;
+  const base = Math.floor(alvo / pessoas.length);
+  const resto = alvo % pessoas.length;
   abrirDlg(`
-    <div class="dlg-cab"><h2>Dividir ${p.totalQuestoes} itens igualmente?</h2>
+    <div class="dlg-cab"><h2>Dividir ${alvo} itens igualmente?</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo"><p style="margin-top:0">Cada um dos <b>${pessoas.length}</b> docentes fica com
       <b>${base}</b> ${base === 1 ? 'item' : 'itens'}${resto ? `, e os ${resto} primeiros da lista recebem um a mais` : ''}.
@@ -1181,15 +1230,17 @@ ACOES['aloc-dividir'] = () => {
 ACOES['aloc-dividir-ok'] = () => {
   const p = provaAtual();
   const pessoas = docentesAlocaveis();
-  const base = Math.floor(p.totalQuestoes / pessoas.length);
-  const resto = p.totalQuestoes % pessoas.length;
+  const alvo = totalDeQuestoes(p, 'regular');
+  if (!alvo) return;
+  const base = Math.floor(alvo / pessoas.length);
+  const resto = alvo % pessoas.length;
   pessoas.forEach((d, ix) => {
     const a = alocacaoParaEditar(p.id, d.chave);
     a.meta = base + (ix < resto ? 1 : 0);
     if (!a.meta && !a.observacao) delete S.alocacoes[p.id][d.chave];
   });
   $('#dlg').close(); commit(); PERS.alocacoes(p.id);
-  toast(`${p.totalQuestoes} itens divididos entre ${pessoas.length} docentes.`);
+  toast(`${alvo} itens divididos entre ${pessoas.length} docentes.`);
 };
 
 ACOES['aloc-copiar'] = () => {
@@ -1310,8 +1361,16 @@ function telaTextos() {
   <p class="nota-tela"><strong>Modelo de alocação:</strong> cada texto tem uma quantidade de itens, sem amarração prévia a disciplinas — qualquer docente ocupa um espaço livre com item do tipo que escolher. A coordenação pode registrar regras por texto (informativas nesta fase) e aprova as sugestões de texto dos docentes.</p>`;
 }
 
-function dlgTexto(t) {
+// `preservar` reabre o formulário sem re-semear o que está em edição — é o que
+// permite acrescentar uma figura e continuar de onde se estava, em vez de voltar
+// ao último estado gravado e perder o texto digitado.
+function dlgTexto(t, { preservar = false } = {}) {
   const novo = !t;
+  if (!preservar) {
+    corpoTextoRico = (t?.linhas || []).join('<br>');
+    imagensTexto = todasAsImagens(t?.imagens).map(i => ({ ...i }));
+    textoEmEdicao = t || null;
+  }
   abrirDlg(`
     <div class="dlg-cab"><h2>${novo ? (ehCoord() ? 'Novo texto-base' : 'Sugerir texto-base') : 'Editar texto-base'}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
@@ -1321,8 +1380,16 @@ function dlgTexto(t) {
           <input class="caixa" id="tx-titulo" value="${esc(t?.titulo || '')}" placeholder="ex.: “O Cerrado e as veredas” — Guimarães Rosa (adapt.)"></div>
         <div class="campo"><label>Fonte</label><input class="caixa" id="tx-fonte" value="${esc(t?.fonte || '')}" placeholder="autor / obra / veículo, ano"></div>
       </div>
-      <div class="campo" style="margin-bottom:12px"><label>Corpo do texto (uma linha por linha numerada)</label>
-        <textarea class="caixa" id="tx-corpo" rows="8">${esc((t?.linhas || []).join('\n'))}</textarea></div>
+      <div class="campo" style="margin-bottom:12px"><label>Corpo do texto</label>
+        ${editorRico({ campo: 'txCorpo', valor: (t?.linhas || []).join('<br>'), linhas: 9,
+                       rotulo: 'Corpo do texto-base' })}
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Uma linha por linha do texto. Aceita ênfase e
+          notação matemática, como o enunciado do item — a fórmula entre <code>$…$</code>. Em prosa, uma
+          <b>linha em branco</b> separa parágrafos.</p></div>
+      <div class="campo" style="margin-bottom:12px"><label>Figuras do texto</label>
+        ${htmlEditorImagens(imagensTexto, { campo: 'texto', modoNuvem })}
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Infográfico, mapa, obra de arte, gráfico. Sai no
+          caderno depois do texto, antes do comando do bloco.</p></div>
       ${ehCoord() ? `<div class="form-linha">
         <div class="campo"><label>Quantidade de itens (slots)</label>
           <input class="caixa" type="number" min="1" max="40" id="tx-slots" value="${t?.slots ?? 6}"></div>
@@ -1353,20 +1420,35 @@ function dlgTexto(t) {
 ACOES['novo-texto'] = () => dlgTexto(null);
 ACOES['sugerir-texto'] = () => dlgTexto(null);
 ACOES['editar-texto'] = d => dlgTexto(S.textos.find(t => t.id === d.id));
+// O editor rico entrega uma string; cada <br> é uma linha do texto-base. Guardar
+// linha a linha (e não um bloco só) é o que permite ao editor de item numerar e
+// destacar a faixa que o item cita.
+//
+// As linhas em branco do meio ficam: elas separam parágrafo na prosa. Só as das
+// pontas caem.
+function linhasDoCorpoRico(html) {
+  const linhas = String(html || '')
+    .split(/<br\s*\/?>/i)
+    .map(l => l.replace(/^(\s|&nbsp;|<div>|<\/div>)+|(\s|&nbsp;|<div>|<\/div>)+$/gi, '').trim());
+  while (linhas.length && ricoVazio(linhas[0])) linhas.shift();
+  while (linhas.length && ricoVazio(linhas[linhas.length - 1])) linhas.pop();
+  return linhas;
+}
+
 ACOES['salvar-texto'] = d => {
   const anterior = d.id ? S.textos.find(t => t.id === d.id) : null;
   const dados = {
     titulo: $('#tx-titulo').value.trim(),
     fonte: $('#tx-fonte').value.trim(),
     // linhas em branco no meio são separadores de parágrafo — só as das pontas caem
-    linhas: $('#tx-corpo').value.split('\n').map(l => l.trim())
-      .join('\n').replace(/^\n+|\n+$/g, '').split('\n'),
+    linhas: linhasDoCorpoRico(corpoTextoRico),
+    imagens: todasAsImagens(imagensTexto),
     slots: ehCoord() ? Math.max(1, parseInt($('#tx-slots').value, 10) || 6) : (anterior?.slots ?? 6),
     regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || ''),
     comando: ehCoord() && $('#tx-comando') ? $('#tx-comando').value.trim() : (anterior?.comando || ''),
     formato: ehCoord() && $('#tx-formato') ? $('#tx-formato').value : (anterior?.formato || 'prosa')
   };
-  if (!dados.titulo || !dados.fonte || !dados.linhas.length) {
+  if (!dados.titulo || !dados.fonte || !dados.linhas.some(l => !ricoVazio(l))) {
     toast('Título, fonte e corpo do texto são obrigatórios.'); return;
   }
   // A numeração dos textos é por prova: o Texto 1 do 9º ano e o Texto 1 da
@@ -1529,7 +1611,7 @@ function dlgItem() {
   const linhasTx = (t?.linhas || []).map((l, i) => {
     const n = i + 1;
     const marca = fx && n >= fx[0] && n <= fx[1] ? ' mark' : '';
-    return `<div class="linha-tx${marca}"><span class="n">${n}</span><span>${esc(l)}</span></div>`;
+    return `<div class="linha-tx${marca}"><span class="n">${n}</span><span>${rico(l)}</span></div>`;
   }).join('');
   // Só os textos da prova do item: mover um item para o texto de outra série
   // quebraria a numeração das duas.
@@ -1661,6 +1743,10 @@ function dlgItem() {
               destaque, na notação do LaTeX — <code>$\\frac{1}{2}$</code>, <code>$x^2$</code>,
               <code>$\\sqrt{3}$</code>, <code>$30^\\circ$</code>. A prévia mostra como sai impresso.
               Valor em real não vira fórmula: “R$ 50,00” continua sendo R$ 50,00.</p></div>
+          <div class="campo" style="margin-bottom:12px"><label>Figuras do item</label>
+            ${htmlEditorImagens(rasc.imagens, { campo: 'item', modoNuvem })}
+            <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Figura de geometria, estrutura química,
+              gráfico. Sai no caderno depois do enunciado.</p></div>
           ${opcoesHtml}${respostaHtml}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -1687,11 +1773,74 @@ MUDS['it-dlinhas'] = (d, el) => { rasc.dLinhas = Math.max(1, Math.min(40, parseI
 // <textarea>: recebem ênfase e notação matemática. O aviso de mudança NÃO
 // chama `commit()` nem remonta o diálogo — remontar destruiria o cursor a cada
 // tecla, o mesmo motivo já documentado em `alocacaoMudou()`.
+// O corpo do texto-base também é rico, e o diálogo dele não tem `rasc`: o valor
+// em edição fica aqui, e `salvar-texto` o lê. `dlgTexto` o semeia ao abrir.
+let corpoTextoRico = '';
+// As figuras do texto-base em edição, pelo mesmo motivo. Cópia, não referência:
+// cancelar o diálogo não deve deixar figura acrescentada no texto gravado.
+let imagensTexto = [];
+// Qual texto-base está aberto no formulário. Reabrir depois de acrescentar ou
+// remover figura precisa saber se é edição de um texto existente ou um novo.
+let textoEmEdicao = null;
+
+// Onde as figuras em edição vivem, por campo — o texto-base tem as suas, o item
+// tem as dele em `rasc`.
+const listaDeImagens = campo => campo === 'item' ? (rasc.imagens = rasc.imagens || []) : imagensTexto;
+
 ligarEditoresRicos((campo, i, valor) => {
+  if (campo === 'txCorpo') { corpoTextoRico = valor; return; }
   if (!rasc) return;
   if (campo === 'opcao') rasc.opcoes[Number(i)] = valor;
   else if (campo === 'enunciado' || campo === 'gabarito') rasc[campo] = valor;
 });
+/* ---------------- figuras: envio, ajuste e remoção ---------------- */
+// Reabre o formulário em que a figura está, para a tira de miniaturas
+// acompanhar. O item tem `reabrirDlgItem`; o texto-base reabre pelo id.
+function reabrirFormularioDe(campo) {
+  if (campo === 'item') { reabrirDlgItem(); return; }
+  dlgTexto(textoEmEdicao, { preservar: true });
+}
+
+MUDS['img-arquivo'] = async (d, el) => {
+  const arquivo = el.files?.[0];
+  if (!arquivo) return;
+  el.value = '';                       // permite escolher o mesmo arquivo de novo
+  const lista = listaDeImagens(d.campo);
+  toast('Enviando a figura…');
+  try {
+    const img = await guardarImagem(arquivo, {
+      modoNuvem, provaId: idProvaAtual(),
+      dono: d.campo === 'item' ? 'itens' : 'textos', uid
+    });
+    lista.push(img);
+    reabrirFormularioDe(d.campo);
+    toast(`Figura de ${img.largura}×${img.altura} acrescentada.`);
+  } catch (e) {
+    // O motivo importa: formato, tamanho ou falha de rede pedem providências
+    // diferentes de quem está escrevendo.
+    toast('⚠ ' + (e.message || e));
+  }
+};
+
+MUDS['img-legenda'] = (d, el) => { const i = listaDeImagens(d.campo)[+d.i]; if (i) i.legenda = el.value; };
+MUDS['img-fonte']   = (d, el) => { const i = listaDeImagens(d.campo)[+d.i]; if (i) i.fonte = el.value; };
+MUDS['img-escala']  = (d, el) => {
+  const i = listaDeImagens(d.campo)[+d.i];
+  if (!i) return;
+  i.escala = parseInt(el.value, 10) || 100;
+  reabrirFormularioDe(d.campo);        // a miniatura mostra o tamanho escolhido
+};
+
+ACOES['img-remover'] = async d => {
+  const lista = listaDeImagens(d.campo);
+  const [fora] = lista.splice(+d.i, 1);
+  reabrirFormularioDe(d.campo);
+  // Só apaga do bucket depois de a figura sair do registro: arquivo órfão é
+  // lixo, registro apontando para arquivo apagado é figura quebrada no caderno.
+  await descartarImagem(fora);
+  toast('Figura removida.');
+};
+
 ACOES['it-tipo'] = d => {
   rasc.tipo = d.v;
   if (d.v === 'B') rasc.gabarito = /^\d{1,3}$/.test(String(rasc.gabarito)) ? rasc.gabarito : '';
@@ -1902,45 +2051,59 @@ function comandoDoBloco(itens, texto) {
 // continua certa mesmo quando uma fração estica a linha.
 function htmlItem({ item, numero }) {
   const enun = rico(item.enunciado);
+  // A figura do item (geometria, estrutura química, gráfico) vem depois do
+  // enunciado e antes das opções: é o enunciado que a apresenta.
+  const figs = htmlImagens(item.imagens, LARGURA_COLUNA);
   if (item.tipo === 'C') {
     const ops = (item.opcoes || []).map((o, i) =>
       `<p class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}</p>`).join('');
-    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${ops}</div>`;
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}${ops}</div>`;
   }
   if (item.tipo === 'D') {
     const n = Math.max(1, item.dLinhas || 10);
     const pauta = item.dPauta !== false;
     const linhas = Array.from({ length: n }, () => '<i></i>').join('');
-    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}
       <div class="pas-pauta${pauta ? ' numerada' : ' sem-linhas'}">${pauta ? linhas : '<i style="height:' + (n * 17) + 'pt"></i>'}</div></div>`;
   }
-  return `<div class="pas-item"><span class="n">${numero}</span> ${enun}</div>`;
+  return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}</div>`;
 }
 
 // Peças que fluem pelas colunas. Cada peça é indivisível — itens e parágrafos
 // não se partem entre colunas, como nos cadernos impressos.
 // Prosa reflui e é justificada, como no caderno impresso; verso mantém as
 // quebras do autor; “numerado” só quando algum item precisa citar linhas.
+// O texto-base é rico como o item: `rico()` poda a marcação pela mesma lista de
+// permissão e desenha as fórmulas. Texto de Matemática e de Química precisa
+// disso tanto quanto o enunciado — o infográfico e a equação estão no texto.
+//
+// A linha em branco que separa parágrafo é aferida pelo texto por baixo da
+// marcação (`ricoVazio`), não pela string crua: uma linha com só `<b></b>`
+// continua sendo linha em branco.
 function htmlCorpoTexto(texto) {
   const linhas = texto.linhas || [];
+  const branca = l => ricoVazio(l);
   if (texto.formato === 'numerado')
-    return `<div class="pas-linhas">${linhas.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
+    return `<div class="pas-linhas">${linhas.map(l => `<p>${rico(l)}</p>`).join('')}</div>`;
   if (texto.formato === 'verso')
     return `<div class="pas-texto">${linhas.map(l =>
-      l.trim() ? `<p class="pas-verso">${esc(l)}</p>` : '<p>&nbsp;</p>').join('')}</div>`;
+      branca(l) ? '<p>&nbsp;</p>' : `<p class="pas-verso">${rico(l)}</p>`).join('')}</div>`;
   // prosa: linhas em branco separam parágrafos
   const paragrafos = [];
   let atual = [];
   for (const l of linhas) {
-    if (l.trim()) atual.push(l.trim());
+    if (!branca(l)) atual.push(l.trim());
     else if (atual.length) { paragrafos.push(atual.join(' ')); atual = []; }
   }
   if (atual.length) paragrafos.push(atual.join(' '));
-  return `<div class="pas-texto">${paragrafos.map(p => `<p>${esc(p)}</p>`).join('')}</div>`;
+  return `<div class="pas-texto">${paragrafos.map(p => `<p>${rico(p)}</p>`).join('')}</div>`;
 }
 
 function pecasDoBloco(texto, itens) {
   const pecas = [htmlCorpoTexto(texto)];
+  // Uma peça por figura: ela pode mudar de coluna sozinha em vez de arrastar o
+  // texto inteiro, e a régua mede a altura de cada uma isolada.
+  pecas.push(...pecasDeImagens(texto.imagens, LARGURA_COLUNA));
   pecas.push(`<p class="pas-fonte">${esc(texto.fonte)}</p>`);
   pecas.push(`<p class="pas-comando">${comandoDoBloco(itens, texto)}</p>`);
   itens.forEach(e => pecas.push(htmlItem(e)));
@@ -1949,6 +2112,8 @@ function pecasDoBloco(texto, itens) {
 }
 
 const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
+const LARGURA_COLUNA = 266.05; // pt — a mesma de `--col` no CSS
+const LARGURA_UMA_COL = 541.1; // pt — coluna única (proposta de redação)
 const PX_POR_PT = 4 / 3;
 
 // Mede cada peça numa régua com a largura exata da coluna.
@@ -2064,12 +2229,32 @@ function htmlCaderno(provaId, versao, comCapa = true) {
   return `<div class="pas">${capa}${folhas}</div>`;
 }
 
+// As figuras precisam de endereço (URL assinada) e dos bytes em mão ANTES de o
+// caderno ser montado: paginar com imagem pela metade dá quebra errada, e
+// imprimir com imagem faltando dá quadro vazio no papel. Feito uma vez por
+// prova; depois o cache do módulo responde.
+const provasComImagemPronta = new Set();
+async function prepararFigurasDaProva(provaId) {
+  if (provasComImagemPronta.has(provaId)) return;
+  provasComImagemPronta.add(provaId);
+  const listas = [
+    ...textosDaProva(provaId).map(t => t.imagens),
+    ...itensDaProva(provaId).map(i => i.imagens)
+  ];
+  if (!listas.some(l => todasAsImagens(l).length)) return;
+  await prepararImagens(listas);
+  // Remonta agora que os endereços existem — a primeira montagem saiu com os
+  // quadros de espera, e a medida deles já era a definitiva.
+  if (telaAtual() === 'caderno') render();
+}
+
 function telaCaderno() {
   const pAtiva = provaAtual();
   if (!pAtiva) {
     $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
     return;
   }
+  prepararFigurasDaProva(pAtiva.id);
   const pv = prova(pAtiva.id, cadVersao);
   // A proposta de redação é conteúdo do caderno: ela sozinha já justifica gerar
   // o documento, e a sua falta é avisada em vez de ficar em silêncio.
