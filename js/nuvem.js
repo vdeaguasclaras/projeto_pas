@@ -184,18 +184,33 @@ async function apagarImagem(caminho) {
   if (error) throw error;
 }
 
+// A meta que vale: a soma dos tipos quando a meta é dividida por tipo de item,
+// o total solto quando não. Mesma regra de `metaDaAlocacao` na tela — repetida
+// aqui, e não importada, para o driver não depender de `app.js`.
+const metaEfetiva = a => {
+  const soma = Object.values(a?.porTipo || {})
+    .reduce((s, v) => s + (Number(v) > 0 ? Number(v) : 0), 0);
+  if (soma > 0) return soma;
+  const n = Number(a?.meta);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+// Vale a pena guardar a linha? Meta zerada é apagada — "sem meta" e "meta zero"
+// dizem coisas diferentes, e guardar zero faria a tela afirmar a segunda. Mas
+// recado sem meta é conteúdo: apagá-lo faria o recado desaparecer no recarregar,
+// depois de a tela ter mostrado que ele estava salvo.
+const vaiGuardar = a => !!(metaEfetiva(a) || a?.observacao);
+
 // Alocação: quanto cada docente deve entregar em cada prova. Só a coordenação
-// escreve. Meta zerada é apagada — "sem meta" e "meta zero" dizem coisas
-// diferentes, e guardar zero faria a tela afirmar a segunda.
+// escreve.
 async function gravarAlocacao(provaId, email, dados) {
-  if (!dados || !dados.meta)
+  if (!vaiGuardar(dados))
     return void checar(await sb.from('alocacoes').delete()
       .eq('prova_id', provaId).eq('email', email));
   checar(await sb.from('alocacoes')
     .upsert({ prova_id: provaId, email, dados }, { onConflict: 'prova_id,email' }));
 }
 async function gravarAlocacoes(provaId, mapa) {
-  const linhas = Object.entries(mapa || {}).filter(([, a]) => a?.meta)
+  const linhas = Object.entries(mapa || {}).filter(([, a]) => vaiGuardar(a))
     .map(([email, dados]) => ({ prova_id: provaId, email, dados }));
   checar(await sb.from('alocacoes').delete().eq('prova_id', provaId));
   if (linhas.length)

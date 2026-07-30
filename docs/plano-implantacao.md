@@ -89,8 +89,38 @@ o recurso sem banco.
 
 A meta de cada docente vive em `public.alocacoes`, com chave `(prova_id, email)`
 — a mesma pessoa tem metas diferentes em séries diferentes. `dados` traz `meta`,
-`observacao` (o recado que aparece no painel do docente) e o `nome`/`componente`
-do momento em que a meta foi definida, só para exibição.
+`porTipo` (a divisão por tipo de item, quando há), `observacao` (o recado que
+aparece no painel do docente) e o `nome`/`componente` do momento em que a meta
+foi definida, só para exibição. `dados` é jsonb livre: `porTipo` não pediu
+migração.
+
+### A meta dividida por tipo
+
+A coordenação não pede só “6 itens”: pede “6 itens, sendo 3 do tipo A, 2 do tipo
+B e 1 do tipo C”. Isso é `porTipo: { A: 3, B: 2, C: 1 }`, e daí sai uma regra que
+vale em toda parte — **o total é a soma dos tipos quando há divisão, e o número
+solto quando não há** (`metaDaAlocacao()`, js/app.js; repetida como
+`metaEfetiva()` em js/nuvem.js para o driver não depender da tela).
+
+O total não é um segundo número editável ao lado dos tipos. Se fosse, a tela
+aceitaria “6” com partes que somam 7, e passaria a mentir sem que ninguém tivesse
+errado nada. Então: sem nenhum tipo preenchido o total é campo; com qualquer tipo
+preenchido ele vira soma somente-leitura (`.aloc-total-soma`) e `porTipo` manda.
+Apagar o último tipo desfaz a divisão **e zera o total** — aquele número era a
+soma, não algo que alguém digitou, e deixá-lo para trás exibiria um total que a
+coordenação acabou de apagar. `alocacaoMudou()` troca a forma da célula quando o
+estado dividido entra ou sai, sem remontar a tabela.
+
+“Dividir igualmente” apaga `porTipo` antes de gravar o total: a divisão antiga
+venceria o número novo, e a tela mostraria um total que a divisão contradiz. A
+cópia entre provas, ao contrário, leva `porTipo` — é a mesma distribuição.
+
+Do lado de quem escreve, o progresso por tipo se mede em **dois** contadores
+diferentes: `porTipo` de `producaoDe()` (itens escritos) responde “o que ainda
+tenho de escrever”, e `aprovadosPorTipo` responde “o que ainda não fechou”. A
+situação do painel usa o primeiro e as fichas usam o segundo. Por isso seis itens
+entregues com a mistura errada aparecem como “Faltam 2 do tipo B”, e não como
+meta cumprida: o total fecha, a encomenda não.
 
 Meta e produção se cruzam pelo **e-mail**, não pelo nome. O item passou a gravar
 `autorEmail` além do `autor` de exibição, e a migração 0009 acrescentou a coluna
@@ -100,13 +130,18 @@ sem nuvem, onde e-mail não existe, continuar funcionando.
 
 Meta ausente e meta zero são estados distintos: o campo em branco **apaga** a
 linha de alocação, e o painel do docente diz “sem meta definida” em vez de
-mostrar uma barra vazia, que afirmaria uma cobrança que ninguém fez.
+mostrar uma barra vazia, que afirmaria uma cobrança que ninguém fez. Recado sem
+meta, porém, é conteúdo e fica guardado — antes o driver apagava a linha olhando
+só `meta`, e o recado desaparecia no recarregar depois de a tela ter mostrado que
+estava salvo (`vaiGuardar()`, js/nuvem.js).
 
-A tela de alocação **não** usa `commit()` nos campos de meta e recado. `commit()`
-remonta a tela inteira, e com ~22 docentes por prova isso destruiria o campo de
-destino a cada `Tab`, perdendo o foco. Em vez disso `alocacaoMudou()` grava,
-sincroniza e atualiza à mão os três lugares que dependem da meta: a barra da
-linha, o subtotal da área e o resumo do topo (`#aloc-resumo`).
+A tela de alocação **não** usa `commit()` nos campos de meta, tipo e recado.
+`commit()` remonta a tela inteira, e com ~22 docentes por prova e cinco campos
+numéricos por linha isso destruiria o campo de destino a cada `Tab`, perdendo o
+foco. Em vez disso `alocacaoMudou()` grava, sincroniza e atualiza à mão tudo o
+que depende da meta: a célula do total, a barra e as fichas por tipo da linha, o
+subtotal da área e o resumo do topo (`#aloc-resumo`). Os subtotais são
+recalculados dos dados, nunca incrementados a partir do que está na tela.
 
 Componentes em `COMPONENTES` (js/dados.js). A “Artes” genérica saiu da lista e
 vive em `COMPONENTES_LEGADOS`: continua válida e colorida onde já está gravada,

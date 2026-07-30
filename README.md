@@ -16,8 +16,10 @@ menu lateral diz em qual se está trabalhando. O estudante pertence a uma
 A navegação é por **menu lateral**, que vira gaveta em tela estreita.
 
 A coordenação **aloca** quantos itens cada docente deve entregar em cada prova, e
-o docente vê a sua meta e o seu progresso no painel. Item e meta se ligam pelo
-**e-mail** de quem escreve, não pelo nome — nome é rótulo, e-mail é identidade.
+pode dividir a meta **por tipo de item** — “6 itens, sendo 3 do tipo A, 2 do tipo
+B e 1 do tipo C”. O docente lê a encomenda e acompanha o progresso de cada tipo
+no painel. Item e meta se ligam pelo **e-mail** de quem escreve, não pelo nome —
+nome é rótulo, e-mail é identidade.
 
 Os campos de texto do item aceitam **ênfase** (negrito, itálico, sobrescrito,
 subscrito) e **notação matemática** entre `$…$`: fração, expoente, raiz, índice,
