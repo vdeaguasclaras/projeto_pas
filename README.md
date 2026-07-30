@@ -43,6 +43,7 @@ js/nuvem.js             driver do Supabase
 js/limpar.js            higienização do HTML escrito pela equipe
 js/rico.js              texto rico dos campos do item: ênfase e notação matemática
 js/planilha.js          leitura da lista de estudantes colada pela coordenação
+js/imagens.js           figuras de texto-base e item (envio, medida, impressão)
 js/app.js               telas, montagem da prova e correção
 js/vendor/supabase.js   biblioteca supabase-js (cópia local, sem CDN)
 js/vendor/katex/        KaTeX 0.18.1 e as fontes dele (cópia local, sem CDN)
@@ -86,6 +87,9 @@ serve — não há servidor próprio.
   redação — passa por uma lista de permissão curta (`js/limpar.js`) antes de ir
   para a tela e para o papel: só ênfase tipográfica, e atributo nenhum em tag
   nenhuma.
+- As **figuras** ficam em bucket **privado** do Storage, não embutidas no banco:
+  conteúdo de prova é sigiloso até a aplicação, então a leitura exige
+  `eh_equipe()` e a exibição passa por URL assinada de validade curta.
 - A **notação matemática** dos itens é guardada como código entre `$…$`, que é
   texto comum, e desenhada pelo KaTeX só na hora de exibir (`js/rico.js`). O
   HTML do KaTeX — `<span style>`, `<svg>`, `<math>` — nunca é gravado no banco,

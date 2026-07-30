@@ -154,6 +154,36 @@ async function removerResposta(provaId, estId) {
   checar(await sb.from('respostas').delete().eq('prova_id', provaId).eq('est_id', estId));
 }
 
+/* ---------------- imagens (bucket privado `imagens`) ---------------- */
+// O bucket é privado porque conteúdo de prova é sigiloso até a aplicação: a
+// leitura exige `eh_equipe()`, como todas as tabelas. Por isso a exibição passa
+// por URL assinada de validade curta, e não por endereço público.
+const BUCKET = 'imagens';
+
+async function enviarImagem(caminho, arquivo) {
+  const { error } = await sb.storage.from(BUCKET)
+    .upload(caminho, arquivo, { contentType: arquivo.type, upsert: false });
+  if (error) throw error;
+  return caminho;
+}
+
+// Assina em lote: o caderno pede o endereço de todas as imagens de uma vez, e
+// uma chamada por imagem multiplicaria a ida ao servidor por página.
+async function assinarImagens(caminhos, segundos = 3600) {
+  if (!caminhos.length) return {};
+  const { data, error } = await sb.storage.from(BUCKET)
+    .createSignedUrls(caminhos, segundos);
+  if (error) throw error;
+  const mapa = {};
+  for (const d of data || []) if (d.path && d.signedUrl) mapa[d.path] = d.signedUrl;
+  return mapa;
+}
+
+async function apagarImagem(caminho) {
+  const { error } = await sb.storage.from(BUCKET).remove([caminho]);
+  if (error) throw error;
+}
+
 // Alocação: quanto cada docente deve entregar em cada prova. Só a coordenação
 // escreve. Meta zerada é apagada — "sem meta" e "meta zero" dizem coisas
 // diferentes, e guardar zero faria a tela afirmar a segunda.
@@ -212,6 +242,7 @@ export const nuvem = {
   conectado, usuario, iniciar, entrar, sair, trocarSenha,
   carregarTudo, gravarLinha, gravarLinhas, removerLinha, gravarElenco,
   gravarAlocacao, gravarAlocacoes,
+  enviarImagem, assinarImagens, apagarImagem,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
   marcarSenhaTrocada, marcarTutorialVisto

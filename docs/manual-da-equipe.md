@@ -250,6 +250,26 @@ como sai impresso.
 
 Valor em real não vira fórmula: “R$ 50,00 e R$ 30,00” atravessa intacto.
 
+## Figuras: infográfico, mapa, gráfico, obra de arte
+
+O **texto-base** e o **item** aceitam figuras, no bloco “Figuras” do formulário.
+Clique em **+ Figura**, escolha o arquivo (PNG, JPEG, WEBP ou SVG) e pronto.
+
+Para cada figura você pode informar **legenda** e **fonte**, que saem impressas
+embaixo dela, e escolher o **tamanho** — 100%, 75%, 50% ou 33% da largura da
+coluna. Figura de geometria raramente precisa da coluna inteira; esticá-la só
+rouba espaço do texto.
+
+A figura do texto-base sai depois do texto e antes do comando do bloco. A do item
+sai depois do enunciado, antes das opções.
+
+**Reduza a imagem antes de enviar.** O limite é 5 MB, mas o que importa para o
+papel é a nitidez na largura em que ela vai sair: uma figura que ocupa meia
+coluna não ganha nada em ter 4000 pixels de largura.
+
+As figuras ficam no banco da escola, e **só quem está na equipe consegue
+abri-las** — conteúdo de prova é sigiloso até a aplicação.
+
 ## Trocar de prova
 
 O sistema atende quatro provas: **9º ano, 1ª, 2ª e 3ª série**. O seletor no alto

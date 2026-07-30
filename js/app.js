@@ -11,6 +11,10 @@ import {
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
 import {
+  guardarImagem, descartarImagem, prepararImagens, todasAsImagens,
+  htmlImagens, pecasDeImagens, htmlEditorImagens
+} from './imagens.js';
+import {
   carregarKatex, rico, simples, vazio as ricoVazio, editorRico, ligarEditoresRicos
 } from './rico.js';
 import { lerLinhasEstudantes } from './planilha.js';
@@ -1357,9 +1361,16 @@ function telaTextos() {
   <p class="nota-tela"><strong>Modelo de alocação:</strong> cada texto tem uma quantidade de itens, sem amarração prévia a disciplinas — qualquer docente ocupa um espaço livre com item do tipo que escolher. A coordenação pode registrar regras por texto (informativas nesta fase) e aprova as sugestões de texto dos docentes.</p>`;
 }
 
-function dlgTexto(t) {
+// `preservar` reabre o formulário sem re-semear o que está em edição — é o que
+// permite acrescentar uma figura e continuar de onde se estava, em vez de voltar
+// ao último estado gravado e perder o texto digitado.
+function dlgTexto(t, { preservar = false } = {}) {
   const novo = !t;
-  corpoTextoRico = (t?.linhas || []).join('<br>');
+  if (!preservar) {
+    corpoTextoRico = (t?.linhas || []).join('<br>');
+    imagensTexto = todasAsImagens(t?.imagens).map(i => ({ ...i }));
+    textoEmEdicao = t || null;
+  }
   abrirDlg(`
     <div class="dlg-cab"><h2>${novo ? (ehCoord() ? 'Novo texto-base' : 'Sugerir texto-base') : 'Editar texto-base'}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
@@ -1375,6 +1386,10 @@ function dlgTexto(t) {
         <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Uma linha por linha do texto. Aceita ênfase e
           notação matemática, como o enunciado do item — a fórmula entre <code>$…$</code>. Em prosa, uma
           <b>linha em branco</b> separa parágrafos.</p></div>
+      <div class="campo" style="margin-bottom:12px"><label>Figuras do texto</label>
+        ${htmlEditorImagens(imagensTexto, { campo: 'texto', modoNuvem })}
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Infográfico, mapa, obra de arte, gráfico. Sai no
+          caderno depois do texto, antes do comando do bloco.</p></div>
       ${ehCoord() ? `<div class="form-linha">
         <div class="campo"><label>Quantidade de itens (slots)</label>
           <input class="caixa" type="number" min="1" max="40" id="tx-slots" value="${t?.slots ?? 6}"></div>
@@ -1427,6 +1442,7 @@ ACOES['salvar-texto'] = d => {
     fonte: $('#tx-fonte').value.trim(),
     // linhas em branco no meio são separadores de parágrafo — só as das pontas caem
     linhas: linhasDoCorpoRico(corpoTextoRico),
+    imagens: todasAsImagens(imagensTexto),
     slots: ehCoord() ? Math.max(1, parseInt($('#tx-slots').value, 10) || 6) : (anterior?.slots ?? 6),
     regra: ehCoord() && $('#tx-regra') ? $('#tx-regra').value.trim() : (anterior?.regra || ''),
     comando: ehCoord() && $('#tx-comando') ? $('#tx-comando').value.trim() : (anterior?.comando || ''),
@@ -1727,6 +1743,10 @@ function dlgItem() {
               destaque, na notação do LaTeX — <code>$\\frac{1}{2}$</code>, <code>$x^2$</code>,
               <code>$\\sqrt{3}$</code>, <code>$30^\\circ$</code>. A prévia mostra como sai impresso.
               Valor em real não vira fórmula: “R$ 50,00” continua sendo R$ 50,00.</p></div>
+          <div class="campo" style="margin-bottom:12px"><label>Figuras do item</label>
+            ${htmlEditorImagens(rasc.imagens, { campo: 'item', modoNuvem })}
+            <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Figura de geometria, estrutura química,
+              gráfico. Sai no caderno depois do enunciado.</p></div>
           ${opcoesHtml}${respostaHtml}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -1756,6 +1776,16 @@ MUDS['it-dlinhas'] = (d, el) => { rasc.dLinhas = Math.max(1, Math.min(40, parseI
 // O corpo do texto-base também é rico, e o diálogo dele não tem `rasc`: o valor
 // em edição fica aqui, e `salvar-texto` o lê. `dlgTexto` o semeia ao abrir.
 let corpoTextoRico = '';
+// As figuras do texto-base em edição, pelo mesmo motivo. Cópia, não referência:
+// cancelar o diálogo não deve deixar figura acrescentada no texto gravado.
+let imagensTexto = [];
+// Qual texto-base está aberto no formulário. Reabrir depois de acrescentar ou
+// remover figura precisa saber se é edição de um texto existente ou um novo.
+let textoEmEdicao = null;
+
+// Onde as figuras em edição vivem, por campo — o texto-base tem as suas, o item
+// tem as dele em `rasc`.
+const listaDeImagens = campo => campo === 'item' ? (rasc.imagens = rasc.imagens || []) : imagensTexto;
 
 ligarEditoresRicos((campo, i, valor) => {
   if (campo === 'txCorpo') { corpoTextoRico = valor; return; }
@@ -1763,6 +1793,54 @@ ligarEditoresRicos((campo, i, valor) => {
   if (campo === 'opcao') rasc.opcoes[Number(i)] = valor;
   else if (campo === 'enunciado' || campo === 'gabarito') rasc[campo] = valor;
 });
+/* ---------------- figuras: envio, ajuste e remoção ---------------- */
+// Reabre o formulário em que a figura está, para a tira de miniaturas
+// acompanhar. O item tem `reabrirDlgItem`; o texto-base reabre pelo id.
+function reabrirFormularioDe(campo) {
+  if (campo === 'item') { reabrirDlgItem(); return; }
+  dlgTexto(textoEmEdicao, { preservar: true });
+}
+
+MUDS['img-arquivo'] = async (d, el) => {
+  const arquivo = el.files?.[0];
+  if (!arquivo) return;
+  el.value = '';                       // permite escolher o mesmo arquivo de novo
+  const lista = listaDeImagens(d.campo);
+  toast('Enviando a figura…');
+  try {
+    const img = await guardarImagem(arquivo, {
+      modoNuvem, provaId: idProvaAtual(),
+      dono: d.campo === 'item' ? 'itens' : 'textos', uid
+    });
+    lista.push(img);
+    reabrirFormularioDe(d.campo);
+    toast(`Figura de ${img.largura}×${img.altura} acrescentada.`);
+  } catch (e) {
+    // O motivo importa: formato, tamanho ou falha de rede pedem providências
+    // diferentes de quem está escrevendo.
+    toast('⚠ ' + (e.message || e));
+  }
+};
+
+MUDS['img-legenda'] = (d, el) => { const i = listaDeImagens(d.campo)[+d.i]; if (i) i.legenda = el.value; };
+MUDS['img-fonte']   = (d, el) => { const i = listaDeImagens(d.campo)[+d.i]; if (i) i.fonte = el.value; };
+MUDS['img-escala']  = (d, el) => {
+  const i = listaDeImagens(d.campo)[+d.i];
+  if (!i) return;
+  i.escala = parseInt(el.value, 10) || 100;
+  reabrirFormularioDe(d.campo);        // a miniatura mostra o tamanho escolhido
+};
+
+ACOES['img-remover'] = async d => {
+  const lista = listaDeImagens(d.campo);
+  const [fora] = lista.splice(+d.i, 1);
+  reabrirFormularioDe(d.campo);
+  // Só apaga do bucket depois de a figura sair do registro: arquivo órfão é
+  // lixo, registro apontando para arquivo apagado é figura quebrada no caderno.
+  await descartarImagem(fora);
+  toast('Figura removida.');
+};
+
 ACOES['it-tipo'] = d => {
   rasc.tipo = d.v;
   if (d.v === 'B') rasc.gabarito = /^\d{1,3}$/.test(String(rasc.gabarito)) ? rasc.gabarito : '';
@@ -1973,19 +2051,22 @@ function comandoDoBloco(itens, texto) {
 // continua certa mesmo quando uma fração estica a linha.
 function htmlItem({ item, numero }) {
   const enun = rico(item.enunciado);
+  // A figura do item (geometria, estrutura química, gráfico) vem depois do
+  // enunciado e antes das opções: é o enunciado que a apresenta.
+  const figs = htmlImagens(item.imagens, LARGURA_COLUNA);
   if (item.tipo === 'C') {
     const ops = (item.opcoes || []).map((o, i) =>
       `<p class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}</p>`).join('');
-    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${ops}</div>`;
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}${ops}</div>`;
   }
   if (item.tipo === 'D') {
     const n = Math.max(1, item.dLinhas || 10);
     const pauta = item.dPauta !== false;
     const linhas = Array.from({ length: n }, () => '<i></i>').join('');
-    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}
+    return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}
       <div class="pas-pauta${pauta ? ' numerada' : ' sem-linhas'}">${pauta ? linhas : '<i style="height:' + (n * 17) + 'pt"></i>'}</div></div>`;
   }
-  return `<div class="pas-item"><span class="n">${numero}</span> ${enun}</div>`;
+  return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}</div>`;
 }
 
 // Peças que fluem pelas colunas. Cada peça é indivisível — itens e parágrafos
@@ -2020,6 +2101,9 @@ function htmlCorpoTexto(texto) {
 
 function pecasDoBloco(texto, itens) {
   const pecas = [htmlCorpoTexto(texto)];
+  // Uma peça por figura: ela pode mudar de coluna sozinha em vez de arrastar o
+  // texto inteiro, e a régua mede a altura de cada uma isolada.
+  pecas.push(...pecasDeImagens(texto.imagens, LARGURA_COLUNA));
   pecas.push(`<p class="pas-fonte">${esc(texto.fonte)}</p>`);
   pecas.push(`<p class="pas-comando">${comandoDoBloco(itens, texto)}</p>`);
   itens.forEach(e => pecas.push(htmlItem(e)));
@@ -2028,6 +2112,8 @@ function pecasDoBloco(texto, itens) {
 }
 
 const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
+const LARGURA_COLUNA = 266.05; // pt — a mesma de `--col` no CSS
+const LARGURA_UMA_COL = 541.1; // pt — coluna única (proposta de redação)
 const PX_POR_PT = 4 / 3;
 
 // Mede cada peça numa régua com a largura exata da coluna.
@@ -2143,12 +2229,32 @@ function htmlCaderno(provaId, versao, comCapa = true) {
   return `<div class="pas">${capa}${folhas}</div>`;
 }
 
+// As figuras precisam de endereço (URL assinada) e dos bytes em mão ANTES de o
+// caderno ser montado: paginar com imagem pela metade dá quebra errada, e
+// imprimir com imagem faltando dá quadro vazio no papel. Feito uma vez por
+// prova; depois o cache do módulo responde.
+const provasComImagemPronta = new Set();
+async function prepararFigurasDaProva(provaId) {
+  if (provasComImagemPronta.has(provaId)) return;
+  provasComImagemPronta.add(provaId);
+  const listas = [
+    ...textosDaProva(provaId).map(t => t.imagens),
+    ...itensDaProva(provaId).map(i => i.imagens)
+  ];
+  if (!listas.some(l => todasAsImagens(l).length)) return;
+  await prepararImagens(listas);
+  // Remonta agora que os endereços existem — a primeira montagem saiu com os
+  // quadros de espera, e a medida deles já era a definitiva.
+  if (telaAtual() === 'caderno') render();
+}
+
 function telaCaderno() {
   const pAtiva = provaAtual();
   if (!pAtiva) {
     $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada — crie a primeira no Painel.</div></div></div>';
     return;
   }
+  prepararFigurasDaProva(pAtiva.id);
   const pv = prova(pAtiva.id, cadVersao);
   // A proposta de redação é conteúdo do caderno: ela sozinha já justifica gerar
   // o documento, e a sua falta é avisada em vez de ficar em silêncio.
