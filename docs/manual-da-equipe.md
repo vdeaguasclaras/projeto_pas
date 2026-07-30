@@ -54,18 +54,31 @@ qualquer um começar a escrever.
   Troque de prova no menu à esquerda para alocar cada uma.
 - **Campo em branco = sem meta**, que não é a mesma coisa que meta zero: quem
   está sem meta não aparece cobrado no painel dele.
+- As colunas **A, B, C e D** dividem a meta **por tipo de item**. Preencha 3, 2 e
+  1 na linha do Renato e ele lê, no painel dele, “6 itens, sendo 3 do tipo A, 2 do
+  tipo B e 1 do tipo C”.
+  Enquanto nenhum tipo tem número, digite só o **Total** e a mistura fica a
+  critério de quem escreve. A partir do primeiro tipo preenchido, o Total passa a
+  ser a **soma dos tipos** e não se digita mais — um total ao lado de partes que
+  somam outra coisa seria um número que mente. Apagar todos os tipos devolve o
+  Total ao teclado, sem meta.
 - O **recado** que você escrever na linha aparece no painel daquele docente,
   junto da meta.
 - **Dividir igualmente** reparte a quantidade de questões da prova **regular**
   entre todos, fechando a conta exatamente (o resto vai para os primeiros da
-  lista).
-  **Copiar de outra prova** repete a distribuição de uma série em outra.
+  lista) — e **desfaz a divisão por tipo**, porque passa a valer um total solto.
+  **Copiar de outra prova** repete a distribuição de uma série em outra, levando
+  a divisão por tipo de quem tiver uma.
 - A **conferência** no topo compara a soma das metas com o tamanho da prova e
   com o espaço dos textos-base. Ela avisa, nunca corrige sozinha — quem decide é
-  você.
+  você. Ao lado do total alocado aparece a **mistura da prova** — quanto está
+  pedido de cada tipo e quanto ficou sem tipo definido.
 
 Os docentes veem a sua meta no Painel, em “O que você tem para entregar”, com
-uma barra de *aprovados / meta* por prova.
+uma barra de *aprovados / meta* por prova. Quando a meta é dividida por tipo, o
+painel traz também a encomenda escrita por extenso, uma ficha de progresso por
+tipo (*A 1/3*, *B 0/2*) e uma situação que cobra o que falta **daquele** tipo:
+seis itens entregues com a mistura errada não passam por meta cumprida.
 
 **3 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
 Clique num *espaço livre* para escrever um item seu naquele texto. Docentes

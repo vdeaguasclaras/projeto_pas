@@ -539,8 +539,12 @@ function producaoDe(provaId, chave = idDocente(S.perfil)) {
     devolvidos: meus.filter(i => i.status === 'devolvido').length,
     rascunhos: meus.filter(i => i.status === 'rascunho').length,
     // Por tipo, para conferir contra a divisão da meta quando ela existir.
+    // Escritos e aprovados são contas diferentes: “falta escrever” se mede pelo
+    // que existe, “está em dia” se mede pelo que passou na revisão.
     porTipo: Object.fromEntries(Object.keys(TIPOS).map(t =>
-      [t, meus.filter(i => i.tipo === t).length]))
+      [t, meus.filter(i => i.tipo === t).length])),
+    aprovadosPorTipo: Object.fromEntries(Object.keys(TIPOS).map(t =>
+      [t, meus.filter(i => i.tipo === t && i.status === 'aprovado').length]))
   };
 }
 const minhaProducao = provaId => producaoDe(provaId);
@@ -548,6 +552,88 @@ const minhaProducao = provaId => producaoDe(provaId);
 /* ---------------- alocação: a meta de cada docente ---------------- */
 const alocacaoDe = (provaId, chave) => S.alocacoes?.[provaId]?.[chave] || null;
 const minhaAlocacao = provaId => alocacaoDe(provaId, idDocente(S.perfil));
+
+// A meta pode ser dividida por tipo de item: “6 itens, sendo 3 do tipo A, 2 do
+// tipo B e 1 do tipo C”. É essa divisão que diz ao docente o que escrever — um
+// total solto deixa a escolha do tipo em aberto, e às vezes é isso que a
+// coordenação quer.
+//
+// O total NÃO é um número independente quando há divisão: ele é a soma dos
+// tipos. Total editável ao lado de tipos editáveis produziria "6" com partes que
+// somam 7 — um número que mente. Enquanto nenhum tipo é informado, o total é
+// direto (tipos a critério de quem escreve).
+const TIPOS_META = Object.keys(TIPOS);
+
+const tiposDaAlocacao = a => {
+  const p = a?.porTipo || {};
+  return Object.fromEntries(TIPOS_META.map(t => {
+    const n = Number(p[t]);
+    return [t, Number.isFinite(n) && n > 0 ? n : 0];
+  }));
+};
+const somaDosTipos = a => Object.values(tiposDaAlocacao(a)).reduce((s, n) => s + n, 0);
+const temDivisaoPorTipo = a => somaDosTipos(a) > 0;
+
+// A meta que vale: a soma dos tipos quando há divisão, o total solto quando não.
+function metaDaAlocacao(a) {
+  if (!a) return 0;
+  const soma = somaDosTipos(a);
+  if (soma > 0) return soma;
+  const n = Number(a.meta);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+// A divisão dita em português, do jeito que a coordenação a diz em voz alta:
+// “6 itens, sendo 3 do tipo A, 2 do tipo B e 1 do tipo C”. Tipo com zero não
+// entra na frase — dizer “0 do tipo D” é ruído.
+function fraseDosTipos(a) {
+  if (!temDivisaoPorTipo(a)) return '';
+  const tipos = tiposDaAlocacao(a);
+  const partes = TIPOS_META.filter(t => tipos[t]).map(t => `${tipos[t]} do tipo ${t}`);
+  if (partes.length === 1) return partes[0];
+  return partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+}
+
+// Quanto ainda falta em cada tipo, contra a contagem que se passar: a de itens
+// escritos responde “o que ainda tenho de escrever”, a de aprovados responde
+// “o que ainda não fechou”.
+function tiposEmFalta(a, contagem) {
+  if (!temDivisaoPorTipo(a)) return [];
+  const tipos = tiposDaAlocacao(a);
+  return TIPOS_META
+    .map(t => ({ tipo: t, faltam: tipos[t] - (contagem?.[t] || 0) }))
+    .filter(x => x.faltam > 0);
+}
+
+// A divisão com o progresso de cada tipo, em fichas: “A 1/3 · B 0/2”. Uma barra
+// só, do total, esconderia exatamente o que esta tela existe para mostrar —
+// seis itens escritos com a mistura errada não são a meta cumprida.
+function htmlTiposDaMeta(a, prod) {
+  if (!temDivisaoPorTipo(a)) return '';
+  const tipos = tiposDaAlocacao(a);
+  return `<div class="tipos-meta">${TIPOS_META.filter(t => tipos[t]).map(t => {
+    const feito = prod?.aprovadosPorTipo?.[t] || 0;
+    const cls = feito >= tipos[t] ? 'ok' : feito ? 'pend' : 'falta';
+    return `<span class="chip ${cls}" title="${esc(TIPOS[t].rotulo)} — ${feito} de ${tipos[t]} ${
+      feito === 1 ? 'aprovado' : 'aprovados'}">${t} ${feito}/${tipos[t]}</span>`;
+  }).join('')}</div>`;
+}
+
+// A mistura de tipos da prova inteira, e quanto ficou sem tipo definido. É o
+// que responde à coordenação “esta prova está pedindo quantos de cada tipo?”.
+function mixDaProva(provaId) {
+  const m = S.alocacoes?.[provaId] || {};
+  const porTipo = Object.fromEntries(TIPOS_META.map(t => [t, 0]));
+  let livre = 0;
+  for (const a of Object.values(m)) {
+    if (temDivisaoPorTipo(a)) {
+      const t = tiposDaAlocacao(a);
+      for (const k of TIPOS_META) porTipo[k] += t[k];
+    } else livre += metaDaAlocacao(a);
+  }
+  const definido = Object.values(porTipo).reduce((s, n) => s + n, 0);
+  return { porTipo, livre, definido };
+}
 
 // Quem pode receber meta. Na nuvem, a equipe cadastrada, menos a coordenação
 // geral (que não escreve item) e a professora de redação. Sem nuvem, quem já
@@ -574,7 +660,7 @@ function docentesAlocaveis() {
 // Soma das metas de uma prova, para comparar com o tamanho dela.
 function somaDasMetas(provaId) {
   const m = S.alocacoes?.[provaId] || {};
-  return Object.values(m).reduce((s, a) => s + (a.meta || 0), 0);
+  return Object.values(m).reduce((s, a) => s + metaDaAlocacao(a), 0);
 }
 
 // Barrinha de progresso contra a meta. Sem meta não desenha barra: "sem meta"
@@ -593,10 +679,16 @@ function painelDoDocente() {
   const linhas = provas.map(p => {
     const m = minhaProducao(p.id);
     const a = minhaAlocacao(p.id);
-    const meta = a?.meta || 0;
+    const meta = metaDaAlocacao(a);
+    // Falta por tipo, medida no que está escrito: é a conta de "o que ainda
+    // tenho de fazer". Ela vem antes do total na situação, porque um total
+    // fechado com a mistura errada não é meta cumprida.
+    const faltaTipo = tiposEmFalta(a, m.porTipo);
     // A situação responde "estou em dia?" — e isso só tem resposta contra a
     // meta. Sem meta, o mais honesto é relatar o estágio do que existe.
     const situacao = m.devolvidos ? '<span class="chip falta">Devolvido — ajustar</span>'
+      : faltaTipo.length ? `<span class="chip falta">Faltam ${
+          faltaTipo.map(x => `${x.faltam} do tipo ${x.tipo}`).join(', ')}</span>`
       : meta && m.aprovados >= meta ? '<span class="chip ok">Meta cumprida</span>'
       : meta && m.criados >= meta ? '<span class="chip pend">Entregue, em revisão</span>'
       : meta ? `<span class="chip falta">Faltam ${meta - m.criados}</span>`
@@ -606,7 +698,7 @@ function painelDoDocente() {
       : '<span class="chip">Nada entregue</span>';
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
-      <td>${progressoDaMeta(m.aprovados, meta)}</td>
+      <td>${progressoDaMeta(m.aprovados, meta)}${htmlTiposDaMeta(a, m)}</td>
       <td>${m.criados}</td><td>${m.aprovados}</td><td>${m.emRevisao}</td>
       <td>${situacao}</td>
     </tr>`;
@@ -617,7 +709,7 @@ function painelDoDocente() {
     return {
       criados: s.criados + m.criados,
       aprovados: s.aprovados + m.aprovados,
-      meta: s.meta + (minhaAlocacao(p.id)?.meta || 0)
+      meta: s.meta + metaDaAlocacao(minhaAlocacao(p.id))
     };
   }, { criados: 0, aprovados: 0, meta: 0 });
 
@@ -626,11 +718,26 @@ function painelDoDocente() {
     .map(p => ({ p, obs: minhaAlocacao(p.id)?.observacao }))
     .filter(x => x.obs);
 
+  // A encomenda em palavras, prova por prova. A tabela mostra o progresso; esta
+  // frase é o pedido — “6 itens, sendo 3 do tipo A, 2 do tipo B e 1 do tipo C” —
+  // e é ela que o docente precisa ler para saber o que escrever.
+  const divisoes = provas
+    .map(p => ({ p, a: minhaAlocacao(p.id) }))
+    .filter(({ a }) => temDivisaoPorTipo(a));
+
   return `<div class="cartao" style="margin-bottom:16px">
     <h3>O que você tem para entregar</h3>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Prova</th><th>Aprovados / meta</th><th>Criados</th><th>Aprovados</th><th>Em revisão</th><th>Situação</th></tr></thead>
       <tbody>${linhas}</tbody></table></div>
+    ${divisoes.length ? `<div class="cartao encomenda" style="margin:14px 0 0">
+      <h3>A sua encomenda, por tipo de item</h3>
+      ${divisoes.map(({ p, a }) => {
+        const n = metaDaAlocacao(a);
+        return `<p><b>${esc(p.serie)}:</b> ${n} ${n === 1 ? 'item' : 'itens'}, sendo ${fraseDosTipos(a)}.</p>`;
+      }).join('')}
+      <p class="legenda-tipos">${TIPOS_META.map(t => esc(TIPOS[t].rotulo)).join(' · ')}</p>
+    </div>` : ''}
     <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">
       ${tot.meta
         ? `Ao todo a coordenação alocou <b>${tot.meta}</b> ${tot.meta === 1 ? 'item' : 'itens'} para você nas
@@ -1055,18 +1162,34 @@ function telaAlocacao() {
 
   const grupos = Object.entries(porArea).sort((a, b2) => a[0].localeCompare(b2[0], 'pt-BR'))
     .map(([area, lista]) => {
-      const somaArea = lista.reduce((s, d) => s + (alocacaoDe(p.id, d.chave)?.meta || 0), 0);
+      const somaArea = lista.reduce((s, d) => s + metaDaAlocacao(alocacaoDe(p.id, d.chave)), 0);
       const linhas = lista.map(d => {
         const a = alocacaoDe(p.id, d.chave);
         const prod = producaoDe(p.id, d.chave);
-        const meta = a?.meta || 0;
+        const meta = metaDaAlocacao(a);
+        const tipos = tiposDaAlocacao(a);
+        const dividido = temDivisaoPorTipo(a);
+        // Um campo por tipo de item. Enquanto nenhum tem valor, o total é
+        // digitado direto (tipos a critério de quem escreve); a partir do
+        // primeiro, o total é a soma e vira somente-leitura — total editável ao
+        // lado de partes editáveis produziria um número que mente.
+        const camposTipo = TIPOS_META.map(t => `
+          <input class="caixa aloc-tipo" type="number" min="0" max="90"
+            value="${tipos[t] || ''}" placeholder="—"
+            title="${esc(TIPOS[t].rotulo)}"
+            data-mud="aloc-tipo" data-chave="${esc(d.chave)}" data-tipo="${t}"
+            aria-label="Itens do tipo ${t} para ${esc(d.nome)}">`).join('');
         return `<tr>
           <td><b>${esc(d.nome)}</b>${d.email ? `<br><span style="font-size:11px;color:var(--ink-2);font-family:var(--mono)">${esc(d.email)}</span>` : ''}</td>
           <td>${d.componente ? discChip(d.componente) : '<span style="color:var(--ink-2)">—</span>'}</td>
-          <td><input class="caixa" type="number" min="0" max="90" style="width:88px"
-              value="${meta || ''}" placeholder="—"
-              data-mud="aloc-meta" data-chave="${esc(d.chave)}" aria-label="Meta de ${esc(d.nome)}"></td>
-          <td style="min-width:132px" data-barra="${esc(d.chave)}">${progressoDaMeta(prod.aprovados, meta)}</td>
+          <td class="aloc-tipos">${camposTipo}</td>
+          <td data-total="${esc(d.chave)}">${dividido
+            ? `<span class="aloc-total-soma" title="soma dos tipos">${meta}</span>`
+            : `<input class="caixa" type="number" min="0" max="90" style="width:78px"
+                 value="${meta || ''}" placeholder="—"
+                 data-mud="aloc-meta" data-chave="${esc(d.chave)}"
+                 aria-label="Total de itens para ${esc(d.nome)}">`}</td>
+          <td style="min-width:132px" data-barra="${esc(d.chave)}">${progressoDaMeta(prod.aprovados, meta)}${htmlTiposDaMeta(a, prod)}</td>
           <td>${prod.criados}</td>
           <td>${prod.emRevisao || '—'}</td>
           <td>${prod.devolvidos ? `<span class="chip falta">${prod.devolvidos}</span>` : '—'}</td>
@@ -1077,7 +1200,7 @@ function telaAlocacao() {
       }).join('');
       return `<tbody>
         <tr class="aloc-area"><th colspan="2">${esc(area)}</th>
-          <th colspan="6" data-soma-area="${esc(area)}">${rotuloSomaArea(somaArea)}</th></tr>
+          <th colspan="7" data-soma-area="${esc(area)}">${rotuloSomaArea(somaArea)}</th></tr>
         ${linhas}</tbody>`;
     }).join('');
 
@@ -1098,14 +1221,17 @@ function telaAlocacao() {
     ${pessoas.length ? `<div class="cartao" style="overflow-x:auto;padding-bottom:6px">
       <table class="aloc-tab">
         <thead><tr>
-          <th>Docente</th><th>Componente</th><th>Meta</th><th>Aprovados / meta</th>
+          <th>Docente</th><th>Componente</th>
+          <th class="aloc-tipos-cab">${TIPOS_META.map(t => `<span title="${esc(TIPOS[t].rotulo)}">${t}</span>`).join('')}</th>
+          <th>Total</th><th>Aprovados / meta</th>
           <th>Criados</th><th>Em revisão</th><th>Devolv.</th><th>Recado</th>
         </tr></thead>
         ${grupos}
       </table>
     </div>` : `<div class="vazio">Nenhum docente para alocar.${modoNuvem ? ' Cadastre a equipe em Administração.' : ''}</div>`}
   </div></div>
-  <p class="nota-tela"><strong>A meta é por prova.</strong> A mesma pessoa pode ter metas diferentes no 9º ano e na 3ª série — troque de prova no menu à esquerda para alocar cada uma. Campo em branco significa <em>sem meta</em>, que é diferente de meta zero: quem está sem meta não aparece cobrado no painel dele. O <strong>recado</strong> aparece no painel do docente, junto da meta. Cada campo é gravado ao sair dele, como no resto do sistema.</p>`;
+  <p class="nota-tela"><strong>A meta é por prova.</strong> A mesma pessoa pode ter metas diferentes no 9º ano e na 3ª série — troque de prova no menu à esquerda para alocar cada uma. Campo em branco significa <em>sem meta</em>, que é diferente de meta zero: quem está sem meta não aparece cobrado no painel dele.
+    <strong>As colunas A, B, C e D dividem a meta por tipo de item</strong> — preencha 3, 2 e 1 e o docente lê “6 itens, sendo 3 do tipo A, 2 do tipo B e 1 do tipo C” no painel dele. Enquanto nenhum tipo é preenchido, digite só o <strong>Total</strong> e a mistura fica a critério de quem escreve; a partir do primeiro tipo, o Total passa a ser a <em>soma</em> dos tipos e não se digita mais — um total ao lado de partes que somam outra coisa seria um número que mente. O <strong>recado</strong> aparece no painel do docente, junto da meta. Cada campo é gravado ao sair dele, como no resto do sistema.</p>`;
 }
 
 // Resumo da alocação: os três cartões e a conferência. Fica numa função à
@@ -1119,7 +1245,7 @@ function htmlResumoAlocacao(p) {
   const soma = somaDasMetas(p.id);
   const b = balancoDaProva(p.id);
   const pessoas = docentesAlocaveis();
-  const semMeta = pessoas.filter(d => !alocacaoDe(p.id, d.chave)?.meta).length;
+  const semMeta = pessoas.filter(d => !metaDaAlocacao(alocacaoDe(p.id, d.chave))).length;
 
   const conf = [];
   if (!b.totalQuestoes)
@@ -1136,7 +1262,8 @@ function htmlResumoAlocacao(p) {
     <div class="grade g3" style="margin-bottom:16px">
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--azul)"></span>Alocado</h3>
         <div class="num">${soma}<small>${b.totalQuestoes ? ` / ${b.totalQuestoes} da prova` : ' de um total ainda a definir'}</small></div>
-        <div class="barra"><i style="width:${b.totalQuestoes ? Math.min(100, soma / b.totalQuestoes * 100) : 0}%"></i></div></div>
+        <div class="barra"><i style="width:${b.totalQuestoes ? Math.min(100, soma / b.totalQuestoes * 100) : 0}%"></i></div>
+        ${htmlMixResumo(p.id)}</div>
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--verde)"></span>Já aprovado</h3>
         <div class="num">${b.aprovados}<small>${soma ? ` / ${soma} alocados` : ''}</small></div>
         <div class="barra"><i style="width:${soma ? Math.min(100, b.aprovados / soma * 100) : 0}%"></i></div></div>
@@ -1147,6 +1274,19 @@ function htmlResumoAlocacao(p) {
       <h3>Conferência da alocação</h3>
       <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.7">${conf.map(c => `<li>${c}</li>`).join('')}</ul>
     </div>` : ''}`;
+}
+
+// A mistura de tipos da prova no cartão “Alocado”: quanto está pedido de cada
+// tipo e quanto ficou a critério de quem escreve. Sem nenhuma divisão, não
+// desenha nada — o cartão não precisa de uma linha para dizer que não há linha.
+function htmlMixResumo(provaId) {
+  const { porTipo, livre, definido } = mixDaProva(provaId);
+  if (!definido) return '';
+  const fichas = TIPOS_META.filter(t => porTipo[t])
+    .map(t => `<span title="${esc(TIPOS[t].rotulo)}">${t} ${porTipo[t]}</span>`).join('');
+  return `<div class="mix-tipos">${fichas}${livre
+    ? `<span class="livre" title="metas sem divisão por tipo — o tipo fica a critério de quem escreve">${livre} sem tipo</span>`
+    : ''}</div>`;
 }
 
 const rotuloSomaArea = n => `${n} ${n === 1 ? 'item alocado' : 'itens alocados'}`;
@@ -1163,16 +1303,38 @@ function alocacaoMudou(provaId, chave) {
 
   $('#aloc-resumo').innerHTML = htmlResumoAlocacao(p);
 
+  const a = alocacaoDe(provaId, chave);
+  const meta = metaDaAlocacao(a);
+
+  const prod = producaoDe(provaId, chave);
   const cel = document.querySelector(`[data-barra="${CSS.escape(chave)}"]`);
-  if (cel) cel.innerHTML = progressoDaMeta(producaoDe(provaId, chave).aprovados,
-                                           alocacaoDe(provaId, chave)?.meta || 0);
+  if (cel) cel.innerHTML = progressoDaMeta(prod.aprovados, meta) + htmlTiposDaMeta(a, prod);
+
+  // A célula do total troca de forma quando a divisão por tipo entra ou sai:
+  // com divisão ela mostra a soma, sem divisão ela é campo. Trocar só o número
+  // deixaria um campo editável exibindo uma soma que ele não controla.
+  const ct = document.querySelector(`[data-total="${CSS.escape(chave)}"]`);
+  if (ct) {
+    const dividido = temDivisaoPorTipo(a);
+    const eraCampo = !!ct.querySelector('input');
+    if (dividido === eraCampo) {
+      ct.innerHTML = dividido
+        ? `<span class="aloc-total-soma" title="soma dos tipos">${meta}</span>`
+        : `<input class="caixa" type="number" min="0" max="90" style="width:78px"
+             value="${meta || ''}" placeholder="—"
+             data-mud="aloc-meta" data-chave="${esc(chave)}" aria-label="Total de itens">`;
+    } else if (dividido) {
+      const alvo = ct.querySelector('.aloc-total-soma');
+      if (alvo) alvo.textContent = meta;
+    }
+  }
 
   // Subtotais por área, recalculados dos dados — não incrementados a partir do
   // que está na tela.
   const porArea = {};
   for (const d of docentesAlocaveis()) {
     const area = areaDoComponente(d.componente) || 'Sem área definida';
-    porArea[area] = (porArea[area] || 0) + (alocacaoDe(provaId, d.chave)?.meta || 0);
+    porArea[area] = (porArea[area] || 0) + metaDaAlocacao(alocacaoDe(provaId, d.chave));
   }
   for (const th of document.querySelectorAll('[data-soma-area]'))
     th.textContent = rotuloSomaArea(porArea[th.dataset.somaArea] || 0);
@@ -1192,14 +1354,31 @@ MUDS['aloc-meta'] = (d, el) => {
   const n = parseInt(el.value, 10);
   const a = alocacaoParaEditar(provaId, d.chave);
   a.meta = Number.isFinite(n) && n > 0 ? n : 0;
-  if (!a.meta && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  if (!metaDaAlocacao(a) && !a.observacao) delete S.alocacoes[provaId][d.chave];
   alocacaoMudou(provaId, d.chave);
 };
+MUDS['aloc-tipo'] = (d, el) => {
+  const provaId = idProvaAtual();
+  const n = parseInt(el.value, 10);
+  const a = alocacaoParaEditar(provaId, d.chave);
+  a.porTipo = tiposDaAlocacao(a);
+  a.porTipo[d.tipo] = Number.isFinite(n) && n > 0 ? n : 0;
+  // Sem nenhum tipo, a divisão deixa de existir e o total volta a ser digitado
+  // direto: o campo some do registro em vez de ficar um objeto de zeros. O total
+  // vai embora com ela — ele era a soma, não um número que alguém digitou, e
+  // deixá-lo para trás faria a tela exibir um total que a coordenação acabou de
+  // apagar.
+  if (!temDivisaoPorTipo(a)) { delete a.porTipo; a.meta = 0; }
+  else a.meta = somaDosTipos(a);   // o total gravado acompanha a soma
+  if (!metaDaAlocacao(a) && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  alocacaoMudou(provaId, d.chave);
+};
+
 MUDS['aloc-obs'] = (d, el) => {
   const provaId = idProvaAtual();
   const a = alocacaoParaEditar(provaId, d.chave);
   a.observacao = el.value.trim();
-  if (!a.meta && !a.observacao) delete S.alocacoes[provaId][d.chave];
+  if (!metaDaAlocacao(a) && !a.observacao) delete S.alocacoes[provaId][d.chave];
   alocacaoMudou(provaId, d.chave);
 };
 
@@ -1223,7 +1402,8 @@ ACOES['aloc-dividir'] = () => {
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo"><p style="margin-top:0">Cada um dos <b>${pessoas.length}</b> docentes fica com
       <b>${base}</b> ${base === 1 ? 'item' : 'itens'}${resto ? `, e os ${resto} primeiros da lista recebem um a mais` : ''}.
-      Isto <b>substitui as metas já definidas</b> nesta prova; os recados são preservados.</p></div>
+      Isto <b>substitui as metas já definidas</b> nesta prova e <b>desfaz a divisão por tipo</b> — o total passa a ser
+      um número solto, e a mistura de tipos volta a ser definida docente por docente. Os recados são preservados.</p></div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="aloc-dividir-ok">Dividir</button></div>`);
 };
@@ -1236,8 +1416,11 @@ ACOES['aloc-dividir-ok'] = () => {
   const resto = alvo % pessoas.length;
   pessoas.forEach((d, ix) => {
     const a = alocacaoParaEditar(p.id, d.chave);
+    // A divisão por tipo antiga tem de sair: ela venceria o total que estamos
+    // gravando aqui, e a tela mostraria um número que a divisão contradiz.
+    delete a.porTipo;
     a.meta = base + (ix < resto ? 1 : 0);
-    if (!a.meta && !a.observacao) delete S.alocacoes[p.id][d.chave];
+    if (!metaDaAlocacao(a) && !a.observacao) delete S.alocacoes[p.id][d.chave];
   });
   $('#dlg').close(); commit(); PERS.alocacoes(p.id);
   toast(`${alvo} itens divididos entre ${pessoas.length} docentes.`);
@@ -1255,7 +1438,8 @@ ACOES['aloc-copiar'] = () => {
         <select class="caixa" id="aloc-de">${outras.map(x =>
           `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(x.etapa)} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
       <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Substitui as metas desta prova pelas da prova
-        escolhida, docente por docente. Útil quando a distribuição entre as séries é a mesma. Os recados não são copiados.</p>
+        escolhida, docente por docente, junto com a divisão por tipo de quem tiver uma. Útil quando a distribuição entre
+        as séries é a mesma. Os recados não são copiados.</p>
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="aloc-copiar-ok">Copiar</button></div>`);
@@ -1266,7 +1450,7 @@ ACOES['aloc-copiar-ok'] = () => {
   const origem = S.alocacoes?.[de] || {};
   S.alocacoes[p.id] = {};
   for (const [chave, a] of Object.entries(origem))
-    if (a.meta) S.alocacoes[p.id][chave] = { ...a, observacao: '' };
+    if (metaDaAlocacao(a)) S.alocacoes[p.id][chave] = { ...a, observacao: '' };
   $('#dlg').close(); commit(); PERS.alocacoes(p.id);
   toast(`Metas copiadas de ${provaPorId(de)?.serie}.`);
 };
