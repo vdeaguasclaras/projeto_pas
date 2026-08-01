@@ -155,9 +155,18 @@ abrir o formulário. Para aposentar um componente no futuro, mova-o de
 
 Duas etapas obrigatórias, marcadas em `public.equipe`:
 
-- `trocar_senha` — a conta nasce com a senha provisória da escola
-  (`Marista@2026`) e o `render()` trava na tela de criação de senha até a pessoa
-  definir a sua. Redefinir a senha pela tela de Equipe volta a exigir a troca.
+- `trocar_senha` — a conta nasce com uma senha provisória **sorteada para ela**
+  (`senhaProvisoria()` em js/app.js: três palavras e quatro dígitos, por
+  `crypto.getRandomValues`), e o `render()` trava na tela de criação de senha
+  até a pessoa definir a sua. Redefinir a senha pela tela de Administração volta
+  a exigir a troca.
+
+  > Até 1º/08/2026 esta senha era uma **constante do código**, igual para toda
+  > conta nova, dentro de um arquivo que o site serve sem exigir login — quem o
+  > lesse entrava como qualquer pessoa que ainda não tivesse trocado a sua. Das
+  > 27 contas, 22 estavam nessa situação. A constante saiu e as 22 foram
+  > rotacionadas. Senha de acesso não pode ser valor literal de repositório,
+  > nem ser a mesma para duas pessoas.
 - `tutorial_visto` — na estreia abre um tutorial curto e animado, com roteiro
   próprio para cada papel (`TUTORIAL` em js/app.js). Dá para revê-lo em
   “Minha conta”.
