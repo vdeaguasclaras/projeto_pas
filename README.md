@@ -111,4 +111,7 @@ serve — não há servidor próprio.
 - A chave em `js/config-supabase.js` é a chave **publicável** do Supabase, feita
   para ficar no navegador: sozinha ela não dá acesso a nada.
 - A chave de serviço existe apenas dentro da Edge Function `equipe`, que só
-  atende chamadas da coordenação.
+  atende chamadas da coordenação — e só a partir dos **endereços do sistema**:
+  o CORS dela era `*`, o que numa função que administra contas quer dizer que
+  qualquer página da internet podia disparar a chamada pelo navegador de quem
+  coordena.

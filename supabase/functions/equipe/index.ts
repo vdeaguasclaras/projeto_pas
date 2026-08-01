@@ -17,19 +17,30 @@ const PAPEIS = ['coordenacao', 'coordenacao_area', 'docente', 'redacao'];
 // administra contas quer dizer que qualquer página da internet podia disparar
 // a chamada a partir do navegador de quem coordena. O JWT ainda seria exigido,
 // mas não há motivo para a permissão ser mais larga que o sistema: o PAS mora
-// em dois endereços, e no `localhost` de quem desenvolve.
+// no endereço de produção e no `localhost` de quem desenvolve.
 const ORIGENS = [
   'https://projeto-pas.vercel.app',
-  'https://projeto-pas-raul-cardosos-projects-a0fc093e.vercel.app',
   'http://127.0.0.1:8000',
   'http://localhost:8000'
 ];
-// Pré-visualização da Vercel: endereço gerado por push, com sufixo do projeto.
-const ehPrevia = (o: string) => /^https:\/\/projeto-pas-[a-z0-9-]+\.vercel\.app$/.test(o);
+
+// Os outros endereços da Vercel — o alias do projeto, o alias de cada branch e
+// a URL gerada a cada deploy — mudam de forma conforme o caso:
+//
+//   projeto-pas-raul-cardosos-projects-a0fc093e.vercel.app          (alias do projeto)
+//   projeto-pas-git-claude-l-04fa92-raul-cardosos-projects-….app    (alias de branch)
+//   projeto-1eby6ifbq-raul-cardosos-projects-a0fc093e.vercel.app    (deploy avulso)
+//
+// O que todos têm em comum é terminar no sufixo desta conta. É por ele que se
+// reconhece um endereço nosso — um prefixo `projeto-pas-` deixaria de fora
+// justamente a URL de deploy, que encurta o nome do projeto para `projeto-`.
+const SUFIXO_VERCEL = '-raul-cardosos-projects-a0fc093e.vercel.app';
+const ehDaVercel = (o: string) =>
+  /^https:\/\/projeto-[a-z0-9-]+$/.test(o.replace(SUFIXO_VERCEL, ''));
 
 function cabecalhos(req: Request) {
   const origem = req.headers.get('Origin') || '';
-  const liberada = ORIGENS.includes(origem) || ehPrevia(origem);
+  const liberada = ORIGENS.includes(origem) || ehDaVercel(origem);
   return {
     // Sem origem conhecida não se devolve permissão nenhuma: o navegador então
     // recusa a resposta, que é exatamente o que se quer.
