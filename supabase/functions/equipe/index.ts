@@ -13,19 +13,41 @@ const CHAVE_SERVICO = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const PAPEIS = ['coordenacao', 'coordenacao_area', 'docente', 'redacao'];
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
-};
+// De onde esta função aceita ser chamada. Era `*`, e `*` numa função que
+// administra contas quer dizer que qualquer página da internet podia disparar
+// a chamada a partir do navegador de quem coordena. O JWT ainda seria exigido,
+// mas não há motivo para a permissão ser mais larga que o sistema: o PAS mora
+// em dois endereços, e no `localhost` de quem desenvolve.
+const ORIGENS = [
+  'https://projeto-pas.vercel.app',
+  'https://projeto-pas-raul-cardosos-projects-a0fc093e.vercel.app',
+  'http://127.0.0.1:8000',
+  'http://localhost:8000'
+];
+// Pré-visualização da Vercel: endereço gerado por push, com sufixo do projeto.
+const ehPrevia = (o: string) => /^https:\/\/projeto-pas-[a-z0-9-]+\.vercel\.app$/.test(o);
 
-const responder = (corpo: unknown, status = 200) =>
-  new Response(JSON.stringify(corpo), {
-    status,
-    headers: { ...cors, 'Content-Type': 'application/json' }
-  });
+function cabecalhos(req: Request) {
+  const origem = req.headers.get('Origin') || '';
+  const liberada = ORIGENS.includes(origem) || ehPrevia(origem);
+  return {
+    // Sem origem conhecida não se devolve permissão nenhuma: o navegador então
+    // recusa a resposta, que é exatamente o que se quer.
+    ...(liberada ? { 'Access-Control-Allow-Origin': origem } : {}),
+    Vary: 'Origin',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  };
+}
 
 Deno.serve(async (req) => {
+  const cors = cabecalhos(req);
+  const responder = (corpo: unknown, status = 200) =>
+    new Response(JSON.stringify(corpo), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' }
+    });
+
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return responder({ erro: 'Use POST.' }, 405);
 

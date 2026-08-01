@@ -160,6 +160,8 @@ tr.clic{cursor:pointer}
 .d-his{background:var(--coral)}.d-fis{background:var(--roxo)}.d-geo{background:var(--ciano)}
 .d-ing{background:var(--amarelo);color:#5c4300}.d-lit{background:#d6499b}
 .d-qui{background:#0d9488}.d-fil{background:#a16207}.d-soc{background:#64748b}
+/* Redação, vizinha de Português e Literatura — a mesma família de rosas. */
+.d-red{background:#be185d}
 /* Artes, pelas quatro linguagens — tons vizinhos, para lerem como uma família.
    `d-art` é a “Artes” genérica de antes: fica para quem ainda está nela. */
 .d-art{background:#c026d3}
@@ -253,6 +255,17 @@ textarea.caixa{resize:vertical;min-height:80px;line-height:1.55}
 .cartao.encomenda{background:var(--azul-claro);border-left:4px solid var(--azul)}
 .cartao.encomenda p{font-size:13px;margin:0 0 6px}
 .cartao.encomenda p.legenda-tipos{font-size:11.5px;color:var(--ink-2);margin:8px 0 0}
+
+/* A mesma encomenda, agora nas telas em que o item é escrito: uma faixa, não um
+   cartão — ela informa o trabalho que já está na tela, não o substitui. */
+.encomenda-faixa{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:space-between;
+  background:var(--azul-claro);border:1px solid color-mix(in srgb,var(--azul) 24%,transparent);
+  border-left:4px solid var(--azul);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.encomenda-faixa.ok{background:color-mix(in srgb,var(--verde) 10%,transparent);
+  border-color:color-mix(in srgb,var(--verde) 28%,transparent);border-left-color:var(--verde)}
+.encomenda-frase{font-size:13px;line-height:1.6;flex:1;min-width:240px}
+.encomenda-recado{display:block;font-size:12.5px;color:var(--ink-2);margin-top:3px}
+.encomenda-medida{display:flex;flex-direction:column;gap:2px;min-width:150px}
 
 /* cartão de conferência: o painel avisa quando os números da prova discordam */
 .cartao.aviso{border-left:4px solid var(--amarelo)}
@@ -527,6 +540,9 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .pas-item .n{font-size:9pt;font-weight:700}
 .pas-op{margin-left:1.9pt;padding-left:14.3pt;text-indent:-14.3pt}
 .pas-op b{font-weight:700}
+/* Alternativa ilustrada: a figura entra alinhada com o texto da opção, não com
+   a letra — o recuo negativo é do texto, e a figura não deve herdá-lo. */
+.pas-op .pas-fig{text-indent:0;margin:3pt 0 5pt}
 .pas-pauta{margin-top:5pt;text-indent:0;counter-reset:pas-pauta}
 .pas-pauta i{display:block;height:17pt;border-bottom:.7px solid #999;position:relative}
 .pas-pauta.numerada i::before{
@@ -872,10 +888,18 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
   color:var(--ink-2);margin-bottom:3px}
 .rico-saida{word-break:break-word}
 
-/* Opção do tipo C: a letra fixa à esquerda, o editor ocupando o resto. */
-.it-opcao{display:flex;gap:8px;align-items:center;margin-bottom:10px}
-.it-opcao>b{width:16px;flex:none;text-align:center;font-size:15px}
+/* Campo só de leitura: item de outra pessoa. Fundo do papel e cursor de texto,
+   para ler como texto, e não como campo que não responde. */
+.rico-lendo .rico-area{background:var(--fundo);border-style:dashed;cursor:text;white-space:normal}
+.rico-lendo .rico-area:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+
+/* Opção do tipo C: a letra fixa à esquerda, o editor e as figuras dela à direita.
+   `align-items:flex-start` porque a opção deixou de ser sempre de uma linha —
+   com figura ela cresce, e a letra fica no alto, ao lado da primeira linha. */
+.it-opcao{display:flex;gap:8px;align-items:flex-start;margin-bottom:10px}
+.it-opcao>b{width:16px;flex:none;text-align:center;font-size:15px;line-height:2.4}
 .it-opcao .rico{flex:1;min-width:0}
+.it-opcao-corpo{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 
 /* --- a coluna de enunciado na lista de itens ---
    Duas linhas e corta: a lista serve para reconhecer o item, não para ler o
@@ -960,3 +984,25 @@ td.it-enun>div{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:verti
 .img-vazio{font-size:13px;color:var(--ink-2);margin:0 0 8px}
 .img-add{display:inline-flex;cursor:pointer;margin:0}
 .img-nota{font-size:12px;color:var(--ink-2);margin:8px 0 0}
+
+/* Dentro de uma alternativa o espaço é de uma linha: a tira encolhe, perde a
+   moldura e o botão vira um link discreto — quatro caixas cheias, uma por
+   opção, afogariam o texto das alternativas. */
+.img-bloco.compacto{border:none;background:transparent;padding:0}
+.img-bloco.compacto:empty{display:none}
+.img-bloco.compacto .img-cartao{padding:5px;margin-bottom:5px;gap:8px}
+.img-bloco.compacto .img-mini{width:62px;height:48px}
+.img-bloco.compacto .img-add{font-size:11.5px;padding:4px 9px;border-radius:8px}
+
+/* Figuras de item alheio: sem campos, sem “Remover” — só a imagem e o que ela diz. */
+.img-bloco.lendo{background:transparent}
+.img-cartao.lendo{background:var(--fundo)}
+.img-legenda-lida{font-size:12.5px;font-weight:700;color:var(--ink)}
+.img-fonte-lida{font-size:11.5px;color:var(--ink-2)}
+
+/* As figuras do texto-base ao lado do editor de item: quando o texto-base é a
+   própria imagem, é ela que quem escreve o item precisa ter na frente. */
+.painel-texto-figs{margin-top:10px}
+.painel-texto-figs .img-cartao{background:var(--papel)}
+
+.rot-opcional{font-weight:400;color:var(--ink-2);text-transform:none;letter-spacing:0}

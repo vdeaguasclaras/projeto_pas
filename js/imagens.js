@@ -190,17 +190,34 @@ const pecasDeImagens = (lista, larguraColuna, opcoes) =>
 
 /* ---------------- editar ---------------- */
 // A tira de miniaturas que aparece no formulário do texto-base e do item.
-function htmlEditorImagens(lista, { campo, modoNuvem }) {
+//
+// `soLeitura` mostra as figuras sem os campos nem o botão de enviar — é o que
+// vê quem abriu o item de outra pessoa. `compacto` encolhe a tira para caber
+// dentro de uma alternativa, onde o espaço é de uma linha; `rotuloAdd` troca o
+// texto do botão, porque “+ Figura” quatro vezes seguidas não diz de qual
+// alternativa é cada uma.
+function htmlEditorImagens(lista, { campo, modoNuvem, soLeitura = false, compacto = false, rotuloAdd = '+ Figura' }) {
   const imgs = todasAsImagens(lista);
   const cartoes = imgs.map((img, i) => {
     const src = enderecoDaImagem(img);
     const ops = ESCALAS.map(e =>
       `<option value="${e.v}" ${Number(img.escala || ESCALA_PADRAO) === e.v ? 'selected' : ''}>${esc(e.rot)}</option>`).join('');
+    const mini = `<div class="img-mini">${src
+      ? `<img src="${esc(src)}" alt="${esc(img.legenda || '')}">`
+      : '<span>sem prévia</span>'}</div>`;
+    if (soLeitura)
+      return `
+    <div class="img-cartao lendo">
+      ${mini}
+      <div class="img-campos">
+        <span class="img-legenda-lida">${esc(img.legenda || 'sem legenda')}</span>
+        ${img.fonte ? `<span class="img-fonte-lida">${esc(img.fonte)}</span>` : ''}
+        <span class="img-dim">${img.largura}×${img.altura} · ${esc(String(img.escala || ESCALA_PADRAO))}% da coluna</span>
+      </div>
+    </div>`;
     return `
     <div class="img-cartao">
-      <div class="img-mini">${src
-        ? `<img src="${esc(src)}" alt="">`
-        : '<span>sem prévia</span>'}</div>
+      ${mini}
       <div class="img-campos">
         <input class="caixa" placeholder="legenda (opcional)" value="${esc(img.legenda || '')}"
           data-mud="img-legenda" data-campo="${esc(campo)}" data-i="${i}" aria-label="Legenda da figura ${i + 1}">
@@ -217,18 +234,23 @@ function htmlEditorImagens(lista, { campo, modoNuvem }) {
     </div>`;
   }).join('');
 
+  if (soLeitura)
+    return imgs.length
+      ? `<div class="img-bloco lendo${compacto ? ' compacto' : ''}">${cartoes}</div>`
+      : (compacto ? '' : '<div class="img-bloco lendo"><p class="img-vazio">Nenhuma figura.</p></div>');
+
   const teto = modoNuvem ? LIMITE_NUVEM : LIMITE_EMBUTIDA;
   return `
-  <div class="img-bloco">
-    ${cartoes || '<p class="img-vazio">Nenhuma figura.</p>'}
+  <div class="img-bloco${compacto ? ' compacto' : ''}">
+    ${cartoes || (compacto ? '' : '<p class="img-vazio">Nenhuma figura.</p>')}
     <label class="btn fantasma img-add">
-      + Figura
+      ${esc(rotuloAdd)}
       <input type="file" accept="${MIMES.join(',')}" hidden
         data-mud="img-arquivo" data-campo="${esc(campo)}">
     </label>
-    <p class="img-nota">PNG, JPEG, WEBP ou SVG, até ${kb(teto)}.${modoNuvem
+    ${compacto ? '' : `<p class="img-nota">PNG, JPEG, WEBP ou SVG, até ${kb(teto)}.${modoNuvem
       ? ' A figura fica no banco da escola e só quem está na equipe consegue abri-la.'
-      : ' <b>Sem conexão</b> a figura fica neste navegador e conta no espaço dele — no banco da escola o limite é bem maior.'}</p>
+      : ' <b>Sem conexão</b> a figura fica neste navegador e conta no espaço dele — no banco da escola o limite é bem maior.'}</p>`}
   </div>`;
 }
 

@@ -121,7 +121,7 @@ const PERS = {
 
 // Áreas do conhecimento — é por elas que a coordenação de área revisa.
 const AREAS = {
-  'Linguagens': ['Português', 'Literatura', 'Artes Visuais', 'Dança', 'Música', 'Teatro', 'Artes'],
+  'Linguagens': ['Português', 'Literatura', 'Redação', 'Artes Visuais', 'Dança', 'Música', 'Teatro', 'Artes'],
   'Humanas': ['História', 'Geografia', 'Filosofia', 'Sociologia'],
   'Matemática': ['Matemática'],
   'Ciências da Natureza': ['Biologia', 'Física', 'Química'],
@@ -136,6 +136,28 @@ const ehRedacao = () => S.perfil.papel === 'redacao';
 // ou quem coordena justamente a área do componente daquele item.
 const revisaArea = item => ehCoord() ||
   (ehCoordArea() && !!S.perfil.area && areaDoComponente(item.componente) === S.perfil.area);
+
+// Quem pode MEXER no conteúdo de um item — enunciado, opções, gabarito, tipo.
+// Diferente de quem pode decidir a etapa do fluxo (`revisaArea`) e de quem pode
+// abri-lo (toda a equipe).
+//
+// A regra que faltava: até aqui o diálogo trazia “Salvar” para qualquer pessoa
+// que abrisse qualquer item, e a política de RLS `equipe edita` (migração 0006)
+// libera UPDATE em `itens` a toda a equipe. Vinte e sete contas podiam
+// reescrever, em silêncio, o item já aprovado de outra — inclusive o gabarito.
+//
+//   · a coordenação geral, sempre (é ela quem corrige a vírgula do aprovado);
+//   · quem escreveu, enquanto o item não está aprovado;
+//   · a coordenação da área do item, enquanto ele está na mão dela.
+//
+// Quem não se encaixa lê e comenta — o fio da revisão continua aberto a todos.
+function podeEditarItem(item) {
+  if (!item) return false;
+  if (!item.id) return true;                 // rascunho novo, ainda de ninguém
+  if (ehCoord()) return true;
+  if (souEu(item)) return item.status !== 'aprovado';
+  return item.status === 'area' && revisaArea(item);
+}
 const nomePerfil = () => {
   if (S.perfil.papel === 'docente')
     return `Docente · ${S.perfil.nome}${S.perfil.componente ? ' (' + S.perfil.componente + ')' : ''}`;
@@ -307,34 +329,46 @@ function ranking(provaId, versao) {
 /* ---------------- casca / navegação ---------------- */
 // `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
 // que também vira o título do cabeçalho.
-// `n` é a ordem no menu lateral, mostrada na pastilha; `rot` é o nome da tela,
-// que também vira o título do cabeçalho. A ordem é a do trabalho: distribuir a
-// prova entre os docentes vem antes de escrever item.
+// `rot` é o nome da tela, que também vira o título do cabeçalho. A ordem é a do
+// trabalho: distribuir a prova entre os docentes vem antes de escrever item, e
+// a redação vem antes do caderno porque é ele que a imprime.
 //
-// Só o número mudou quando a Alocação entrou — as rotas são por nome
-// (`#/textos`), então nenhum endereço salvo quebrou.
-// `curto` é o rótulo do simulacro do tutorial, onde a coluna é estreita.
+// A pastilha do menu NÃO é um número fixo: é a posição dentro do que aquela
+// pessoa vê. Quando era fixo, o docente lia “1, 3, 4, 5, 6, 7” e ficava
+// procurando a tela 2, que é da coordenação. Numerar o que se vê é o que faz o
+// número significar alguma coisa.
+//
+// As rotas são por nome (`#/textos`), então mexer na ordem não quebra endereço
+// salvo. `curto` é o rótulo do simulacro do tutorial, onde a coluna é estreita.
 const TELAS = {
-  painel:        { n: 1, rot: 'Painel',               curto: 'Painel' },
-  alocacao:      { n: 2, rot: 'Alocação por docente', curto: 'Alocação', soCoordenacao: true },
-  textos:        { n: 3, rot: 'Textos e alocação',    curto: 'Textos' },
-  itens:         { n: 4, rot: 'Itens e revisão',      curto: 'Itens' },
-  caderno:       { n: 5, rot: 'Caderno',              curto: 'Caderno' },
-  cartoes:       { n: 6, rot: 'Cartões-resposta',     curto: 'Cartões' },
-  correcao:      { n: 7, rot: 'Correção e boletins',  curto: 'Correção' },
-  administracao: { n: 8, rot: 'Administração',        curto: 'Admin.', soCoordenacaoNaNuvem: true }
+  painel:        { rot: 'Painel',               curto: 'Painel' },
+  alocacao:      { rot: 'Alocação por docente', curto: 'Alocação', soCoordenacao: true },
+  textos:        { rot: 'Textos e alocação',    curto: 'Textos',   foraDaRedacao: true },
+  itens:         { rot: 'Itens e revisão',      curto: 'Itens',    foraDaRedacao: true },
+  redacao:       { rot: 'Redação',              curto: 'Redação',  soQuemCuidaDaRedacao: true },
+  caderno:       { rot: 'Caderno',              curto: 'Caderno' },
+  cartoes:       { rot: 'Cartões-resposta',     curto: 'Cartões' },
+  correcao:      { rot: 'Correção e boletins',  curto: 'Correção' },
+  administracao: { rot: 'Administração',        curto: 'Admin.',   soCoordenacaoNaNuvem: true }
 };
 // Administração cuida de contas e da lista de estudantes — só aparece para a
 // coordenação e só com o sistema ligado ao banco. Alocação é da coordenação em
 // qualquer modo: quem recebe meta não a define.
+//
+// A professora de redação não escreve item, então Textos e Itens não são dela —
+// ofereciam “+ Novo item” a quem nunca vai criar um. Em troca, a tela Redação é
+// dela e da coordenação: é onde a proposta de cada prova é escrita.
 function telasVisiveis() {
   return Object.entries(TELAS).filter(([, v]) =>
     (!v.soCoordenacaoNaNuvem || (modoNuvem && ehCoord())) &&
-    (!v.soCoordenacao || ehCoord()));
+    (!v.soCoordenacao || ehCoord()) &&
+    (!v.foraDaRedacao || !ehRedacao()) &&
+    (!v.soQuemCuidaDaRedacao || ehCoord() || ehRedacao()));
 }
 function telaAtual() {
   const h = location.hash.replace('#/', '');
-  // A tela 7 já se chamou "equipe": quem tiver o endereço antigo salvo continua chegando.
+  // A tela de administração já se chamou "equipe": quem tiver o endereço antigo
+  // salvo continua chegando.
   const alvo = h === 'equipe' ? 'administracao' : h;
   return telasVisiveis().some(([k]) => k === alvo) ? alvo : 'painel';
 }
@@ -421,12 +455,12 @@ function render() {
   if (sel) sel.addEventListener('change', ev => dlgPerfil(ev.target.value));
 
   $('#nav').innerHTML = telasVisiveis()
-    .map(([k, v]) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>
-      <span class="n">${v.n}</span>${esc(v.rot)}</a>`).join('');
+    .map(([k, v], i) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>
+      <span class="n">${i + 1}</span>${esc(v.rot)}</a>`).join('');
   ({
     painel: telaPainel, alocacao: telaAlocacao, textos: telaTextos, itens: telaItens,
-    caderno: telaCaderno, cartoes: telaCartoes, correcao: telaCorrecao,
-    administracao: telaAdministracao
+    redacao: telaRedacao, caderno: telaCaderno, cartoes: telaCartoes,
+    correcao: telaCorrecao, administracao: telaAdministracao
   }[atual])();
 
   // Estreia: o tutorial do papel abre sozinho, uma única vez.
@@ -663,6 +697,44 @@ function somaDasMetas(provaId) {
   return Object.values(m).reduce((s, a) => s + metaDaAlocacao(a), 0);
 }
 
+// A encomenda em uma faixa, para as telas em que o item é escrito.
+//
+// A meta só existia no Painel, e quem escreve item não fica no Painel: ele abre
+// “Textos e alocação”, ocupa um espaço livre e escreve. Era possível trabalhar
+// a semana inteira sem nunca ver quantos itens a coordenação pediu, nem de que
+// tipo — foi exatamente o que a escola relatou. Aqui a encomenda acompanha o
+// trabalho, na prova que está na tela.
+//
+// Some para a coordenação geral (que não recebe meta) e para quem não tem meta
+// nesta prova — uma faixa dizendo “sem meta” em toda tela seria ruído.
+function faixaDaEncomenda(provaId) {
+  if (ehCoord() || ehRedacao()) return '';
+  const a = alocacaoDe(provaId, idDocente(S.perfil));
+  const meta = metaDaAlocacao(a);
+  if (!meta) return '';
+  const prod = producaoDe(provaId);
+  const faltam = tiposEmFalta(a, prod.porTipo);
+  const p = provaPorId(provaId);
+  const pronto = prod.aprovados >= meta;
+  return `
+  <div class="encomenda-faixa${pronto ? ' ok' : ''}">
+    <div class="encomenda-frase">
+      <b>Sua encomenda em ${esc(p?.serie || 'nesta prova')}:</b>
+      ${meta} ${meta === 1 ? 'item' : 'itens'}${temDivisaoPorTipo(a) ? `, sendo ${fraseDosTipos(a)}` : ''}.
+      ${faltam.length
+        ? `Ainda ${faltam.length === 1 ? 'falta' : 'faltam'} escrever ${
+            faltam.map(x => `<b>${x.faltam} do tipo ${x.tipo}</b>`).join(', ')}.`
+        : prod.criados >= meta
+          ? (pronto ? 'Tudo aprovado. ' : 'Tudo escrito, aguardando a revisão. ')
+          : `Ainda ${meta - prod.criados === 1 ? 'falta' : 'faltam'} <b>${meta - prod.criados}</b>.`}
+      ${a?.observacao ? `<span class="encomenda-recado">Recado da coordenação: ${esc(a.observacao)}</span>` : ''}
+    </div>
+    <div class="encomenda-medida">
+      ${progressoDaMeta(prod.aprovados, meta)}${htmlTiposDaMeta(a, prod)}
+    </div>
+  </div>`;
+}
+
 // Barrinha de progresso contra a meta. Sem meta não desenha barra: "sem meta"
 // e "meta zero" dizem coisas diferentes, e uma barra vazia afirmaria a segunda.
 function progressoDaMeta(feito, meta) {
@@ -760,6 +832,45 @@ ACOES['ir-para-prova'] = d => {
   render();
 };
 
+// Visão de quem responde pela redação. O painel do docente não serve aqui: ele
+// mede itens contra metas, e quem tem o papel `redacao` não escreve item — a
+// tabela dizia “sem meta definida · Nada entregue” nas quatro provas, todo dia,
+// para alguém que estava com o trabalho em dia.
+function painelDaRedacao() {
+  const linhas = provasOrdenadas().map(p => {
+    const tem = provaTemRedacao(p.id);
+    const escrita = tem && propostaEscrita(p.id);
+    const elenco = estudantesDaProva(p.id);
+    const lancadas = tem ? elenco.filter(e => redLancada(redacaoDe(p.id, e.id))).length : 0;
+    const sit = !tem ? '<span class="chip">sem redação</span>'
+      : !escrita ? '<span class="chip falta">Falta escrever a proposta</span>'
+      : !elenco.length ? '<span class="chip info">Proposta pronta</span>'
+      : lancadas >= elenco.length ? '<span class="chip ok">Tudo lançado</span>'
+      : lancadas ? `<span class="chip pend">Faltam ${elenco.length - lancadas} lançamentos</span>`
+      : '<span class="chip info">Proposta pronta, à espera da aplicação</span>';
+    return `<tr class="clic" data-acao="ir-para-redacao" data-id="${esc(p.id)}">
+      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td>${!tem ? '—' : escrita ? '<span class="chip ok">escrita</span>' : '<span class="chip falta">em branco</span>'}</td>
+      <td>${tem && escrita ? esc(proposta(p.id).tema).slice(0, 48) || '—' : '—'}</td>
+      <td>${tem ? `${lancadas}/${elenco.length}` : '—'}</td>
+      <td>${sit}</td>
+    </tr>`;
+  }).join('');
+  const b = balancoDaRedacao();
+  return `<div class="cartao" style="margin-bottom:16px">
+    <h3>A redação das quatro provas</h3>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Prova</th><th>Proposta</th><th>Tema</th><th>Notas lançadas</th><th>Situação</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">
+      ${b.faltando.length
+        ? `Falta escrever a proposta de <b>${esc(b.faltando.map(p => p.serie).join(', '))}</b> — a prova tem redação,
+           e sem a proposta o caderno sai com a folha em branco.`
+        : `As ${b.comRedacao.length} propostas estão escritas.`}
+      Clique numa linha para abrir a redação daquela prova.</p>
+  </div>`;
+}
+
 // Visão da coordenação: as quatro provas lado a lado. É o que responde
 // “como está cada série?” sem obrigar a trocar de prova quatro vezes.
 function painelDasProvas() {
@@ -828,7 +939,15 @@ function telaPainel() {
   // Conferência entre as três grandezas. Mostrada, nunca corrigida em
   // silêncio: se os textos comportam mais ou menos do que a prova pede, quem
   // decide é a coordenação.
+  //
+  // Para quem responde pela redação, a conferência dos ITENS não é recado: ela
+  // não escreve item, não define tamanho de prova e não alcança a tela dos
+  // textos-base. Sobra a linha que é dela — a proposta.
   const conf = [];
+  if (ehRedacao()) {
+    if (provaTemRedacao(p.id) && !propostaEscrita(p.id))
+      conf.push('esta prova tem redação, mas a <b>proposta</b> (tema, comando e textos motivadores) ainda não foi escrita — escreva na tela <a href="#/redacao">Redação</a>');
+  } else {
   if (b.totalQuestoes && b.slots && b.slots !== b.totalQuestoes)
     conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, e a prova regular pede <b>${b.totalQuestoes}</b>`);
   if (!b.totalQuestoes)
@@ -846,7 +965,14 @@ function telaPainel() {
   // caderno incompleto, e isso precisa ser dito antes da impressão.
   if (provaTemRedacao(p.id) && !propostaEscrita(p.id))
     conf.push('esta prova tem redação, mas a <b>proposta</b> (tema, comando e textos motivadores) ainda não foi escrita' +
-      (doPapel ? ' — escreva em <a href="#/caderno">Caderno</a>, no botão “✍ Proposta de redação”' : ''));
+      (cuidaDaRedacao() ? ' — escreva em <a href="#/redacao">Redação</a>, no botão “✍ Escrever a proposta”' : ''));
+  }
+
+  // Os quadros de produção de item — versões, contagens, entregas por
+  // componente — são a leitura de quem escreve ou revisa item. Para o papel
+  // `redacao` eles diziam “0 de 110 itens aprovados” e mandavam “começar pela
+  // tela Textos e alocação”, que é justamente a tela que ela não tem.
+  const mostraItens = !ehRedacao();
 
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
@@ -862,8 +988,9 @@ function telaPainel() {
       </div>
     </div>
 
-    ${doPapel ? '' : painelDoDocente()}
+    ${doPapel ? '' : ehRedacao() ? painelDaRedacao() : painelDoDocente()}
 
+    ${!mostraItens ? '' : `
     <div class="versoes">
       <div class="versao sel"><div class="ic" style="background:var(--azul)">📘</div>
         <div><b>Prova Regular</b><span>${b.nReg}${b.totalQuestoes ? ` de ${b.totalQuestoes}` : ''} ${b.nReg === 1 ? 'item aprovado' : 'itens aprovados'}${
@@ -884,7 +1011,7 @@ function telaPainel() {
       <div class="cartao vivo"><h3><span class="pingo" style="background:var(--amarelo)"></span>Textos-base</h3>
         <div class="num">${b.textos}<small> ativos · ${b.slots} espaços</small></div>
         <span style="font-size:12px;color:var(--ink-2)">${b.sugestoes ? '+' + b.sugestoes + ' sugestão(ões) aguardando aprovação' : 'nenhuma sugestão pendente'}</span></div>
-    </div>
+    </div>`}
 
     ${conf.length ? `<div class="cartao aviso" style="margin-bottom:16px">
       <h3>Conferência da prova</h3>
@@ -893,11 +1020,11 @@ function telaPainel() {
 
     ${doPapel ? painelDasProvas() : ''}
 
-    <div class="cartao" style="margin-bottom:16px">
+    ${!mostraItens ? '' : `<div class="cartao" style="margin-bottom:16px">
       <h3>Entregas por componente curricular — ${esc(p.serie)}</h3>
       ${linhas ? `<table><thead><tr><th>Componente</th><th>Docente(s)</th><th>Itens criados</th><th>Aprovados</th><th>Situação</th></tr></thead>
         <tbody>${linhas}</tbody></table>` : '<div class="vazio">Nenhum item criado nesta prova ainda — comece pela tela “Textos e alocação”.</div>'}
-    </div>
+    </div>`}
 
     ${ehCoord() ? `<div class="cartao"><h3>Dados e backup${modoNuvem ? '' : ' (persistência local deste navegador)'}</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -953,7 +1080,7 @@ function dlgProva(p, nova = false) {
         <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
       <p style="font-size:12px;color:var(--ink-2);margin:10px 0 0">Sem redação, a prova não tem proposta, nem folha de
         redação, nem lançamento de NC/NE/TL. A <b>proposta</b> — tema, comando e textos motivadores — é escrita na tela
-        <b>Caderno</b>, em “✍ Proposta de redação”, e sai nas últimas páginas do caderno.</p>
+        <b>Redação</b>, e sai nas últimas páginas do caderno.</p>
     </div>
     <div class="dlg-pe">
       ${!nova && provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
@@ -1539,6 +1666,7 @@ function telaTextos() {
           : '<button class="btn verde" data-acao="sugerir-texto">+ Sugerir novo texto</button>'}
       </div>
     </div>
+    ${faixaDaEncomenda(pAtiva.id)}
     ${blocos || '<div class="vazio">Nenhum texto-base aprovado ainda.' + (ehCoord() ? ' Crie o primeiro com “+ Novo texto”.' : ' Sugira um texto para a coordenação aprovar.') + '</div>'}
     ${sugestoes}
   </div></div>
@@ -1564,7 +1692,7 @@ function dlgTexto(t, { preservar = false } = {}) {
           <input class="caixa" id="tx-titulo" value="${esc(t?.titulo || '')}" placeholder="ex.: “O Cerrado e as veredas” — Guimarães Rosa (adapt.)"></div>
         <div class="campo"><label>Fonte</label><input class="caixa" id="tx-fonte" value="${esc(t?.fonte || '')}" placeholder="autor / obra / veículo, ano"></div>
       </div>
-      <div class="campo" style="margin-bottom:12px"><label>Corpo do texto</label>
+      <div class="campo" style="margin-bottom:12px"><label>Corpo do texto <span class="rot-opcional">— opcional, se houver figura</span></label>
         ${editorRico({ campo: 'txCorpo', valor: (t?.linhas || []).join('<br>'), linhas: 9,
                        rotulo: 'Corpo do texto-base' })}
         <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Uma linha por linha do texto. Aceita ênfase e
@@ -1572,8 +1700,9 @@ function dlgTexto(t, { preservar = false } = {}) {
           <b>linha em branco</b> separa parágrafos.</p></div>
       <div class="campo" style="margin-bottom:12px"><label>Figuras do texto</label>
         ${htmlEditorImagens(imagensTexto, { campo: 'texto', modoNuvem })}
-        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Infográfico, mapa, obra de arte, gráfico. Sai no
-          caderno depois do texto, antes do comando do bloco.</p></div>
+        <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Infográfico, mapa, obra de arte, charge, gráfico.
+          Sai no caderno depois do texto, antes do comando do bloco. <b>A figura pode ser o texto-base inteiro</b>:
+          deixe o corpo em branco e o caderno traz só a imagem, com a legenda e a fonte.</p></div>
       ${ehCoord() ? `<div class="form-linha">
         <div class="campo"><label>Quantidade de itens (slots)</label>
           <input class="caixa" type="number" min="1" max="40" id="tx-slots" value="${t?.slots ?? 6}"></div>
@@ -1603,7 +1732,16 @@ function dlgTexto(t, { preservar = false } = {}) {
 }
 ACOES['novo-texto'] = () => dlgTexto(null);
 ACOES['sugerir-texto'] = () => dlgTexto(null);
-ACOES['editar-texto'] = d => dlgTexto(S.textos.find(t => t.id === d.id));
+ACOES['editar-texto'] = d => {
+  const t = S.textos.find(x => x.id === d.id);
+  dlgTexto(t);
+  // Mesmo motivo de `abrirItemComFiguras`: a tira de miniaturas precisa de
+  // endereço assinado, e ele só existia depois de o caderno ser montado.
+  if (modoNuvem && todasAsImagens(t?.imagens).length)
+    prepararImagens([t.imagens]).then(() => {
+      if ($('#dlg').open && textoEmEdicao?.id === t.id) dlgTexto(t, { preservar: true });
+    });
+};
 // O editor rico entrega uma string; cada <br> é uma linha do texto-base. Guardar
 // linha a linha (e não um bloco só) é o que permite ao editor de item numerar e
 // destacar a faixa que o item cita.
@@ -1632,8 +1770,19 @@ ACOES['salvar-texto'] = d => {
     comando: ehCoord() && $('#tx-comando') ? $('#tx-comando').value.trim() : (anterior?.comando || ''),
     formato: ehCoord() && $('#tx-formato') ? $('#tx-formato').value : (anterior?.formato || 'prosa')
   };
-  if (!dados.titulo || !dados.fonte || !dados.linhas.some(l => !ricoVazio(l))) {
-    toast('Título, fonte e corpo do texto são obrigatórios.'); return;
+  // O corpo escrito deixa de ser obrigatório quando há figura: no PAS o
+  // texto-base é, muitas vezes, uma obra de arte, uma charge, um infográfico ou
+  // um mapa — e nada mais. Exigir corpo escrito era o que impedia isso, e a
+  // saída que sobrava era descrever a imagem por escrito, como estava feito nos
+  // dados de exemplo. Título e fonte continuam obrigatórios: a fonte é crédito
+  // de obra, e sem ela o caderno não pode ser impresso.
+  const temCorpo = dados.linhas.some(l => !ricoVazio(l));
+  const temFigura = dados.imagens.length > 0;
+  if (!dados.titulo || !dados.fonte) {
+    toast('Título e fonte do texto-base são obrigatórios.'); return;
+  }
+  if (!temCorpo && !temFigura) {
+    toast('Escreva o corpo do texto ou acrescente ao menos uma figura.'); return;
   }
   // A numeração dos textos é por prova: o Texto 1 do 9º ano e o Texto 1 da
   // 1ª série convivem sem se atropelar.
@@ -1738,6 +1887,7 @@ function telaItens() {
         <button class="btn" data-acao="novo-item">+ Novo item</button>
       </div>
     </div>
+    ${todasAsProvas ? '' : faixaDaEncomenda(pAtiva?.id)}
     ${linhas ? `<table><thead><tr>${todasAsProvas ? '<th>Prova</th>' : ''}<th>Texto</th><th>Enunciado</th><th>Tipo</th><th>Componente</th><th>Autor</th><th>Versão</th><th>Status</th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : '<div class="vazio">Nenhum item neste filtro. Crie um item pelos espaços livres em “Textos e alocação” ou pelo botão acima.</div>'}
@@ -1763,8 +1913,22 @@ function novoRascunho(textoId) {
     autor: S.perfil.nome, autorEmail: S.perfil.email || null,
     habilidade: '', grupo: 'Interpretar', versao: 'ambas',
     linhasRef: '', gabarito: 'C', opcoes: ['', '', '', ''],
+    imagensOpcoes: [[], [], [], []],
     enunciado: '', status: 'rascunho', comentarios: []
   };
+}
+
+// As figuras do texto-base e do item aparecem dentro do editor, então elas
+// precisam de endereço assinado aqui também — não só na montagem do caderno.
+// Abre o diálogo na hora e remonta quando os endereços chegarem: esperar a rede
+// para só então abrir faria o clique parecer perdido.
+function abrirItemComFiguras() {
+  dlgItem();
+  if (!modoNuvem) return;
+  const listas = [S.textos.find(t => t.id === rasc.textoId)?.imagens,
+                  rasc.imagens, ...(rasc.imagensOpcoes || [])];
+  if (!listas.some(l => todasAsImagens(l).length)) return;
+  prepararImagens(listas).then(() => { if ($('#dlg').open && rasc) dlgItem(); });
 }
 
 ACOES['novo-item'] = d => {
@@ -1772,13 +1936,13 @@ ACOES['novo-item'] = d => {
     toast(`A prova de ${provaAtual()?.serie || 'esta série'} ainda não tem texto-base aprovado.`); return;
   }
   rasc = novoRascunho(d.texto);
-  dlgItem();
+  abrirItemComFiguras();
 };
 ACOES['abrir-item'] = d => {
   const i = S.itens.find(x => x.id === d.id);
   rasc = JSON.parse(JSON.stringify(i));
   if (!rasc.opcoes || rasc.opcoes.length < 4) rasc.opcoes = ['', '', '', ''];
-  dlgItem();
+  abrirItemComFiguras();
 };
 
 function faixaLinhas(ref) {
@@ -1791,12 +1955,23 @@ function faixaLinhas(ref) {
 function dlgItem() {
   const t = S.textos.find(x => x.id === rasc.textoId);
   const st = STATUS_ITEM[rasc.status];
+  // Item de outra pessoa abre para leitura: os campos vêm sem edição e o
+  // rodapé, sem “Salvar”. O fio da revisão continua aberto — comentar é como
+  // se pede um ajuste a quem escreveu.
+  const editavel = podeEditarItem(rasc);
+  const trava = editavel ? '' : ' disabled';
   const fx = faixaLinhas(rasc.linhasRef);
   const linhasTx = (t?.linhas || []).map((l, i) => {
     const n = i + 1;
     const marca = fx && n >= fx[0] && n <= fx[1] ? ' mark' : '';
     return `<div class="linha-tx${marca}"><span class="n">${n}</span><span>${rico(l)}</span></div>`;
   }).join('');
+  // O texto-base pode ser a própria figura — obra de arte, charge, mapa. Quem
+  // escreve o item precisa dela na frente, do mesmo jeito que precisa das linhas.
+  const figsTexto = todasAsImagens(t?.imagens);
+  const figurasTx = figsTexto.length
+    ? `<div class="painel-texto-figs">${htmlEditorImagens(figsTexto, { campo: 'texto', modoNuvem, soLeitura: true })}</div>`
+    : '';
   // Só os textos da prova do item: mover um item para o texto de outra série
   // quebraria a numeração das duas.
   const opsTexto = textosAprovados(rasc.provaId).map(x =>
@@ -1804,45 +1979,53 @@ function dlgItem() {
   const opsComp = opcoesComponente(rasc.componente);
 
   const segTipo = Object.keys(TIPOS).map(tp =>
-    `<button class="${rasc.tipo === tp ? 'sel' : ''}" data-acao="it-tipo" data-v="${tp}" title="${TIPOS[tp].rotulo}">${tp}</button>`).join('');
+    `<button class="${rasc.tipo === tp ? 'sel' : ''}" data-acao="it-tipo" data-v="${tp}" title="${TIPOS[tp].rotulo}"${trava}>${tp}</button>`).join('');
   const segGrupo = GRUPOS.map(g =>
-    `<button class="${rasc.grupo === g ? 'sel' : ''}" data-acao="it-grupo" data-v="${g}">${g}</button>`).join('');
+    `<button class="${rasc.grupo === g ? 'sel' : ''}" data-acao="it-grupo" data-v="${g}"${trava}>${g}</button>`).join('');
   const segVersao = ['regular', 'adaptada', 'ambas'].map(v =>
-    `<button class="${rasc.versao === v ? 'sel' : ''}" data-acao="it-versao" data-v="${v}" style="text-transform:capitalize">${v}</button>`).join('');
+    `<button class="${rasc.versao === v ? 'sel' : ''}" data-acao="it-versao" data-v="${v}" style="text-transform:capitalize"${trava}>${v}</button>`).join('');
 
   let respostaHtml = '';
   if (rasc.tipo === 'B') {
     respostaHtml = `<div class="form-linha"><div class="campo"><label>Gabarito</label>
       <input class="caixa" style="width:110px;font-family:var(--mono)" maxlength="3" inputmode="numeric"
-        data-mud="it-campo" data-campo="gabarito" value="${esc(rasc.gabarito)}" placeholder="000–999"></div></div>`;
+        data-mud="it-campo" data-campo="gabarito" value="${esc(rasc.gabarito)}" placeholder="000–999"${trava}></div></div>`;
   } else if (rasc.tipo === 'D') {
     respostaHtml = `
       <div class="campo" style="margin-bottom:12px"><label>Resposta esperada (guia de correção)</label>
-        ${editorRico({ campo: 'gabarito', valor: rasc.gabarito || '', linhas: 3,
+        ${editorRico({ campo: 'gabarito', valor: rasc.gabarito || '', linhas: 3, soLeitura: !editavel,
                        rotulo: 'O que se espera na resposta construída do estudante' })}</div>
       <div class="form-linha">
         <div class="campo" style="flex:0;min-width:160px"><label>Linhas de resposta</label>
-          <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"></div>
+          <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"${trava}></div>
         <div class="campo" style="flex:0"><label>Espaço de resposta</label>
           <div class="seg">
-            <button class="${rasc.dPauta !== false ? 'sel' : ''}" data-acao="it-dpauta" data-v="1">Com linhas</button>
-            <button class="${rasc.dPauta === false ? 'sel' : ''}" data-acao="it-dpauta" data-v="0">Sem linhas</button>
+            <button class="${rasc.dPauta !== false ? 'sel' : ''}" data-acao="it-dpauta" data-v="1"${trava}>Com linhas</button>
+            <button class="${rasc.dPauta === false ? 'sel' : ''}" data-acao="it-dpauta" data-v="0"${trava}>Sem linhas</button>
           </div></div>
       </div>
       <p style="font-size:12px;color:var(--ink-2);margin:0 0 12px">Mesmo sem linhas impressas, a quantidade define o espaço reservado à resposta no caderno. Itens discursivos não entram no cartão-resposta — a nota (0 a 10) é lançada na tela de Correção pelo docente responsável.</p>`;
   } else {
     respostaHtml = `<div class="form-linha"><div class="campo"><label>Gabarito</label><div>` +
       TIPOS[rasc.tipo].respostas.map(r =>
-        `<button class="gab-op ${String(rasc.gabarito).toUpperCase() === r ? 'certo' : ''}" data-acao="it-gab" data-v="${r}">${r}</button>`).join('') +
+        `<button class="gab-op ${String(rasc.gabarito).toUpperCase() === r ? 'certo' : ''}" data-acao="it-gab" data-v="${r}"${trava}>${r}</button>`).join('') +
       `</div></div></div>`;
   }
+  // Cada alternativa carrega as suas figuras: em Matemática e em Artes a opção
+  // É a imagem — quatro gráficos, quatro obras, quatro estruturas. Uma figura
+  // única no item não dá conta disso, porque ela sai antes das opções.
   const opcoesHtml = rasc.tipo === 'C' ? `
     <div class="campo" style="margin-bottom:12px"><label>Opções (A a D)</label>
       ${['A', 'B', 'C', 'D'].map((L, i) => `
         <div class="it-opcao">
           <b>${L}</b>
-          ${editorRico({ campo: 'opcao', i, valor: rasc.opcoes[i] || '', linhas: 1,
-                         rotulo: 'Opção ' + L })}
+          <div class="it-opcao-corpo">
+            ${editorRico({ campo: 'opcao', i, valor: rasc.opcoes[i] || '', linhas: 1,
+                           rotulo: 'Opção ' + L, soLeitura: !editavel })}
+            ${htmlEditorImagens(rasc.imagensOpcoes?.[i], {
+              campo: 'opcao' + i, modoNuvem, soLeitura: !editavel, compacto: true,
+              rotuloAdd: '+ Figura da opção ' + L })}
+          </div>
         </div>`).join('')}
     </div>` : '';
 
@@ -1878,9 +2061,18 @@ function dlgItem() {
     ${podeExcluir ? `<button class="btn vermelho fantasma pe-excluir" data-acao="it-excluir"
         title="Apagar este item definitivamente">Excluir</button>` : ''}
     <button class="btn fantasma" data-acao="fechar-dlg">Fechar</button>
-    <button class="btn" data-acao="it-salvar" title="Guarda as alterações e mantém o item onde está">Salvar</button>
+    ${editavel ? '<button class="btn" data-acao="it-salvar" title="Guarda as alterações e mantém o item onde está">Salvar</button>' : ''}
     ${acoes.map(a => `<button class="btn ${a.cls}" data-acao="${a.acao}">
       ${esc(a.rot)}<small class="pe-dica">${esc(a.dica)}</small></button>`).join('')}`;
+
+  // Por que este item está travado — dito na hora, para não parecer defeito.
+  const avisoLeitura = editavel ? '' : `
+    <div class="cartao aviso" style="margin:0 0 14px">
+      <p style="font-size:13px;margin:0">${meuItem
+        ? 'Este item já foi <b>aprovado</b>: o conteúdo dele está fechado, e só a coordenação geral ainda o altera. Peça o ajuste no fio da revisão, aqui embaixo.'
+        : `Este item é de <b>${esc(rasc.autor || 'outra pessoa')}</b>, e por isso abre para leitura.
+           Se algo precisa mudar, escreva no fio da revisão — quem escreveu recebe o recado no item.`}</p>
+    </div>`;
 
   abrirDlg(`
     <div class="dlg-cab">
@@ -1894,19 +2086,23 @@ function dlgItem() {
             <h4>${t ? 'Texto ' + t.numero + ' — ' + esc(t.titulo) : 'Selecione um texto'}</h4>
             <div class="fonte">${esc(t?.fonte || '')}${rasc.linhasRef ? ' · linhas ' + esc(rasc.linhasRef) : ''}</div>
             ${linhasTx}
-            <div style="margin-top:10px;font-size:11.5px;color:var(--ink-2)">💡 As linhas destacadas em amarelo são a referência deste item.</div>
+            ${figurasTx}
+            <div style="margin-top:10px;font-size:11.5px;color:var(--ink-2)">${linhasTx
+              ? '💡 As linhas destacadas em amarelo são a referência deste item.'
+              : '💡 Este texto-base é a figura acima — escreva o item a partir dela.'}</div>
           </div>
         </div>
         <div>
+          ${avisoLeitura}
           <div class="form-linha">
             <div class="campo" style="min-width:220px"><label>Texto-base</label>
-              <select class="caixa" data-mud="it-texto">${opsTexto}</select></div>
+              <select class="caixa" data-mud="it-texto"${trava}>${opsTexto}</select></div>
             <div class="campo"><label>Linhas de referência</label>
-              <input class="caixa" data-mud="it-campo" data-campo="linhasRef" value="${esc(rasc.linhasRef)}" placeholder="ex.: 5-7"></div>
+              <input class="caixa" data-mud="it-campo" data-campo="linhasRef" value="${esc(rasc.linhasRef)}" placeholder="ex.: 5-7"${trava}></div>
           </div>
           <div class="form-linha">
             <div class="campo" style="flex:0"><label>Tipo</label><div class="seg">${segTipo}</div></div>
-            <div class="campo"><label>Componente</label><select class="caixa" data-mud="it-campo" data-campo="componente">${opsComp}</select></div>
+            <div class="campo"><label>Componente</label><select class="caixa" data-mud="it-campo" data-campo="componente"${trava}>${opsComp}</select></div>
           </div>
           <div class="form-linha">
             <div class="campo" style="flex:1 1 100%"><label>Versão da prova em que este item entra</label>
@@ -1914,7 +2110,7 @@ function dlgItem() {
           </div>
           <div class="form-linha">
             <div class="campo"><label>Habilidade</label>
-              <input class="caixa" data-mud="it-campo" data-campo="habilidade" value="${esc(rasc.habilidade)}" placeholder="ex.: H6 — Inferências"></div>
+              <input class="caixa" data-mud="it-campo" data-campo="habilidade" value="${esc(rasc.habilidade)}" placeholder="ex.: H6 — Inferências"${trava}></div>
           </div>
           <div class="form-linha">
             <div class="campo" style="flex:1 1 100%"><label>Grupo de habilidades</label>
@@ -1922,15 +2118,15 @@ function dlgItem() {
           </div>
           <div class="campo" style="margin-bottom:12px"><label>Enunciado</label>
             ${editorRico({ campo: 'enunciado', valor: rasc.enunciado, linhas: 4,
-                           rotulo: 'Enunciado do item' })}
-            <p class="rico-ajuda">Fórmula entre <code>$…$</code> na linha e <code>$$…$$</code> em
+                           rotulo: 'Enunciado do item', soLeitura: !editavel })}
+            ${editavel ? `<p class="rico-ajuda">Fórmula entre <code>$…$</code> na linha e <code>$$…$$</code> em
               destaque, na notação do LaTeX — <code>$\\frac{1}{2}$</code>, <code>$x^2$</code>,
               <code>$\\sqrt{3}$</code>, <code>$30^\\circ$</code>. A prévia mostra como sai impresso.
-              Valor em real não vira fórmula: “R$ 50,00” continua sendo R$ 50,00.</p></div>
-          <div class="campo" style="margin-bottom:12px"><label>Figuras do item</label>
-            ${htmlEditorImagens(rasc.imagens, { campo: 'item', modoNuvem })}
+              Valor em real não vira fórmula: “R$ 50,00” continua sendo R$ 50,00.</p>` : ''}</div>
+          <div class="campo" style="margin-bottom:12px"><label>Figuras do enunciado</label>
+            ${htmlEditorImagens(rasc.imagens, { campo: 'item', modoNuvem, soLeitura: !editavel })}
             <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Figura de geometria, estrutura química,
-              gráfico. Sai no caderno depois do enunciado.</p></div>
+              gráfico. Sai no caderno depois do enunciado${rasc.tipo === 'C' ? ' e antes das opções — a figura que pertence a uma <b>alternativa</b> vai no campo dela, logo abaixo' : ''}.</p></div>
           ${opcoesHtml}${respostaHtml}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -1968,8 +2164,18 @@ let imagensTexto = [];
 let textoEmEdicao = null;
 
 // Onde as figuras em edição vivem, por campo — o texto-base tem as suas, o item
-// tem as dele em `rasc`.
-const listaDeImagens = campo => campo === 'item' ? (rasc.imagens = rasc.imagens || []) : imagensTexto;
+// tem as dele em `rasc`, e cada alternativa do tipo C tem a sua própria lista
+// (`opcao0`…`opcao3`), guardada em `rasc.imagensOpcoes[i]`.
+function listaDeImagens(campo) {
+  if (campo === 'item') return (rasc.imagens = rasc.imagens || []);
+  const op = /^opcao(\d)$/.exec(campo || '');
+  if (op) {
+    rasc.imagensOpcoes = rasc.imagensOpcoes || [[], [], [], []];
+    const i = Number(op[1]);
+    return (rasc.imagensOpcoes[i] = rasc.imagensOpcoes[i] || []);
+  }
+  return imagensTexto;
+}
 
 ligarEditoresRicos((campo, i, valor) => {
   if (campo === 'txCorpo') { corpoTextoRico = valor; return; }
@@ -1981,7 +2187,7 @@ ligarEditoresRicos((campo, i, valor) => {
 // Reabre o formulário em que a figura está, para a tira de miniaturas
 // acompanhar. O item tem `reabrirDlgItem`; o texto-base reabre pelo id.
 function reabrirFormularioDe(campo) {
-  if (campo === 'item') { reabrirDlgItem(); return; }
+  if (campo === 'item' || /^opcao\d$/.test(campo || '')) { reabrirDlgItem(); return; }
   dlgTexto(textoEmEdicao, { preservar: true });
 }
 
@@ -1994,8 +2200,12 @@ MUDS['img-arquivo'] = async (d, el) => {
   try {
     const img = await guardarImagem(arquivo, {
       modoNuvem, provaId: idProvaAtual(),
-      dono: d.campo === 'item' ? 'itens' : 'textos', uid
+      dono: d.campo === 'texto' ? 'textos' : 'itens', uid
     });
+    // Assina a recém-enviada antes de remontar. Sem isto a miniatura aparecia
+    // como “sem prévia” até alguém abrir o caderno — quem acabou de enviar a
+    // figura lia isso como envio que falhou, e mandava de novo.
+    await prepararImagens([[img]]);
     lista.push(img);
     reabrirFormularioDe(d.campo);
     toast(`Figura de ${img.largura}×${img.altura} acrescentada.`);
@@ -2043,11 +2253,27 @@ ACOES['it-versao'] = d => { rasc.versao = d.v; reabrirDlgItem(); };
 ACOES['it-gab'] = d => { rasc.gabarito = d.v; reabrirDlgItem(); };
 
 function persistirRascunho() {
+  // Última barreira antes de gravar. A tela já esconde “Salvar” de quem não
+  // edita este item, mas a checagem mora aqui também porque as ações de fluxo
+  // (`it-devolver`, `it-aprovar`) passam por aqui: quem só decide a etapa de um
+  // item alheio não deve levar junto uma alteração de conteúdo.
+  //
+  // A permissão é medida pelo item COMO ESTÁ GRAVADO. As ações de fluxo já
+  // mexeram em `rasc.status` quando chegam aqui, e medir pelo estado novo
+  // tiraria o direito de quem acabou de exercê-lo — a coordenação de área
+  // revisa e aprova na mesma janela, e o item sai de “área” na mesma ação.
+  const gravado = rasc.id ? S.itens.find(i => i.id === rasc.id) : null;
+  if (gravado && !podeEditarItem(gravado))
+    rasc = { ...gravado, status: rasc.status, comentarios: rasc.comentarios };
   // Enunciado agora é HTML: “vazio” pode ser <br> ou espaço inquebrável, e
   // `ricoVazio()` olha o texto por baixo da marcação.
   if (ricoVazio(rasc.enunciado)) { toast('Escreva o enunciado do item.'); return false; }
   if (rasc.tipo === 'B' && !/^\d{1,3}$/.test(String(rasc.gabarito).trim())) { toast('Gabarito do tipo B: número de 0 a 999.'); return false; }
   if (rasc.tipo === 'D' && !(rasc.dLinhas >= 1)) { toast('Informe a quantidade de linhas de resposta do item discursivo.'); return false; }
+  // Quatro listas vazias em todo item seriam ruído gravado linha a linha: o
+  // campo só existe quando alguma alternativa tem figura.
+  if (rasc.imagensOpcoes && !rasc.imagensOpcoes.some(l => todasAsImagens(l).length))
+    delete rasc.imagensOpcoes;
   if (!rasc.id) { rasc.id = uid(); S.itens.push(rasc); }
   else {
     const idx = S.itens.findIndex(i => i.id === rasc.id);
@@ -2239,8 +2465,18 @@ function htmlItem({ item, numero }) {
   // enunciado e antes das opções: é o enunciado que a apresenta.
   const figs = htmlImagens(item.imagens, LARGURA_COLUNA);
   if (item.tipo === 'C') {
-    const ops = (item.opcoes || []).map((o, i) =>
-      `<p class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}</p>`).join('');
+    // A figura da alternativa sai DENTRO dela, logo abaixo do texto: quatro
+    // gráficos soltos depois das quatro letras não diriam qual é de qual.
+    //
+    // A alternativa é <div>, e não <p>: <figure> não é conteúdo permitido
+    // dentro de <p>, e o próprio analisador do navegador fecha o parágrafo
+    // antes da figura — a imagem saía do lado de fora da opção, perdendo o
+    // recuo e a ligação com a letra. Não é bug que apareça na tela: aparece no
+    // papel. O estilo de `.pas-op` não depende da tag.
+    const ops = (item.opcoes || []).map((o, i) => {
+      const fig = htmlImagens(item.imagensOpcoes?.[i], LARGURA_COLUNA);
+      return `<div class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}${fig}</div>`;
+    }).join('');
     return `<div class="pas-item"><span class="n">${numero}</span> ${enun}${figs}${ops}</div>`;
   }
   if (item.tipo === 'D') {
@@ -2284,14 +2520,17 @@ function htmlCorpoTexto(texto) {
 }
 
 function pecasDoBloco(texto, itens) {
-  const pecas = [htmlCorpoTexto(texto)];
+  // Texto-base que é só figura (obra de arte, charge, infográfico) não tem
+  // corpo escrito: sem esta guarda entraria uma peça vazia na paginação, que a
+  // régua mede e transforma em respiro no meio da coluna.
+  const pecas = (texto.linhas || []).some(l => !ricoVazio(l)) ? [htmlCorpoTexto(texto)] : [];
   // Uma peça por figura: ela pode mudar de coluna sozinha em vez de arrastar o
   // texto inteiro, e a régua mede a altura de cada uma isolada.
   pecas.push(...pecasDeImagens(texto.imagens, LARGURA_COLUNA));
   pecas.push(`<p class="pas-fonte">${esc(texto.fonte)}</p>`);
   pecas.push(`<p class="pas-comando">${comandoDoBloco(itens, texto)}</p>`);
   itens.forEach(e => pecas.push(htmlItem(e)));
-  pecas.push('<div style="height:13.3pt"></div>');   // respiro entre blocos
+  pecas.push('<div class="pas-respiro" style="height:13.3pt"></div>');   // respiro entre blocos
   return pecas;
 }
 
@@ -2315,6 +2554,13 @@ function medirPecas(pecas, larga = false) {
   return alturas;
 }
 
+// O respiro entre blocos existe para separar um texto-base do próximo dentro da
+// mesma coluna. Empurrado para uma coluna nova, ele não separa nada — e, quando
+// a coluna nova é a primeira de uma folha, imprime uma página inteira em
+// branco. Aconteceu assim que um item passou a ocupar mais que uma coluna, o
+// que ficou comum com alternativas ilustradas.
+const ehRespiro = html => html.includes('class="pas-respiro"');
+
 // Distribui as peças em colunas de altura fixa, duas por página.
 function distribuir(pecas, alturas) {
   const paginas = [];
@@ -2325,7 +2571,11 @@ function distribuir(pecas, alturas) {
   };
   pecas.forEach((html, i) => {
     const alt = alturas[i];
-    if (altura > 0 && altura + alt > ALTURA_COLUNA) proximaColuna();
+    if (altura > 0 && altura + alt > ALTURA_COLUNA) {
+      // A quebra de coluna já é a separação que o respiro daria.
+      if (ehRespiro(html)) return;
+      proximaColuna();
+    }
     colunas[ci].push(html);
     altura += alt;
   });
@@ -2423,7 +2673,10 @@ async function prepararFigurasDaProva(provaId) {
   provasComImagemPronta.add(provaId);
   const listas = [
     ...textosDaProva(provaId).map(t => t.imagens),
-    ...itensDaProva(provaId).map(i => i.imagens)
+    ...itensDaProva(provaId).map(i => i.imagens),
+    // As figuras das alternativas do tipo C são listas à parte, uma por opção:
+    // fora daqui elas ficariam sem endereço assinado e sairiam em branco.
+    ...itensDaProva(provaId).flatMap(i => i.imagensOpcoes || [])
   ];
   if (!listas.some(l => todasAsImagens(l).length)) return;
   await prepararImagens(listas);
@@ -2457,7 +2710,7 @@ function telaCaderno() {
             <button class="${cadVersao === 'adaptada' ? 'sel' : ''}" data-acao="cad-versao" data-v="adaptada">Adaptada</button>
           </div>
           ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-capa">⚙ Capa e instruções</button>' : ''}
-          ${ehCoord() && provaTemRedacao(pAtiva.id) ? '<button class="btn fantasma" data-acao="cad-redacao">✍ Proposta de redação</button>' : ''}
+          ${cuidaDaRedacao() && provaTemRedacao(pAtiva.id) ? '<button class="btn fantasma" data-acao="cad-redacao">✍ Proposta de redação</button>' : ''}
           <button class="btn rosa" data-acao="cad-imprimir" ${temConteudo ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
         </div>
       </div>
@@ -2614,8 +2867,11 @@ function htmlPropostaTela(provaId) {
   const mots = motivadoresDe(p);
   if (!propostaEscrita(provaId))
     return `<div class="vazio">A proposta desta prova ainda não foi escrita.${
-      ehCoord() ? ' Escreva-a na tela <a href="#/caderno">Caderno</a>, em “✍ Proposta de redação”.'
-                : ' A coordenação a escreve na tela do Caderno.'}</div>`;
+      !cuidaDaRedacao() ? ' Ela é escrita na tela Redação, pela coordenação ou por quem responde pela redação.'
+        // Mandar “vá para a tela Redação” quando já se está nela é dar volta no
+        // quarteirão: ali o botão está logo acima, e é ele que se aponta.
+        : telaAtual() === 'redacao' ? ' Use o botão <b>“✍ Escrever a proposta”</b>, aqui em cima.'
+        : ' Escreva-a na tela <a href="#/redacao">Redação</a>, em “✍ Escrever a proposta”.'}</div>`;
   return `
     <div class="red-proposta">
       ${p.tema.trim() ? `<p class="red-tema"><span>Tema</span>${limpar(p.tema)}</p>` : ''}
@@ -2710,6 +2966,113 @@ ACOES['cad-redacao'] = () => {
   rascRed = { provaId: p.id, ...proposta(p.id) };
   dlgRedacao(p.id);
 };
+
+/* ================= TELA · REDAÇÃO =================
+   A proposta existia desde a etapa anterior, mas só como um botão dentro do
+   Caderno e só para a coordenação geral. Duas consequências, as duas relatadas
+   pela escola: quem tem o papel `redacao` — a pessoa que de fato escreve e
+   corrige a redação — não conseguia escrever a proposta de prova nenhuma, e o
+   módulo de redação não aparecia em lugar nenhum do menu.
+
+   Aqui ele aparece: a proposta desta prova, o estado das quatro, e o caminho
+   para o lançamento das notas. Quem escreve é a coordenação geral ou o papel
+   `redacao`; o resto da equipe não vê esta tela — vê a proposta no Caderno,
+   como antes. */
+const cuidaDaRedacao = () => ehCoord() || ehRedacao();
+
+// Quantas propostas faltam, entre as provas que têm redação. É o número que a
+// coordenação e a professora de redação perguntam primeiro.
+function balancoDaRedacao() {
+  const comRedacao = provasOrdenadas().filter(p => provaTemRedacao(p.id));
+  return {
+    comRedacao,
+    escritas: comRedacao.filter(p => propostaEscrita(p.id)).length,
+    faltando: comRedacao.filter(p => !propostaEscrita(p.id))
+  };
+}
+
+function telaRedacao() {
+  const pAtiva = provaAtual();
+  if (!pAtiva) {
+    $('#app').innerHTML = '<div class="quadro"><div class="miolo"><div class="vazio">Nenhuma prova cadastrada ainda.</div></div></div>';
+    return;
+  }
+  const b = balancoDaRedacao();
+  const temRed = provaTemRedacao(pAtiva.id);
+  const escrita = propostaEscrita(pAtiva.id);
+  const podeEscrever = cuidaDaRedacao();
+
+  const linhas = provasOrdenadas().map(p => {
+    const tem = provaTemRedacao(p.id);
+    const ok = propostaEscrita(p.id);
+    const mots = tem && ok ? motivadoresDe(proposta(p.id)).length : 0;
+    const elenco = estudantesDaProva(p.id);
+    const lancadas = elenco.filter(e => redLancada(redacaoDe(p.id, e.id))).length;
+    return `<tr class="clic" data-acao="ir-para-redacao" data-id="${esc(p.id)}">
+      <td><b>${esc(p.serie)}</b>${p.id === pAtiva.id ? ' <span class="chip info">na tela</span>' : ''}</td>
+      <td>${esc(p.etapa)}</td>
+      <td>${tem ? '✓' : '<span style="color:var(--ink-2)">sem redação</span>'}</td>
+      <td>${!tem ? '—' : ok
+        ? `<span class="chip ok">escrita</span>`
+        : '<span class="chip falta">em branco</span>'}</td>
+      <td>${tem && ok ? esc(proposta(p.id).tema).slice(0, 60) || '<span style="color:var(--ink-2)">sem tema</span>' : '—'}</td>
+      <td>${tem && ok ? mots : '—'}</td>
+      <td>${tem ? `${lancadas}/${elenco.length}` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  $('#app').innerHTML = `
+  <div class="quadro"><div class="miolo">
+    <div class="cab-tela">
+      <div><h2>Redação — ${esc(pAtiva.serie)}</h2>
+        <span class="sub">${esc(pAtiva.etapa)} · a proposta que o estudante lê e a nota que ele recebe</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${podeEscrever && temRed
+          ? `<button class="btn ${escrita ? 'fantasma' : 'rosa'}" data-acao="cad-redacao">✍ ${escrita ? 'Editar a proposta' : 'Escrever a proposta'}</button>`
+          : ''}
+        <a class="btn fantasma" href="#/caderno" style="text-decoration:none">Ver no caderno</a>
+        ${provaTemRedacao(pAtiva.id) ? '<a class="btn fantasma" href="#/correcao" style="text-decoration:none">Lançar notas</a>' : ''}
+      </div>
+    </div>
+
+    ${!temRed ? `<div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(pAtiva.etapa)}) está marcada como
+      <b>sem redação</b>.${ehCoord() ? ' Isso se muda no Painel, em “⚙ Configurar prova”.' : ''}
+      Troque de prova no seletor do menu à esquerda para trabalhar em outra série.</div>`
+    : `
+    ${b.faltando.length ? `<div class="cartao aviso" style="margin-bottom:16px">
+      <h3>${b.faltando.length === 1 ? 'Uma prova está' : `${b.faltando.length} provas estão`} sem proposta</h3>
+      <p style="font-size:13px;margin:0">${esc(b.faltando.map(p => p.serie).join(', '))} —
+        ${b.faltando.length === 1 ? 'a prova tem redação, mas o tema, o comando e os textos motivadores ainda não foram escritos'
+          : 'as provas têm redação, mas o tema, o comando e os textos motivadores ainda não foram escritos'}.
+        Sem a proposta, o caderno sai com a folha de redação em branco.</p>
+    </div>` : ''}
+
+    <div class="cartao" style="margin-bottom:16px">
+      <h3>A proposta de ${esc(pAtiva.serie)}</h3>
+      ${htmlPropostaTela(pAtiva.id)}
+    </div>`}
+
+    <div class="cartao" style="margin-bottom:16px">
+      <h3>A redação nas quatro provas</h3>
+      <div style="overflow-x:auto"><table>
+        <thead><tr><th>Série</th><th>Etapa</th><th>Tem redação</th><th>Proposta</th><th>Tema</th><th>Motivadores</th><th>Notas lançadas</th></tr></thead>
+        <tbody>${linhas}</tbody></table></div>
+      <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Clique numa linha para trabalhar naquela prova.
+        ${b.comRedacao.length ? `${b.escritas} de ${b.comRedacao.length} propostas escritas.` : ''}</p>
+    </div>
+  </div></div>
+  <p class="nota-tela"><strong>A proposta é de cada prova:</strong> o 9º ano não escreve sobre o tema da 3ª série.
+    Ela sai nas últimas páginas do caderno, em <strong>coluna única</strong>, como no caderno do PAS, e a folha de
+    redação do cartão-resposta traz o tema no alto. As notas — <strong>NC</strong> (conteúdo), <strong>NE</strong>
+    (erros) e <strong>TL</strong> (total de linhas) — são lançadas em <a href="#/correcao">Correção</a>, e a nota
+    final sai da planilha oficial: NR = NC − 2·NE/TL.</p>`;
+}
+ACOES['ir-para-redacao'] = d => {
+  S.provaAtiva = d.id;
+  salvarProvaAtiva(d.id);
+  save(S);
+  render();
+};
 ACOES['rd-mot-somar'] = () => {
   const r = colherProposta();
   if (!r) return;
@@ -2756,7 +3119,6 @@ ACOES['rd-apagar'] = d => {
 //             de acerto (0, 25, 50, 75, 100%), marcadas por quem corrige;
 //   folha 3 — redação: pauta de 30 linhas de 17pt. Opcional, definido pela
 //             coordenação em “Configurar simulado”.
-const SENHA_PROVISORIA = 'Marista@2026';
 const PERCENTUAIS_D = [0, 25, 50, 75, 100];
 const COLUNAS_CARTAO = 4;
 const LINHAS_REDACAO = 30;
@@ -3451,8 +3813,8 @@ function telaCorrecao() {
       <h3>Redação — lançamento por estudante (a professora de redação vê só esta tabela, com a proposta ao lado)</h3>
       <div id="red-resumo">${htmlResumoRedacao(provaId)}</div>
       ${propostaEscrita(provaId) ? '' : `<p style="font-size:12.5px;color:var(--ink-2);margin:0 0 10px">
-        A proposta desta prova ainda não foi escrita — escreva-a em <a href="#/caderno">Caderno</a>,
-        em “✍ Proposta de redação”, para que ela saia no caderno e apareça a quem corrige.</p>`}
+        A proposta desta prova ainda não foi escrita — escreva-a na tela <a href="#/redacao">Redação</a>,
+        para que ela saia no caderno e apareça a quem corrige.</p>`}
       ${tabelaRedacao()}
     </div>` : ''}
     ${(() => { const t = tabelaDiscursivos(); return t ? `<div class="cartao" style="margin-top:16px">
@@ -3634,12 +3996,27 @@ const PAPEIS = {
 let equipeCache = [];
 let equipeCarregada = false;
 
+// Senha provisória: sorteada por conta, nunca escrita no código.
+//
+// Já houve uma constante aqui — a mesma senha para todo mundo, e num arquivo
+// que o navegador baixa de qualquer lugar do mundo sem entrar. Quem lesse
+// `js/app.js` entrava como qualquer pessoa da equipe que ainda não tivesse
+// trocado a sua, e são justamente as contas recém-criadas que ainda não
+// trocaram. Senha de acesso não pode ser um valor literal do repositório.
+//
+// Três palavras e quatro dígitos: ~27 bits sorteados por `crypto`, e ainda
+// ditável por telefone, que é como a coordenação a entrega.
 function senhaProvisoria() {
-  const palavras = ['cerrado', 'vereda', 'buriti', 'marista', 'sertao', 'aguas', 'pauta', 'ipe', 'lobo', 'chapada'];
-  const n = new Uint32Array(3);
+  const palavras = [
+    'cerrado', 'vereda', 'buriti', 'marista', 'sertao', 'aguas', 'pauta', 'ipe',
+    'lobo', 'chapada', 'pequi', 'aroeira', 'jatoba', 'sucupira', 'tucano', 'seriema',
+    'cagaita', 'gabiroba', 'canela', 'angico', 'jacaranda', 'copaiba', 'murici', 'baru'
+  ];
+  const n = new Uint32Array(4);
   crypto.getRandomValues(n);
   const p = i => palavras[n[i] % palavras.length];
-  return p(0).charAt(0).toUpperCase() + p(0).slice(1) + '-' + p(1) + '-' + (1000 + (n[2] % 9000));
+  return p(0).charAt(0).toUpperCase() + p(0).slice(1) +
+    '-' + p(1) + '-' + p(2) + '-' + (1000 + (n[3] % 9000));
 }
 
 function telaAdministracao() {
@@ -3825,9 +4202,10 @@ function dlgMembro(m) {
       <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 10px">A coordenação de área também escreve itens: ela revisa a primeira etapa dos itens da sua área e produz os seus próprios.</p>
       ${novo ? `
         <div class="campo" style="margin-bottom:10px"><label>Senha provisória</label>
-          <input class="caixa" id="eq-senha" value="${SENHA_PROVISORIA}" style="font-family:var(--mono)"></div>
-        <p style="font-size:12.5px;color:var(--ink-2);margin:0">A conta é criada já liberada — nenhum e-mail de confirmação é enviado.
-          Entregue esta senha à pessoa; <b>o sistema exige que ela crie a própria senha no primeiro acesso</b>.</p>`
+          <input class="caixa" id="eq-senha" value="${senhaProvisoria()}" style="font-family:var(--mono)"></div>
+        <p style="font-size:12.5px;color:var(--ink-2);margin:0">Sorteada agora, só para esta pessoa. A conta é criada já
+          liberada — nenhum e-mail de confirmação é enviado. Entregue esta senha a ela;
+          <b>o sistema exige que ela crie a própria senha no primeiro acesso</b>.</p>`
         : '<p style="font-size:12.5px;color:var(--ink-2);margin:0">Para trocar a senha desta pessoa, use “Nova senha” na lista.</p>'}
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
@@ -3919,8 +4297,19 @@ ACOES['equipe-senha-ok'] = async (d, botao) => {
   botao.disabled = true;
   try {
     await nuvem.redefinirSenha(d.email, senha);
-    $('#dlg').close();
-    toast(`Senha de ${d.email} redefinida — entregue “${senha}” à pessoa.`);
+    await recarregarEquipe();
+    // Em diálogo, não em toast: o toast some em dois segundos e leva junto a
+    // única cópia da senha — a coordenação teria de gerar outra para conseguir
+    // ditá-la.
+    abrirDlg(`
+      <div class="dlg-cab"><h2>Senha redefinida</h2><button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+      <div class="dlg-corpo">
+        <p style="margin-top:0">Entregue a nova senha a <b>${esc(d.email)}</b>:</p>
+        <div class="cartao" style="font-family:var(--mono);font-size:15px">${esc(senha)}</div>
+        <p style="font-size:12.5px;color:var(--ink-2)">A senha aparece só agora, e a anterior deixou de funcionar.
+          No próximo acesso o sistema exige que a pessoa crie a própria senha.</p>
+      </div>
+      <div class="dlg-pe"><button class="btn" data-acao="fechar-dlg">Fechar</button></div>`);
   } catch (e) {
     botao.disabled = false;
     toast('Não foi possível redefinir: ' + (e.message || e));
@@ -4014,7 +4403,6 @@ ACOES['ps-salvar'] = async (d, botao) => {
   const a = $('#ps-1').value, b = $('#ps-2').value;
   if (a.length < 8) { toast('A senha precisa de ao menos 8 caracteres.'); return; }
   if (a !== b) { toast('As duas senhas não conferem.'); return; }
-  if (a === SENHA_PROVISORIA) { toast('Escolha uma senha diferente da provisória.'); return; }
   if (botao) botao.disabled = true;
   try {
     await nuvem.trocarSenha(a);
@@ -4024,7 +4412,13 @@ ACOES['ps-salvar'] = async (d, botao) => {
     render();
   } catch (e) {
     if (botao) botao.disabled = false;
-    toast('Não foi possível salvar a senha: ' + (e.message || e));
+    // A senha provisória é sorteada por conta e o cliente não a conhece aqui —
+    // quem recusa a repetição é o próprio Supabase, e a recusa dele vem em
+    // inglês. Traduzida, porque é o aviso que a pessoa mais vai ver.
+    const msg = String(e.message || e);
+    toast(/should be different|same.*password/i.test(msg)
+      ? 'Escolha uma senha diferente da provisória.'
+      : 'Não foi possível salvar a senha: ' + msg);
   }
 };
 
@@ -4044,6 +4438,8 @@ const TUTORIAL = {
       texto: 'Você cadastra os textos-base e diz quantos itens cada um comporta. Os docentes ocupam esses espaços livres. As sugestões de texto que eles enviarem aparecem aqui para você aprovar.' },
     { cena: 'revisao', tela: 'itens', titulo: 'Itens e revisão',
       texto: 'O item nasce como rascunho, passa pela coordenação de área e chega a você. Só o que você aprovar entra no caderno, no cartão e na correção. Tudo é conversado dentro do próprio item.' },
+    { cena: 'redacao', tela: 'redacao', titulo: 'Redação',
+      texto: 'A proposta de cada prova — tema, comando e textos motivadores — mora aqui, e a tela mostra quais das quatro séries ainda estão sem proposta. Quem tem o papel “professora de redação” também escreve por esta tela.' },
     { cena: 'caderno', tela: 'caderno', titulo: 'Caderno',
       texto: 'O caderno se monta sozinho com os itens aprovados, na diagramação do PAS: duas colunas, numeração contínua e o comando de cada bloco escrito automaticamente. Imprima ou salve em PDF.' },
     { cena: 'cartoes', tela: 'cartoes', titulo: 'Cartões-resposta',
@@ -4079,7 +4475,9 @@ const TUTORIAL = {
   ],
   redacao: [
     { cena: 'ola', titulo: 'Bem-vinda ao Sistema PAS',
-      texto: 'Seu acesso é focado: você lança as informações da redação de cada estudante.' },
+      texto: 'Seu acesso é focado na redação: você escreve a proposta de cada prova e lança as notas de cada estudante.' },
+    { cena: 'redacao', tela: 'redacao', titulo: 'Redação',
+      texto: 'Esta é a sua tela. Nela você escreve a proposta de cada prova — tema, comando e os textos motivadores que o estudante vai ler — e vê, de uma vez, quais das quatro provas ainda estão sem proposta. A proposta sai nas últimas páginas do caderno, em coluna única, como no caderno do PAS.' },
     { cena: 'redacao', tela: 'correcao', titulo: 'A proposta e o lançamento',
       texto: 'A tela de correção mostra, de um lado, a proposta daquela prova — tema, comando e os textos motivadores que o estudante leu — e, do outro, a tabela de lançamento: nota de conteúdo (NC), número de erros (NE) e total de linhas (TL) de cada estudante. Troque de prova no seletor do menu à esquerda: cada série tem a sua proposta.' },
     { cena: 'formula', tela: 'correcao', titulo: 'A nota sai sozinha',
