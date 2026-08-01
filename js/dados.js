@@ -19,12 +19,17 @@ const SERIES = ['9º ano', '1ª série EM', '2ª série EM', '3ª série EM'];
 // Artes é lançada pelas quatro linguagens da BNCC — quem dá aula de Música e
 // quem dá aula de Artes Visuais são pessoas diferentes, e a coordenação precisa
 // ver a entrega de cada uma separada.
+//
+// Redação é componente como os outros: quem a leciona recebe meta, escreve item
+// e aparece na entrega por componente. Ela faltava aqui, e por isso não havia
+// como atribuí-la a ninguém no cadastro da equipe — o papel `redacao` responde
+// por outra coisa (quem corrige a redação da prova), não pela aula.
 const COMPONENTES = {
   'Artes Visuais': 'd-artv', 'Biologia': 'd-bio', 'Dança': 'd-dan',
   'Filosofia': 'd-fil', 'Física': 'd-fis', 'Geografia': 'd-geo',
   'História': 'd-his', 'Inglês': 'd-ing', 'Literatura': 'd-lit',
   'Matemática': 'd-mat', 'Música': 'd-mus', 'Português': 'd-lp',
-  'Química': 'd-qui', 'Sociologia': 'd-soc', 'Teatro': 'd-tea'
+  'Química': 'd-qui', 'Redação': 'd-red', 'Sociologia': 'd-soc', 'Teatro': 'd-tea'
 };
 
 // “Artes” genérica não é mais oferecida, mas continua válida: há gente

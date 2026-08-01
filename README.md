@@ -3,10 +3,12 @@
 Sistema de elaboração, revisão, aplicação e correção dos simulados no formato
 PAS/UnB do Colégio Marista Águas Claras.
 
-Oito telas: painel de coordenação, alocação da produção entre os docentes,
+Nove telas: painel de coordenação, alocação da produção entre os docentes,
 textos-base com alocação de itens por vagas, editor de itens com revisão
-comentada em dois níveis, caderno de provas, cartões-resposta nominais, correção
-com boletins, e administração da equipe e dos estudantes.
+comentada em dois níveis, redação (proposta de cada prova), caderno de provas,
+cartões-resposta nominais, correção com boletins, e administração da equipe e
+dos estudantes. O menu mostra só as telas do papel de quem entrou, numeradas na
+ordem em que aquela pessoa as vê.
 
 Atende quatro provas — **9º ano, 1ª, 2ª e 3ª série** —, cada uma com os seus
 textos, itens, capa, instruções, **proposta de redação** e elenco. O seletor no
@@ -79,12 +81,22 @@ serve — não há servidor próprio.
 - Só entra quem a coordenação cadastrou: um gatilho no banco recusa a criação de
   conta de e-mail fora da lista da equipe.
 - Todas as tabelas exigem, via RLS, que o e-mail da sessão esteja na equipe.
-- O papel (coordenação / docente / redação) vem do banco, não do que a conta diz
-  sobre si mesma.
+- O papel (coordenação / coordenação de área / docente / redação) vem do banco,
+  não do que a conta diz sobre si mesma.
+- A **senha provisória** de cada conta nova é **sorteada** na hora da criação e
+  entregue uma única vez a quem coordena. Nenhuma senha existe no código: uma
+  constante compartilhada num arquivo que o navegador baixa sem login é uma
+  senha pública.
 - O fluxo de revisão é regra do banco, não só da tela: um gatilho recusa
   `status: "aprovado"` de quem não é a coordenação geral.
 - Apagar texto, estudante, resposta ou prova é restrito à coordenação; o docente
-  só descarta o próprio rascunho.
+  só descarta o **próprio** rascunho — a política de exclusão confere o
+  `autorEmail` do item contra o e-mail da sessão.
+- **O item tem dono, na tela e no banco.** O conteúdo — enunciado, opções,
+  gabarito — só é alterado por quem escreveu (enquanto não aprovado), pela
+  coordenação da área do item (enquanto ele está na etapa dela) ou pela
+  coordenação geral. Quem abre o item de outra pessoa lê e comenta. Sem isso,
+  qualquer conta da equipe reescrevia o gabarito de qualquer item aprovado.
 - O HTML que a equipe escreve — instruções da capa, campos do item e proposta de
   redação — passa por uma lista de permissão curta (`js/limpar.js`) antes de ir
   para a tela e para o papel: só ênfase tipográfica, e atributo nenhum em tag

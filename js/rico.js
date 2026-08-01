@@ -285,7 +285,21 @@ const SIMBOLOS = [
 
 // A área editável e a prévia. `campo` e `i` voltam no aviso de mudança para
 // quem chamou saber o que atualizar.
-function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '' }) {
+//
+// `soLeitura` devolve o mesmo campo sem barra e sem `contenteditable`, já com as
+// fórmulas desenhadas: é o que quem abre o item de outra pessoa vê. Um editor
+// desabilitado depois de montado continuaria disparando `input` em navegador
+// que ignora o atributo — aqui a área simplesmente não é editável.
+function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '', soLeitura = false }) {
+  if (soLeitura)
+    return `
+  <div class="rico rico-lendo">
+    <div class="rico-area caixa${vazio(valor) ? ' vazia' : ''}"
+      role="textbox" aria-readonly="true" tabindex="0"
+      ${rotulo ? `aria-label="${esc(rotulo)}"` : ''}
+      data-vazio="${esc(rotulo || 'Em branco')}"
+      style="min-height:${Math.max(1, linhas) * 1.6 + 1.2}em">${rico(valor)}</div>
+  </div>`;
   const enfases = ENFASES.map(e =>
     `<button type="button" class="rico-btn" data-rico-cmd="${e.cmd}"
       title="${esc(e.nome)}" aria-label="${esc(e.nome)}" style="${e.estilo}">${e.rot}</button>`).join('');

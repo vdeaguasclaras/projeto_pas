@@ -17,10 +17,10 @@ Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 | **Coordenação pedagógica** | Vê e faz tudo: configura o simulado, aprova a etapa final da revisão, gera caderno, cartões e boletins, e administra as contas da equipe. |
 | **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. |
 | **Docente** | Escreve itens, acompanha a revisão dos seus e lança as notas dos próprios itens discursivos. |
-| **Professora de redação** | Vê a proposta de redação da prova e lança NC, NE e TL da redação de cada estudante. |
+| **Professora de redação** | Tem a tela **Redação**: escreve a proposta de cada prova — tema, comando e textos motivadores — e lança NC, NE e TL da redação de cada estudante. Não escreve item, e por isso não vê as telas de texto-base e de itens. |
 
 As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
-Artes Visuais, Dança, Música, Teatro), **Humanas** (História, Geografia,
+Redação, Artes Visuais, Dança, Música, Teatro), **Humanas** (História, Geografia,
 Filosofia, Sociologia), **Matemática**, **Ciências da Natureza** (Biologia,
 Física, Química) e **Inglês**.
 
@@ -79,6 +79,11 @@ uma barra de *aprovados / meta* por prova. Quando a meta é dividida por tipo, o
 painel traz também a encomenda escrita por extenso, uma ficha de progresso por
 tipo (*A 1/3*, *B 0/2*) e uma situação que cobra o que falta **daquele** tipo:
 seis itens entregues com a mistura errada não passam por meta cumprida.
+
+> **A sua encomenda acompanha o trabalho.** Nas telas 3 e 4, uma faixa azul no
+> alto repete quantos itens a coordenação alocou para você **naquela prova**, a
+> divisão por tipo, o que ainda falta escrever e o recado da coordenação. Ela só
+> aparece quando você tem meta naquela prova.
 
 **3 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
 Clique num *espaço livre* para escrever um item seu naquele texto. Docentes
@@ -151,7 +156,19 @@ escreva `\$`.
 Uma fórmula tem de estar inteira dentro do mesmo trecho: não negrite metade dela.
 Fórmula já tem a formatação dela.
 
-**5 · Caderno** — o caderno montado com os itens aprovados, em numeração
+**5 · Redação** (coordenação e professora de redação) — a **proposta de cada
+prova**: tema, comando, tipo de texto esperado e os textos motivadores que o
+estudante lê. A tela mostra as quatro provas de uma vez, com quais ainda estão
+sem proposta e quantas notas de redação já foram lançadas em cada uma.
+
+- Quem escreve é a **coordenação geral** ou quem tem o papel **professora de
+  redação**. As demais pessoas veem a proposta pronta no Caderno.
+- A proposta é **de cada prova**: troque de prova no menu à esquerda.
+- Prova marcada como **sem redação** (“⚙ Configurar prova”, no Painel) não tem
+  proposta, nem folha de redação no cartão, nem lançamento de NC/NE/TL.
+- O lançamento das notas continua em **8 · Correção e boletins**.
+
+**6 · Caderno** — o caderno montado com os itens aprovados, em numeração
 contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
 PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
 e escolha “Salvar como PDF”.
@@ -170,8 +187,10 @@ precisa citar linhas; o PAS não numera).
 A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
 uma imagem temática e o texto das instruções ao estudante.
 
-A **proposta de redação** também é escrita aqui, no botão **“✍ Proposta de
-redação”**, e sai impressa **nas últimas páginas do caderno**, depois dos itens:
+A **proposta de redação** tem tela própria — **Redação**, no menu —, e o mesmo
+botão continua aqui no Caderno, por conveniência de quem está diagramando. Ela
+sai impressa **nas últimas páginas do caderno**, depois dos itens, em coluna
+única, como no caderno do PAS:
 
 - **Tema** e **comando** (o que se pede ao estudante) são obrigatórios; o **tipo
   de texto esperado** é opcional.
@@ -185,9 +204,12 @@ redação”**, e sai impressa **nas últimas páginas do caderno**, depois dos 
 - O botão só aparece se a prova **tiver redação** (“⚙ Configurar prova”, no
   Painel). Prova sem redação não tem proposta, nem folha de redação no cartão,
   nem lançamento de NC/NE/TL — a redação simplesmente não existe ali.
+- Quem escreve a proposta é a **coordenação geral** ou quem tem o papel
+  **professora de redação**. A tela Redação mostra, de uma vez, quais das quatro
+  provas ainda estão sem proposta.
 
-**6 · Cartões-resposta** — impressão dos cartões nominais do elenco da prova. A
-lista de estudantes sobe em **8 · Administração**; aqui você confere quem está na
+**7 · Cartões-resposta** — impressão dos cartões nominais do elenco da prova. A
+lista de estudantes sobe em **9 · Administração**; aqui você confere quem está na
 prova e imprime.
 
 Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
@@ -205,7 +227,7 @@ Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos
 “folha N de M”, para a digitalização em lote saber a que estudante e a que parte
 da prova cada imagem pertence.
 
-**7 · Correção e boletins** — lançamento das marcações (à mão ou importando o
+**8 · Correção e boletins** — lançamento das marcações (à mão ou importando o
 CSV do leitor óptico), notas dos itens discursivos, redação (NC, NE e TL) e
 impressão dos boletins por turma.
 
@@ -229,7 +251,7 @@ pesam mais numa redação de 10 linhas do que numa de 30.
 - Cada campo é gravado ao sair dele, e só a linha daquele estudante é
   recalculada: a tela não se remonta, então o **Tab** vai para o campo seguinte.
 
-**8 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
+**9 · Administração** (só coordenação) — duas coisas: os **acessos** da equipe e
 a **lista de estudantes**.
 
 ## Tamanho de cada prova
@@ -265,16 +287,31 @@ Valor em real não vira fórmula: “R$ 50,00 e R$ 30,00” atravessa intacto.
 
 ## Figuras: infográfico, mapa, gráfico, obra de arte
 
-O **texto-base** e o **item** aceitam figuras, no bloco “Figuras” do formulário.
-Clique em **+ Figura**, escolha o arquivo (PNG, JPEG, WEBP ou SVG) e pronto.
+Há **três lugares** que aceitam figura, cada um com o seu bloco “Figuras” no
+formulário. Clique em **+ Figura**, escolha o arquivo (PNG, JPEG, WEBP ou SVG) e
+pronto.
+
+| Onde | Onde sai impresso |
+|---|---|
+| **Figuras do texto** (no texto-base) | depois do texto e antes do comando do bloco |
+| **Figuras do enunciado** (no item) | depois do enunciado, antes das opções |
+| **Figura da opção A/B/C/D** (item tipo C) | dentro da própria alternativa, embaixo do texto dela |
 
 Para cada figura você pode informar **legenda** e **fonte**, que saem impressas
 embaixo dela, e escolher o **tamanho** — 100%, 75%, 50% ou 33% da largura da
 coluna. Figura de geometria raramente precisa da coluna inteira; esticá-la só
 rouba espaço do texto.
 
-A figura do texto-base sai depois do texto e antes do comando do bloco. A do item
-sai depois do enunciado, antes das opções.
+**A figura pode ser o texto-base inteiro.** Obra de arte, charge, infográfico ou
+mapa: deixe o **corpo do texto em branco**, acrescente a figura, e o caderno traz
+só a imagem, com a legenda e a fonte. Título e fonte continuam obrigatórios — a
+fonte é o crédito da obra. Quem for escrever um item sobre esse texto-base vê a
+figura no painel ao lado do editor, no lugar em que veria as linhas.
+
+**A alternativa também pode ser uma figura.** Em item do tipo C de Matemática ou
+de Artes, muitas vezes a resposta É a imagem: quatro gráficos, quatro obras,
+quatro estruturas. Cada opção tem o seu campo de figura, logo abaixo do texto
+dela, e no caderno a imagem sai dentro da alternativa a que pertence.
 
 **Reduza a imagem antes de enviar.** O limite é 5 MB, mas o que importa para o
 papel é a nitidez na largura em que ela vai sair: uma figura que ocupa meia
@@ -307,7 +344,7 @@ do caderno e a **proposta de redação** também são de cada prova.
 
 ## Coordenação: subir a lista de estudantes
 
-Tela **8 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
+Tela **9 · Administração** → **⬆ Importar lista (CSV)**. Cole uma linha por
 estudante, colunas separadas por `;`, `,` ou tabulação (colar direto de uma
 planilha funciona):
 
@@ -341,16 +378,23 @@ atualiza sozinho quando você volta para a aba).
 
 ## Coordenação: criar o acesso de alguém
 
-1. Tela **8 · Administração** → **+ Adicionar pessoa**.
+1. Tela **9 · Administração** → **+ Adicionar pessoa**.
 2. Preencha nome, e-mail e papel. Para **coordenação de área**, escolha a área
    que a pessoa coordena e, se quiser, o componente que ela leciona.
-3. O sistema sugere a senha provisória da escola (`Marista@2026`) — pode aceitar
-   ou trocar.
+3. O sistema **sorteia uma senha provisória só para essa pessoa** — pode aceitar
+   ou trocar. Ela não é a mesma de ninguém e não existe em lugar nenhum do
+   código; anote-a antes de fechar a janela.
 4. Clique em **Criar conta** e entregue à pessoa o endereço, o e-mail e a senha.
+   A senha aparece uma vez; se ela se perder, use **“Nova senha”** para sortear
+   outra.
 
 Nenhum e-mail é enviado: a conta já nasce liberada, e **o sistema obriga a
 pessoa a criar a própria senha no primeiro acesso**. A coluna “Acesso” da tabela
 mostra quem ainda está com senha provisória. “Nova senha” volta a exigir a troca.
+
+> Uma senha provisória **igual para todo mundo** é uma senha pública: qualquer
+> pessoa que a descubra entra como quem ainda não trocou a sua. Por isso ela
+> passou a ser sorteada por conta.
 
 ## Cuidados
 
@@ -359,4 +403,10 @@ mostra quem ainda está com senha provisória. “Nova senha” volta a exigir a
   antes. O banco só aceita essas operações da coordenação.
 - Aprovar item é decisão da coordenação e o **banco confere**: docente e
   coordenação de área não conseguem marcar “aprovado” por fora do fluxo.
+- **Item tem dono.** Você abre e lê o item de qualquer colega, mas só edita o
+  seu — e só enquanto ele não estiver aprovado. A coordenação de área edita os
+  itens da sua área enquanto eles estão na etapa dela; a coordenação geral edita
+  sempre. Para pedir um ajuste no item de outra pessoa, escreva no **fio da
+  revisão**, dentro do próprio item: é ele que avisa quem escreveu. A regra vale
+  na tela e no banco.
 - Exporte o backup JSON ao fim de cada etapa importante do trabalho.
