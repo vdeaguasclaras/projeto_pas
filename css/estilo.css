@@ -34,46 +34,66 @@ button{font:inherit;cursor:pointer}
 
 .casca{display:flex;min-height:100vh;align-items:flex-start}
 
-.lado{position:sticky;top:0;flex:none;width:246px;height:100vh;z-index:40;
-  display:flex;flex-direction:column;color:#fff;
-  background:linear-gradient(165deg,var(--azul-esc),var(--azul) 52%,var(--rosa));
-  box-shadow:2px 0 18px rgba(0,0,0,.14)}
+/* A barra lateral é clara — o desenho “Ar & Luz” do handoff, resgatado das
+   propostas que ficaram pelo caminho (PRs #1 e #2). Antes era um degradê
+   azul→rosa de ponta a ponta: bonito, mas era a peça mais pesada da tela, e
+   competia com o conteúdo, que é onde o trabalho acontece. Clara, ela sustenta
+   a navegação sem puxar o olho; a cor forte fica para o item ativo, que é o
+   único lugar em que ela informa alguma coisa.
+
+   O que NÃO veio das propostas: os números. Lá o menu era só ícone. Aqui o
+   número é a ordem do trabalho e o manual da equipe chama as telas por ele
+   (“tela 5 · Redação”) — some da esquerda, onde o ícone entra, e reaparece à
+   direita, discreto. */
+.lado{position:sticky;top:0;flex:none;width:268px;height:100vh;z-index:40;
+  display:flex;flex-direction:column;color:var(--ink);
+  background:var(--papel);border-right:1px solid var(--borda)}
 .lado-marca{display:flex;align-items:center;gap:11px;padding:18px 16px 14px}
-.logo{width:42px;height:42px;border-radius:12px;background:#fff;color:var(--azul-esc);display:grid;place-items:center;font-weight:800;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.2);flex:none}
-.logo span{border-bottom:3px solid var(--rosa);padding-bottom:1px}
+.logo{width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;
+  font-weight:800;font-size:12px;color:#fff;
+  background:linear-gradient(150deg,var(--azul-esc),var(--azul) 55%,var(--rosa));
+  box-shadow:0 6px 16px rgba(29,92,255,.28)}
+.logo span{border-bottom:3px solid var(--amarelo);padding-bottom:1px}
 .lado-marca-txt{display:flex;flex-direction:column;line-height:1.25;min-width:0}
 .lado-marca-txt b{font-size:15px;font-weight:800}
-.lado-marca-txt small{font-size:11px;opacity:.85}
-.lado-fechar{display:none;margin-left:auto;border:none;background:rgba(255,255,255,.18);color:#fff;
-  border-radius:9px;width:32px;height:32px;font-size:14px;font-weight:700;flex:none}
+.lado-marca-txt small{font-size:11px;color:var(--ink-2)}
+.lado-fechar{display:none;margin-left:auto;border:1px solid var(--borda);background:var(--fundo);
+  color:var(--ink-2);border-radius:9px;width:32px;height:32px;font-size:14px;font-weight:700;flex:none}
 
 /* seletor de prova — a peça que diz em que prova se está trabalhando */
 .lado-prova{padding:0 12px 12px}
-.sel-prova{display:flex;flex-direction:column;gap:5px;background:rgba(255,255,255,.16);
-  backdrop-filter:blur(4px);border-radius:12px;padding:9px 11px 10px}
-.sel-prova>span{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;opacity:.85}
-.sel-prova select{border:none;background:transparent;color:#fff;font-family:inherit;font-size:13.5px;
+.sel-prova{display:flex;flex-direction:column;gap:5px;background:var(--azul-claro);
+  border:1px solid color-mix(in srgb,var(--azul) 18%,transparent);border-radius:12px;padding:9px 11px 10px}
+.sel-prova>span{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--azul)}
+.sel-prova select{border:none;background:transparent;color:var(--ink);font-family:inherit;font-size:13.5px;
   font-weight:700;padding:0;width:100%}
 .sel-prova select option{color:var(--ink);background:var(--papel)}
-.sel-prova select:focus-visible{outline:3px solid var(--amarelo);outline-offset:3px;border-radius:4px}
+.sel-prova select:focus-visible{outline:3px solid var(--azul);outline-offset:3px;border-radius:4px}
 
 .lado-nav{display:flex;flex-direction:column;gap:3px;padding:0 12px;overflow-y:auto;flex:1;min-height:0}
-.lado-nav a{display:flex;align-items:center;gap:10px;text-decoration:none;color:#fff;
-  padding:10px 12px;border-radius:11px;font-weight:700;font-size:13.5px;line-height:1.3;
-  transition:background .15s}
-.lado-nav a .n{width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,.2);
-  display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
-.lado-nav a:hover{background:rgba(255,255,255,.15)}
-.lado-nav a[aria-current="page"]{background:#fff;color:var(--azul-esc);box-shadow:0 6px 18px rgba(0,0,0,.18)}
-.lado-nav a[aria-current="page"] .n{background:var(--azul);color:#fff}
-.lado-nav a:focus-visible{outline:3px solid var(--amarelo);outline-offset:2px}
+.lado-nav a{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink-2);
+  padding:10px 11px;border-radius:12px;font-weight:600;font-size:13.5px;line-height:1.3;
+  transition:background .15s,color .15s}
+/* O ícone: 20px, traço de 1,8 — no peso do texto ao lado, não mais forte. */
+.lado-nav .ic{width:20px;height:20px;flex:none;display:grid;place-items:center}
+.lado-nav .ic svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.lado-nav .rot{flex:1;min-width:0}
+.lado-nav .n{font-size:10.5px;font-weight:700;color:var(--ink-2);opacity:.5;flex:none;
+  font-variant-numeric:tabular-nums;margin-left:2px}
+.lado-nav a:hover{background:var(--azul-claro);color:var(--azul)}
+.lado-nav a[aria-current="page"]{color:#fff;font-weight:700;
+  background:linear-gradient(120deg,var(--azul),#3d7bff);
+  box-shadow:0 8px 20px rgba(29,92,255,.30)}
+.lado-nav a[aria-current="page"] .n{color:#fff;opacity:.75}
+.lado-nav a:focus-visible{outline:3px solid var(--azul);outline-offset:2px}
 
-.lado-pe{border-top:1px solid rgba(255,255,255,.2);padding:12px;display:flex;flex-direction:column;gap:9px;font-size:13px}
+.lado-pe{border-top:1px solid var(--borda);padding:12px;display:flex;flex-direction:column;gap:9px;font-size:13px}
 .lado-quem{display:flex;align-items:center;gap:9px;min-width:0}
 .lado-quem .nome{font-weight:700;font-size:12.5px;line-height:1.3;overflow-wrap:anywhere}
 .lado-acoes{display:flex;gap:6px;flex-wrap:wrap}
-.lado-pe select{border:none;border-radius:10px;padding:8px 10px;font:inherit;font-weight:700;
-  background:rgba(255,255,255,.18);color:#fff;backdrop-filter:blur(4px);width:100%}
+.lado-pe select{border:1px solid var(--borda);border-radius:10px;padding:8px 10px;font:inherit;font-weight:700;
+  background:var(--fundo);color:var(--ink);width:100%}
 .lado-pe select option{color:var(--ink);background:var(--papel)}
 
 .lado-veu{position:fixed;inset:0;background:rgba(10,14,30,.5);z-index:35;border:none;padding:0}
@@ -87,9 +107,11 @@ button{font:inherit;cursor:pointer}
 .menu-btn{display:none;border:1px solid var(--borda);background:var(--fundo);color:var(--ink);
   border-radius:10px;width:40px;height:40px;font-size:17px;flex:none}
 
-.avatar{width:32px;height:32px;border-radius:50%;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:800;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.6);flex:none}
-.tema-btn,.sair-btn{border:none;background:rgba(255,255,255,.18);color:#fff;border-radius:10px;height:34px;padding:0 10px;font-size:14px;font-weight:700;backdrop-filter:blur(4px);transition:background .15s}
-.tema-btn:hover,.sair-btn:hover{background:rgba(255,255,255,.3)}
+.avatar{width:32px;height:32px;border-radius:50%;color:#fff;display:grid;place-items:center;font-size:12px;
+  font-weight:800;flex:none;background:linear-gradient(140deg,var(--azul),var(--rosa))}
+.tema-btn,.sair-btn{border:1px solid var(--borda);background:var(--fundo);color:var(--ink-2);border-radius:10px;
+  height:34px;padding:0 10px;font-size:14px;font-weight:700;transition:background .15s,color .15s}
+.tema-btn:hover,.sair-btn:hover{background:var(--azul-claro);color:var(--azul)}
 .mv{width:19px;height:19px;border-radius:5px;border:none;background:color-mix(in srgb,currentColor 13%,transparent);color:inherit;font-size:10px;display:inline-grid;place-items:center;cursor:pointer;padding:0;line-height:1}
 .mv:hover{background:color-mix(in srgb,currentColor 26%,transparent)}
 
@@ -98,7 +120,11 @@ main:focus{outline:none}
 
 /* Tela estreita: o menu vira gaveta, aberta pelo ☰ do cabeçalho. */
 @media(max-width:1000px){
-  .lado{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .22s ease;width:270px}
+  /* Como gaveta, a barra flutua sobre o conteúdo: aí ela precisa da sombra que
+     a versão fixa não precisa — sem ela, barra clara sobre fundo claro não tem
+     borda percebida, e a gaveta parece parte da página. */
+  .lado{position:fixed;left:0;top:0;transform:translateX(-100%);transition:transform .22s ease;width:270px;
+    box-shadow:2px 0 24px rgba(18,42,74,.18)}
   .casca.menu-aberto .lado{transform:none}
   .lado-fechar{display:grid;place-items:center}
   .menu-btn{display:grid;place-items:center}
@@ -114,6 +140,12 @@ main:focus{outline:none}
 .cab-tela{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px}
 .cab-tela h2{font-size:19px}
 .cab-tela .sub{color:var(--ink-2);font-size:13px}
+/* Sobrancelha do cabeçalho do Painel: o simulado e a etapa, em cima da saudação —
+   o desenho das propostas de redesenho, resgatado. */
+.cab-sobrancelha{display:block;font-size:10.5px;font-weight:800;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--rosa);margin-bottom:3px}
+.cab-tela h2+.sub{display:block;margin-top:2px}
+.cab-contagem{margin-top:7px}
 .vazio{border:2px dashed var(--borda);border-radius:14px;padding:34px 20px;text-align:center;color:var(--ink-2);font-size:14px}
 
 /* ---------- componentes ---------- */

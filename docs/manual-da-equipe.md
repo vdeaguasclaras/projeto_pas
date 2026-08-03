@@ -46,6 +46,11 @@ etapa, série, data, duração e a **quantidade de questões de cada versão** �
 as quatro provas lado a lado. O docente abre esta tela com a sua lista do que tem
 para entregar.
 
+No alto fica a **contagem para a aplicação** da prova que está na tela — “faltam
+40 dias”, “a aplicação é amanhã”, “aplicada há 9 dias”. Ela vem da data em
+“⚙ Configurar prova”; prova sem data não mostra contagem nenhuma. A partir de
+três semanas o aviso muda de cor, e na última semana fica vermelho.
+
 **2 · Alocação por docente** (só coordenação) — quantos itens cada docente deve
 entregar em **cada prova**. É onde a coordenação distribui a prova antes de
 qualquer um começar a escrever.
