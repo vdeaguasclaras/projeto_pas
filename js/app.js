@@ -48,6 +48,48 @@ function dataBR(iso) {
   return `${d}/${m}/${a}`;
 }
 
+// Saudação pela hora do dia, com o primeiro nome. Resgatada do desenho que ficou
+// nas propostas de redesenho: custa nada e faz a tela cumprimentar quem abriu,
+// em vez de abrir com um número.
+function saudacao() {
+  const h = new Date().getHours();
+  const parte = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = String(S.perfil?.nome || '').trim().split(/\s+/)[0];
+  return nome ? `${parte}, ${nome}` : parte;
+}
+
+// Quantos dias faltam para a aplicação. É a informação que a coordenação mais
+// procura e que não existia em lugar nenhum do sistema — a data estava lá, mas
+// a conta ficava na cabeça de quem lia.
+//
+// A data vem como 'AAAA-MM-DD'. Montada campo a campo, e não por `new Date(iso)`,
+// que interpreta a string como UTC: à noite, no fuso de Brasília, isso daria um
+// dia de diferença — e um dia de diferença é justamente o que esta conta não
+// pode errar.
+function diasAteAplicacao(prova) {
+  const iso = prova?.dataAplicacao;
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [a, m, d] = iso.split('-').map(Number);
+  const alvo = new Date(a, m - 1, d);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return Math.round((alvo - hoje) / 86400000);
+}
+
+// A contagem dita em português, com o tom mudando conforme aperta.
+function htmlContagem(prova) {
+  const n = diasAteAplicacao(prova);
+  if (n === null) return '';
+  const [cls, txt] =
+      n === 0  ? ['falta', 'a aplicação é <b>hoje</b>']
+    : n === 1  ? ['falta', 'a aplicação é <b>amanhã</b>']
+    : n < 0    ? ['', n === -1 ? 'aplicada <b>ontem</b>' : `aplicada há <b>${-n}</b> dias`]
+    : n <= 7   ? ['falta', `faltam <b>${n}</b> dias`]
+    : n <= 21  ? ['pend',  `faltam <b>${n}</b> dias`]
+    :            ['info',  `faltam <b>${n}</b> dias`];
+  return `<span class="chip ${cls}" title="Aplicação em ${dataBR(prova.dataAplicacao)}">${txt}</span>`;
+}
+
 function baixar(nome, conteudo, tipo = 'application/json') {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
@@ -351,6 +393,26 @@ const TELAS = {
   correcao:      { rot: 'Correção e boletins',  curto: 'Correção' },
   administracao: { rot: 'Administração',        curto: 'Admin.',   soCoordenacaoNaNuvem: true }
 };
+// Os ícones do menu, desenhados aqui em vez de vir de uma biblioteca.
+//
+// O handoff pedia `lucide-react`, e as duas propostas de redesenho o usavam —
+// mas este sistema não tem etapa de build nem depende de CDN, e nove ícones não
+// justificam nem uma coisa nem outra. São os traços do lucide (24×24, sem
+// preenchimento, cantos arredondados), escritos à mão; o peso e a cor vêm do
+// CSS, para o ícone acompanhar o texto ao lado em vez de gritar mais alto.
+const ICONES = {
+  painel:        '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  alocacao:      '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  textos:        '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/><path d="M8 13h8"/><path d="M8 17h8"/><path d="M8 9h2"/>',
+  itens:         '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  redacao:       '<path d="M20.2 12.2a6 6 0 0 0-8.4-8.4L5 10.5V19h8.5z"/><path d="M16 8 2 22"/><path d="M17.5 15H9"/>',
+  caderno:       '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
+  cartoes:       '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+  correcao:      '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16v-4"/><path d="M12 16V8"/><path d="M17 16v-6"/>',
+  administracao: '<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>'
+};
+const icone = k => `<span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24">${ICONES[k] || ICONES.painel}</svg></span>`;
+
 // Administração cuida de contas e da lista de estudantes — só aparece para a
 // coordenação e só com o sistema ligado ao banco. Alocação é da coordenação em
 // qualquer modo: quem recebe meta não a define.
@@ -456,7 +518,7 @@ function render() {
 
   $('#nav').innerHTML = telasVisiveis()
     .map(([k, v], i) => `<a href="#/${k}" ${k === atual ? 'aria-current="page"' : ''}>
-      <span class="n">${i + 1}</span>${esc(v.rot)}</a>`).join('');
+      ${icone(k)}<span class="rot">${esc(v.rot)}</span><span class="n">${i + 1}</span></a>`).join('');
   ({
     painel: telaPainel, alocacao: telaAlocacao, textos: telaTextos, itens: telaItens,
     redacao: telaRedacao, caderno: telaCaderno, cartoes: telaCartoes,
@@ -978,8 +1040,10 @@ function telaPainel() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div>
-        <h2>${esc(p.serie)} — ${esc(p.nome)}</h2>
-        <span class="sub">${esc(p.etapa)} · Aplicação: ${dataBR(p.dataAplicacao)} · ${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'}${p.temRedacao === false ? ' · sem redação' : ' · com redação'}</span>
+        <span class="cab-sobrancelha">${esc(p.nome)} · ${esc(p.etapa)}</span>
+        <h2>${esc(saudacao())} 👋</h2>
+        <span class="sub">${esc(p.serie)} · Aplicação: ${dataBR(p.dataAplicacao)} · ${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'}${p.temRedacao === false ? ' · sem redação' : ' · com redação'}</span>
+        ${htmlContagem(p) ? `<div class="cab-contagem">${htmlContagem(p)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${doPapel ? '<button class="btn fantasma" data-acao="cfg">⚙ Configurar prova</button>' : ''}
