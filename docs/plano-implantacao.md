@@ -26,7 +26,7 @@ js/limpar.js          poda do HTML escrito pela equipe (lista de permissão curt
 js/planilha.js        leitura da lista de estudantes colada pela coordenação
 js/imagens.js         figuras: envio, URL assinada, medida e impressão
 js/rico.js            texto rico do item: ênfase e notação matemática
-js/app.js             as 8 telas, regras de prova e correção
+js/app.js             as 9 telas, regras de prova e correção
 js/vendor/supabase.js biblioteca supabase-js (cópia versionada — sem CDN)
 js/vendor/katex/      KaTeX 0.18.1 + fontes woff2 (cópia versionada — sem CDN)
 supabase/migrations/  esquema e regras de acesso do banco
@@ -255,9 +255,12 @@ quebram por altura acumulada.
 
 **Consequência para a leitura óptica**, apontada pela coordenação: cada
 estudante passa a ter mais de uma folha digitalizada. O gabarito exportado para
-o leitor local mudou para `pas-marista/gabarito-v2` e agora descreve as folhas —
-qual é objetiva, qual é discursiva (com os percentuais aceitos) e qual é a
-redação —, além da chave de identificação (matrícula) e das âncoras.
+o leitor local passou a descrever as folhas — qual é objetiva, qual é
+discursiva (com os percentuais aceitos) e qual é a redação —, além da chave de
+identificação (matrícula) e das âncoras. Com a entrada das quatro provas ele
+virou `pas-marista/gabarito-v3`, que diz também **de que prova** é o arquivo:
+sem isso o leitor não distingue a folha do 9º ano da folha da 3ª série. O
+formato está descrito em [`desktop/docs/contrato-dados.md`](../desktop/docs/contrato-dados.md).
 
 O lançamento das notas dos discursivos, na tela de correção, passou a oferecer
 exatamente os mesmos cinco níveis do cartão, em vez de um número livre de 0 a
@@ -433,14 +436,32 @@ oficiais e o parâmetro *x* de cada versão da prova.
 
 Vercel (projeto `projeto-pas`), conectada ao repositório do GitHub. Sem etapa
 de build: o site é servido direto da raiz do repositório. `.vercelignore` deixa
-de fora `supabase/`, `docs/` e `.github/`, que existem só para o
+de fora `supabase/`, `docs/`, `desktop/` e `.github/`, que existem só para o
 desenvolvimento.
+
+## A frente que continua aberta: o leitor óptico
+
+Tudo o que este plano previa para a **fase on-line** está feito. A **fase
+offline** — digitalizar os cartões e lê-los opticamente — nunca saiu do papel, e
+é a única parte do fluxo que ainda é toda manual: hoje quem corrige lança
+marcação por marcação na tela “Correção e boletins”.
+
+O desenho existe e está em [`desktop/`](../desktop/README.md): o pipeline
+(âncoras → homografia → grade de bolhas → CSV, com fila de conferência para
+dupla marcação), o contrato dos dois arquivos que ligam as pontas e o esqueleto
+da linha de comando. As **duas pontas no sistema web já funcionam** — a
+exportação do gabarito, na tela de Cartões-resposta, e a importação do CSV, na de
+Correção. Falta o miolo: a leitura em si.
+
+Esse material veio da PR #3. Ela foi fechada porque a metade `web/` dela virou o
+sistema que está em produção; a metade `desktop/` foi resgatada para o
+repositório em vez de ficar enterrada numa PR fechada.
 
 ## Pendências operacionais
 
 - **Proteção contra senha vazada** (Supabase → Authentication → Passwords):
   ligar a verificação no HaveIBeenPwned. Não dá para ativar por API; é um
   clique no painel.
-- **Contas da equipe**: criar pela tela “7 · Equipe” conforme os docentes
+- **Contas da equipe**: criar pela tela “9 · Administração” conforme os docentes
   entrarem no projeto. A coordenação inicial é
   `vde.aguasclaras@maristabrasil.org`.
