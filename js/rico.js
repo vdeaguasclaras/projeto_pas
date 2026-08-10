@@ -290,7 +290,17 @@ const SIMBOLOS = [
 // fórmulas desenhadas: é o que quem abre o item de outra pessoa vê. Um editor
 // desabilitado depois de montado continuaria disparando `input` em navegador
 // que ignora o atributo — aqui a área simplesmente não é editável.
-function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '', soLeitura = false }) {
+// `paragrafos` liga o modo prosa do corpo do texto-base: Enter abre PARÁGRAFO
+// (linha em branco, que é como o texto-base guarda a separação) e Shift+Enter
+// quebra a linha dentro do mesmo parágrafo. Sem isso a única forma de separar
+// parágrafo era teclar Enter duas vezes sabendo que a linha vazia tem esse
+// significado — ninguém adivinha, e os textos chegavam ao caderno num bloco só.
+//
+// `previa` recebe o HTML já montado da prévia. Quando vem preenchida, a prévia
+// fica sempre à vista (não só quando há fórmula): é ela que mostra, em prosa,
+// onde cada parágrafo começa e termina.
+function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '', soLeitura = false,
+                      paragrafos = false, previa = null }) {
   if (soLeitura)
     return `
   <div class="rico rico-lendo">
@@ -306,22 +316,28 @@ function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '', soLeit
   const simbolos = SIMBOLOS.map((s, n) =>
     `<button type="button" class="rico-btn mat" data-rico-simbolo="${n}"
       title="${esc(s.nome)}" aria-label="${esc(s.nome)}">${s.rot}</button>`).join('');
+  const paragrafo = paragrafos
+    ? `<span class="rico-grupo"><button type="button" class="rico-btn" data-rico-paragrafo="1"
+        title="Novo parágrafo (Enter)" aria-label="Novo parágrafo">¶</button></span>`
+    : '';
   const html = limpar(valor);
+  const mostraPrevia = previa !== null || temFormula(valor);
   return `
   <div class="rico">
     <div class="rico-barra" role="toolbar" aria-label="Ênfase e notação matemática">
       <span class="rico-grupo">${enfases}</span>
-      <span class="rico-grupo">${simbolos}</span>
+      <span class="rico-grupo">${simbolos}</span>${paragrafo}
     </div>
     <div class="rico-area caixa${vazio(valor) ? ' vazia' : ''}" contenteditable="true"
       role="textbox" aria-multiline="true" spellcheck="true"
       ${rotulo ? `aria-label="${esc(rotulo)}"` : ''}
       data-rico-campo="${esc(campo)}" data-rico-i="${esc(String(i))}"
+      ${paragrafos ? 'data-rico-paragrafos="1"' : ''}
       data-vazio="${esc(rotulo || 'Escreva aqui')}"
       style="min-height:${Math.max(1, linhas) * 1.6 + 1.2}em">${html}</div>
-    <div class="rico-previa" ${temFormula(valor) ? '' : 'hidden'}>
-      <span class="rico-rot">prévia</span>
-      <div class="rico-saida">${rico(valor)}</div>
+    <div class="rico-previa${previa !== null ? ' rico-previa-fixa' : ''}" ${mostraPrevia ? '' : 'hidden'}>
+      <span class="rico-rot">${previa !== null ? 'como sai no caderno' : 'prévia'}</span>
+      <div class="rico-saida">${previa ?? rico(valor)}</div>
     </div>
   </div>`;
 }
@@ -420,22 +436,25 @@ function devolverSelecao(area) {
 // carregue recurso nem atributo de evento no que se atribui aqui — é a mesma
 // garantia dos outros `innerHTML` do sistema, que sempre recebem `esc()`,
 // `limpar()` ou `rico()`.
-function atualizarPrevia(caixa, valor) {
+// `html` já pronto (vindo de quem chamou `ligarEditoresRicos`) tem precedência:
+// é assim que o corpo do texto-base mostra a divisão em parágrafos, que é regra
+// do caderno e mora em js/app.js, sem este módulo precisar conhecê-la.
+function atualizarPrevia(caixa, valor, html = null) {
   const previa = caixa?.querySelector('.rico-previa');
   if (!previa) return;
-  const mostra = temFormula(valor);
+  const mostra = html !== null || temFormula(valor);
   previa.hidden = !mostra;
-  if (mostra) previa.querySelector('.rico-saida').innerHTML = rico(valor);
+  if (mostra) previa.querySelector('.rico-saida').innerHTML = html ?? rico(valor);
 }
 
 // Um único ouvinte por evento, no document: o diálogo do item é remontado
 // inteiro a cada ação (`reabrirDlgItem`), e ouvinte preso ao elemento morreria
 // junto. Nada aqui remonta a tela — remontar mataria o cursor de quem digita.
-function ligarEditoresRicos(aoMudar) {
+function ligarEditoresRicos(aoMudar, previaDe = null) {
   const avisar = area => {
     const valor = valorDoEditor(area);
     area.classList.toggle('vazia', !simples(valor).trim());
-    atualizarPrevia(caixaDe(area), valor);
+    atualizarPrevia(caixaDe(area), valor, previaDe?.(area.dataset.ricoCampo, valor) ?? null);
     aoMudar(area.dataset.ricoCampo, area.dataset.ricoI, valor);
   };
 
@@ -475,6 +494,7 @@ function ligarEditoresRicos(aoMudar) {
     area.focus();
     devolverSelecao(area);
     if (b.dataset.ricoCmd) document.execCommand(b.dataset.ricoCmd);
+    else if (b.dataset.ricoParagrafo) quebrarLinha(2);
     else inserirSimbolo(SIMBOLOS[Number(b.dataset.ricoSimbolo)]);
     avisar(area);
   });
@@ -486,33 +506,36 @@ function ligarEditoresRicos(aoMudar) {
       desligarStyleWithCSS();   // o atalho do navegador também produziria <span style>
       return;
     }
-    // Enter quebra linha; Ctrl+Enter é atalho de nada aqui, some.
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+    // No corpo em prosa, Enter abre parágrafo e Shift+Enter quebra a linha
+    // dentro dele — a inversão do padrão de editor de texto é proposital: no
+    // texto-base do PAS o parágrafo é a unidade, e a quebra solta é a exceção.
+    // Nos demais campos, Enter continua sendo quebra de linha simples.
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+      const emProsa = !!area.dataset.ricoParagrafos;
+      if (!emProsa && e.shiftKey) return;    // deixa o navegador cuidar
       e.preventDefault();
-      quebrarLinha();
+      quebrarLinha(emProsa && !e.shiftKey ? 2 : 1);
       avisar(area);
     }
   });
 }
 
 // Quebra de linha explícita: `insertLineBreak` não existe em todo navegador, e
-// o Enter nativo cria <div>. Um <br> posto à mão é o que a lista de permissão
-// aceita e o que o caderno entende.
-function quebrarLinha() {
-  const sel = getSelection();
-  if (!sel?.rangeCount) return;
-  const r = sel.getRangeAt(0);
-  r.deleteContents();
-  const br = document.createElement('br');
-  r.insertNode(br);
-  // No fim do texto o cursor não desce sem um segundo <br> à frente dele — é o
-  // mesmo truque que o navegador usa. `podarFimVazio()` tira esse sobressalente
-  // do que se guarda, para o enunciado não terminar em linha em branco.
-  if (!br.nextSibling) br.after(document.createElement('br'));
-  r.setStartAfter(br);
-  r.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(r);
+// o Enter nativo cria <div>, que `limpar()` desembrulharia — a quebra sumiria.
+//
+// A quebra entra como "\n" e não como <br> montado à mão. A área é
+// `white-space: pre-wrap`, então o "\n" já aparece como quebra na tela, e
+// `quebrasEmBr()` o converte em <br> na hora de guardar — o mesmo caminho por
+// onde passa o texto colado de fora, que é código já rodado. <br> à mão exigia
+// um sobressalente à frente do cursor para ele ter onde descer, e o Chrome
+// COMIA esse sobressalente ao receber o primeiro caractere digitado: com duas
+// quebras seguidas sobrava uma só, e o parágrafo novo virava continuação do
+// anterior — exatamente o que os professores relataram não conseguir fazer.
+//
+// `quantas = 2` deixa uma linha em branco atrás do cursor, que é como o
+// texto-base separa parágrafo (ver `htmlCorpoTexto` em js/app.js).
+function quebrarLinha(quantas = 1) {
+  document.execCommand('insertText', false, '\n'.repeat(Math.max(1, quantas)));
 }
 
 // Insere o atalho de notação com o alvo já selecionado.
@@ -542,5 +565,6 @@ export {
   vazio,               // “este campo está em branco?”, olhando por baixo da marcação
   editorRico,          // o HTML de um campo rico
   ligarEditoresRicos,  // liga barra, prévia e aviso de mudança (uma vez)
+  valorDoEditor,       // o que uma área editável vale agora, já podado
   OPCOES_KATEX         // exportado para ficar auditável de fora
 };

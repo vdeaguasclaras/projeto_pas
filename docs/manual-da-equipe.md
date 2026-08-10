@@ -15,8 +15,8 @@ Não tem senha? Peça à coordenação: só e-mails liberados por ela entram.
 | Papel | O que faz |
 |---|---|
 | **Coordenação pedagógica** | Vê e faz tudo: configura o simulado, aprova a etapa final da revisão, gera caderno, cartões e boletins, e administra as contas da equipe. |
-| **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. |
-| **Docente** | Escreve itens, acompanha a revisão dos seus e lança as notas dos próprios itens discursivos. |
+| **Coordenação de área** | Escreve itens como docente **e** é a primeira revisão dos itens da própria área — aprova para a coordenação geral ou devolve com ajustes. Também **aprova e edita os textos-base** da prova, junto com a coordenação geral. |
+| **Docente** | Escreve itens, acompanha a revisão dos seus, sugere textos-base (e corrige as próprias sugestões enquanto não são aprovadas) e lança as notas dos próprios itens discursivos. |
 | **Professora de redação** | Tem a tela **Redação**: escreve a proposta de cada prova — tema, comando e textos motivadores — e lança NC, NE e TL da redação de cada estudante. Não escreve item, e por isso não vê as telas de texto-base e de itens. |
 
 As áreas seguem a organização da escola: **Linguagens** (Português, Literatura,
@@ -92,8 +92,39 @@ seis itens entregues com a mistura errada não passam por meta cumprida.
 
 **3 · Textos e alocação** — cada texto-base tem um número de vagas (“slots”).
 Clique num *espaço livre* para escrever um item seu naquele texto. Docentes
-podem **sugerir** textos novos; a coordenação aprova e define quantos itens o
-texto comporta.
+podem **sugerir** textos novos; a coordenação — geral ou de área — aprova e
+define quantos itens o texto comporta.
+
+Quem pode mexer em qual texto:
+
+| Quem | O que pode |
+|---|---|
+| **Coordenação geral e de área** | criar, editar e aprovar qualquer texto; só a geral exclui |
+| **Quem sugeriu um texto** | corrigir a própria sugestão — título, fonte, corpo e figuras — **enquanto ela não for aprovada** |
+| **Os demais** | ler o texto e ver como ele sai no caderno |
+
+Depois de aprovado, o texto é da prova inteira, e não mais de quem o indicou:
+a partir daí só a coordenação o altera. Se precisar de um ajuste, peça a ela.
+
+O botão **👁 Como sai na prova**, no rodapé do texto, mostra o bloco já
+diagramado — mesma coluna, mesmo corpo de letra e mesmo comando do caderno
+impresso —, com os itens aprovados daquele texto embaixo.
+
+### Parágrafos do texto-base
+
+No corpo do texto, em **prosa**:
+
+- **Enter** abre um **parágrafo novo**;
+- **Shift+Enter** quebra a linha **dentro do mesmo parágrafo**;
+- o botão **¶** da barra faz o mesmo que o Enter.
+
+Logo abaixo do campo, o quadro **“como sai no caderno”** mostra a divisão que
+vai ser impressa, com cada parágrafo numerado (¶1, ¶2, ¶3) e a contagem no pé.
+Se o texto que você colou aparecer como um parágrafo só, é ali que se vê — e o
+Enter no lugar certo resolve.
+
+Em **verso** (poema, canção) e em **linhas numeradas**, cada linha continua
+sendo uma linha, e o Enter só quebra a linha.
 
 **4 · Itens e revisão** — a lista de todos os itens e o fluxo de aprovação:
 rascunho → coordenação de área → coordenação geral → aprovado. Quem revisa
@@ -105,6 +136,14 @@ Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação 
 a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
 na sua mão.
 
+> **A sua fila fica no Painel.** Quem revisa abre o sistema e vê, no alto,
+> quantos itens e quantas sugestões de texto estão esperando a **sua** decisão —
+> somando todas as provas, não só a que está na tela — com um botão que leva
+> direto à lista filtrada. Para a coordenação geral, o cartão mostra também
+> **quanto está parado na etapa das coordenações de área** e quem responde por
+> cada uma; conta que não anda costuma ser conta de quem ainda não fez o
+> primeiro acesso, e o cartão diz isso com todas as letras.
+
 Os botões no rodapé do item dizem **para onde a ação leva**:
 
 | Botão | O que faz |
@@ -114,6 +153,7 @@ Os botões no rodapé do item dizem **para onde a ação leva**:
 | **Aprovar** | na coordenação de área, segue para a geral; na geral, entra no caderno |
 | **Devolver** | volta para quem escreveu, com o comentário |
 | **Reabrir revisão** | tira um item aprovado do caderno até ser aprovado de novo |
+| **👁 Como sai na prova** | mostra o bloco diagramado como sai impresso, com a numeração que o item terá |
 | **Fechar** | sai do item (o que não foi salvo se perde) |
 | **Excluir** | apaga o item — fica separado, à esquerda, para não ser clicado por engano |
 
@@ -122,6 +162,36 @@ Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar e
 
 Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múltipla
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
+
+### A prova adaptada, e como ajustar um item nela
+
+**O sistema não gera a prova adaptada sozinho.** Quem decide onde cada item
+entra é o campo **Versão**, dentro do item:
+
+| Versão | Onde o item sai |
+|---|---|
+| **regular** | só na prova regular |
+| **adaptada** | só na prova de inclusão |
+| **ambas** | nas duas — e é **o mesmo item**, com a mesma redação, palavra por palavra |
+
+É por isso que não dava para “ajustar só na adaptada” um item marcado como
+*ambas*: não existia um item adaptado separado para editar.
+
+Quando a prova de inclusão precisar de um ajuste — enunciado mais curto, uma
+alternativa sem duplo sentido, outra figura —, abra o item e clique em
+**Criar versão adaptada**. O sistema:
+
+1. cria uma **cópia** do item, que vale só para a adaptada e é editável à
+   vontade, sem mexer no original;
+2. passa o item original a valer **só na regular**, para os dois não saírem
+   juntos na prova de inclusão;
+3. deixa a cópia como **rascunho**, no seu nome — ajuste o que precisar e envie
+   para a revisão, que segue o mesmo caminho de qualquer item.
+
+Os dois ficam ligados: dentro de cada um há um botão para abrir o outro, e a
+lista de itens marca **“↳ adaptação”** e **“tem adaptação”**. Enquanto não
+houver adaptação, o item marcado como *ambas* continua saindo igual nas duas
+provas — que é o certo para a maioria deles.
 
 ### Fórmula, expoente e símbolo no enunciado
 
@@ -177,6 +247,13 @@ sem proposta e quantas notas de redação já foram lançadas em cada uma.
 contínua, nas versões regular e adaptada, já paginado em folhas A4 no padrão do
 PAS. O que você vê na tela é o que sai impresso. Use “Imprimir / salvar em PDF”
 e escolha “Salvar como PDF”.
+
+Marque **“ver o que está em revisão”** para conferir a prova antes de aprovar:
+os itens que ainda estão na revisão entram na montagem, **destacados em
+amarelo**, e a numeração mostra como a prova ficaria com eles dentro. É a
+conferência do conjunto, que item a item não se enxerga. Rascunho de outra
+pessoa não aparece — só o que já foi enviado. **A impressão continua saindo só
+com o que está aprovado**, com ou sem a marcação ligada.
 
 O **comando de cada bloco é escrito pelo sistema** a partir dos tipos dos itens
 alocados — “julgue os itens de 11 a 19 e assinale a opção correta no item 20,
@@ -321,6 +398,14 @@ dela, e no caderno a imagem sai dentro da alternativa a que pertence.
 **Reduza a imagem antes de enviar.** O limite é 5 MB, mas o que importa para o
 papel é a nitidez na largura em que ela vai sair: uma figura que ocupa meia
 coluna não ganha nada em ter 4000 pixels de largura.
+
+> **Se a figura não aparecia e o “Salvar” não fazia nada:** era um defeito do
+> sistema, corrigido. Ao acrescentar uma figura, o formulário do texto-base se
+> redesenhava a partir do que estava **gravado**, e apagava o título, a fonte e
+> o corpo que tinham acabado de ser digitados — daí o “Salvar” responder que o
+> título era obrigatório e não gravar nada. Hoje o formulário mantém tudo o que
+> está na tela ao anexar, remover ou redimensionar figura. Se você tentou e
+> desistiu, pode refazer o cadastro normalmente.
 
 As figuras ficam no banco da escola, e **só quem está na equipe consegue
 abri-las** — conteúdo de prova é sigiloso até a aplicação.

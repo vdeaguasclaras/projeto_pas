@@ -920,6 +920,50 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
   color:var(--ink-2);margin-bottom:3px}
 .rico-saida{word-break:break-word}
 
+/* A prévia fixa é a do corpo do texto-base: ela fica sempre à vista, porque o
+   que ela mostra — onde cada parágrafo começa — não tem outro lugar onde ser
+   visto. A linha em branco que separa parágrafo é invisível na área de edição. */
+.rico-previa-fixa{border-style:solid;background:var(--papel)}
+.previa-corpo p{margin:0 0 7px;text-align:justify}
+.previa-corpo p:last-of-type{margin-bottom:0}
+.previa-par{display:inline-block;min-width:22px;margin-right:6px;font-family:var(--mono);font-size:11px;
+  font-weight:700;color:var(--azul);vertical-align:1px;user-select:none}
+.previa-conta{margin:8px 0 0;padding-top:7px;border-top:1px dashed var(--borda);
+  font-size:11.5px;color:var(--ink-2);text-align:left;text-indent:0}
+.previa-vazia{margin:0;font-size:12.5px;color:var(--ink-2)}
+
+/* “Como sai na prova”: uma coluna do caderno, na largura e no corpo reais,
+   dentro do diálogo. Mesmas medidas de `.pas-regua`, que é o que a paginação
+   usa para medir — o que se vê aqui é o que a régua mediu. */
+.previa-quadro{background:#e9e4de;border-radius:12px;padding:20px;overflow:auto;display:flex;justify-content:center}
+.pas-previa-col{width:var(--col);background:#fff;padding:16pt 10pt;text-align:justify;
+  box-shadow:0 3px 14px rgba(0,0,0,.25)}
+.previa-nota{margin:10px 2px 0;font-size:12px;line-height:1.55;color:var(--ink-2)}
+
+/* Item que ainda não foi aprovado, na conferência do caderno e na prévia. */
+.pas-item.em-revisao{background:color-mix(in srgb,var(--amarelo) 34%,transparent);
+  box-shadow:0 0 0 3pt color-mix(in srgb,var(--amarelo) 34%,transparent);border-radius:2pt}
+.cad-revisao{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;
+  white-space:nowrap;cursor:pointer}
+
+/* Vínculo entre o item regular e a versão adaptada dele. */
+.vinculo-versao{border-left:4px solid var(--roxo);margin-bottom:12px}
+.vinculo-versao.neutro{border-left-color:var(--borda)}
+.vinculo-versao p{font-size:12.5px;line-height:1.6;margin:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.marca-derivado{font-size:11px;font-weight:700;color:var(--roxo);white-space:nowrap}
+
+/* A fila de quem revisa, no alto do painel. Amarela porque é pendência de
+   decisão, não erro — e some para o papel que não decide nada. */
+.fila-revisao{border-left:4px solid var(--amarelo)}
+.fila-revisao.vazia{border-left-color:var(--verde)}
+.fila-revisao p{font-size:13.5px;line-height:1.6;margin:0}
+.fila-comps{margin-top:8px !important;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fila-acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.fila-gargalo{margin-top:14px;padding-top:12px;border-top:1px dashed var(--borda)}
+.fila-gargalo p{font-size:13px;color:var(--ink-2);margin-bottom:8px}
+.fila-gargalo table{font-size:13px}
+.fila-gargalo td:nth-child(2){font-variant-numeric:tabular-nums}
+
 /* Campo só de leitura: item de outra pessoa. Fundo do papel e cursor de texto,
    para ler como texto, e não como campo que não responde. */
 .rico-lendo .rico-area{background:var(--fundo);border-style:dashed;cursor:text;white-space:normal}
