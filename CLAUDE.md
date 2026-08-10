@@ -31,6 +31,15 @@ Quatro papéis, definidos em `public.equipe.papel`: `coordenacao`,
 `coordenacao_area`, `docente` e `redacao`. Nove telas em `TELAS` (js/app.js), e
 o menu mostra só as do papel de quem entrou.
 
+- **Diálogo que se remonta lê a cópia de trabalho, nunca o registro gravado.**
+  `dlgItem()` desenha `rasc`; `dlgTexto()` desenha `rascTexto`. O formulário do
+  texto-base não tinha essa cópia, e anexar uma figura — que remonta o diálogo —
+  devolvia os campos ao último estado salvo: quem sugeria um texto novo via
+  título, fonte e corpo sumirem, e o “Salvar” então reclamava de campo
+  obrigatório. Chegou como “a imagem não carrega e o Salvar não faz nada”, e
+  deixou oito arquivos órfãos no bucket. Antes de remontar, chame
+  `recolherCamposDoTexto()` / `mexerNoItem()`: o `change` de um `<input>` só
+  dispara ao perder o foco, e não dá para contar com essa ordem.
 - A **pastilha do menu é a posição na lista daquela pessoa**, não um número
   fixo — quando era fixo, o docente lia “1, 3, 4…” e procurava a tela 2, que é
   da coordenação. O manual (`docs/manual-da-equipe.md`) chama as telas pelo
@@ -64,8 +73,11 @@ Estas três já falharam uma vez. Valem como regra.
   some levando a única cópia.
 - **A regra de acesso vale na tela E no banco.** A tela esconder o botão não é
   proteção: a API do PostgREST está aberta a qualquer conta autenticada. Item
-  tem dono (`podeEditarItem()` em js/app.js, migração 0012 no banco), e as duas
-  pontas precisam concordar.
+  tem dono (`podeEditarItem()` em js/app.js, migração 0012 no banco) e texto-base
+  também (`podeEditarTexto()`, migração 0013), e as duas pontas precisam
+  concordar — inclusive em *como* reconhecem o dono. A tela chegou a reconhecer
+  o autor do texto pelo nome e o banco pelo e-mail: o botão “Editar” aparecia e
+  a gravação era recusada, o que é pior do que não oferecer.
 - **A Edge Function não é publicada pela Vercel.** Ela vive no Supabase, e
   mesclar o PR não a atualiza — é preciso publicá-la à parte
   (`deploy_edge_function`). O CORS dela é restrito aos endereços do sistema.
