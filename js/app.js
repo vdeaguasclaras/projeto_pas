@@ -141,6 +141,22 @@ const PERS = {
     if (modoNuvem) nuvem.gravarLinha('itens',
       { ...i, ordem: PERS.ordemNaProva(i) }).catch(PERS.falha);
   },
+  // A mesma gravação, esperada em vez de solta. Devolve `null` quando o banco
+  // aceitou e a mensagem do erro quando recusou — ver `salvarItem()`, que é
+  // quem decide o que fazer com a resposta. Fora do modo nuvem não há o que
+  // esperar, e ela responde `null` na hora.
+  async itemAgora(i) {
+    if (!modoNuvem) return null;
+    try {
+      await nuvem.gravarLinha('itens', { ...i, ordem: PERS.ordemNaProva(i) });
+      return null;
+    } catch (e) { return e?.message || String(e); }
+  },
+  async textoAgora(t) {
+    if (!modoNuvem) return null;
+    try { await nuvem.gravarLinha('textos', t); return null; }
+    catch (e) { return e?.message || String(e); }
+  },
   itens(ids) {
     if (!modoNuvem) return;
     const lista = ids.map(id => S.itens.find(x => x.id === id)).filter(Boolean)
@@ -229,8 +245,14 @@ const souAutorDoTexto = t => !!t?.autorEmail && t.autorEmail.toLowerCase() === i
 const nomePerfil = () => {
   if (S.perfil.papel === 'docente')
     return `Docente · ${S.perfil.nome}${S.perfil.componente ? ' (' + S.perfil.componente + ')' : ''}`;
-  if (S.perfil.papel === 'coordenacao_area')
-    return `Coord. de área · ${S.perfil.nome}${S.perfil.area ? ' (' + S.perfil.area + ')' : ''}`;
+  // Quem coordena uma área também dá aula: o cadastro dela tem `area` E
+  // `componente`, e os dois são trabalho. Mostrar só a área fazia o sistema
+  // apresentá-la pela metade — “o perfil está incompleto” foi exatamente como
+  // isso chegou.
+  if (S.perfil.papel === 'coordenacao_area') {
+    const partes = [S.perfil.area, S.perfil.componente].filter(Boolean);
+    return `Coord. de área · ${S.perfil.nome}${partes.length ? ' (' + partes.join(' · ') + ')' : ''}`;
+  }
   if (S.perfil.papel === 'redacao') return `Redação · ${S.perfil.nome}`;
   return `Coordenação · ${S.perfil.nome}`;
 };
@@ -979,6 +1001,80 @@ function painelDaRedacao() {
   </div>`;
 }
 
+// A área de quem coordena uma. Ela não existia: o painel da coordenação de área
+// era o do docente, “o que VOCÊ tem para entregar”, e nada dizia como estava a
+// área pela qual ela responde. Para saber quantos itens de Literatura já
+// existiam, ou quem ainda não escreveu nada em Português, era preciso ir à tela
+// de itens e montar o filtro na mão — e é justamente a pessoa que precisa dessa
+// conta todo dia. As duas coisas são dela, e agora aparecem uma embaixo da
+// outra: a área, e depois a própria entrega.
+//
+// A conta é da prova que está na tela. A fila de revisão, logo acima, é que
+// atravessa as quatro provas — ali o assunto é o que está parado esperando uma
+// decisão, e item esquecido de outra série não pode sumir por causa do seletor.
+function painelDaArea(provaId) {
+  const area = S.perfil.area;
+  if (!area) return `<div class="cartao aviso" style="margin-bottom:16px">
+    <h3>Área não definida no seu cadastro</h3>
+    <p style="font-size:13px;margin:0">O seu papel é de coordenação de área, mas o cadastro não diz qual área.
+      Sem ela o sistema não tem como saber quais itens são seus para revisar — peça à coordenação geral
+      para completar isso em <b>Administração</b>.</p></div>`;
+
+  const daArea = itensDaProva(provaId).filter(i => areaDoComponente(i.componente) === area);
+  const comps = (AREAS[area] || []).filter(c => daArea.some(i => i.componente === c));
+  const linhas = comps.map(c => {
+    const doComp = daArea.filter(i => i.componente === c);
+    const quem = [...new Set(doComp.map(i => i.autor).filter(Boolean))];
+    const naFila = doComp.filter(i => i.status === 'area').length;
+    const devolvidos = doComp.filter(i => i.status === 'devolvido').length;
+    const aprovados = doComp.filter(i => i.status === 'aprovado').length;
+    return `<tr>
+      <td>${discChip(c)}</td>
+      <td>${quem.length ? esc(quem.join(', ')) : '<span style="color:var(--ink-2)">ninguém ainda</span>'}</td>
+      <td>${doComp.length}</td>
+      <td>${aprovados}</td>
+      <td>${naFila ? `<b class="fila-n">${naFila}</b>` : '—'}</td>
+      <td>${devolvidos || '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const naFila = daArea.filter(i => i.status === 'area').length;
+  // “Artes” genérica está no mapa das áreas porque ainda há gente cadastrada
+  // nela, mas não é componente que se peça item — cobrá-lo aqui seria cobrar
+  // uma disciplina que a escola deixou de oferecer.
+  const semItem = (AREAS[area] || [])
+    .filter(c => !ehComponenteLegado(c) && !daArea.some(i => i.componente === c));
+  return `<div class="cartao painel-area" style="margin-bottom:16px">
+    <h3><span class="pingo" style="background:var(--roxo)"></span>A sua área — ${esc(area)}</h3>
+    ${linhas ? `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Componente</th><th>Quem escreve</th><th>Itens</th><th>Aprovados</th>
+        <th>Na sua fila</th><th>Devolvidos</th></tr></thead>
+      <tbody>${linhas}</tbody></table></div>`
+      : '<p style="font-size:13px;margin:0">Nenhum item desta área foi escrito para esta prova ainda.</p>'}
+    <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">
+      ${naFila
+        ? `<b>${naFila}</b> ${naFila === 1 ? 'item desta prova espera' : 'itens desta prova esperam'} a sua decisão —
+           você aprova (e ele segue para a coordenação geral), devolve com ajustes ou corrige o texto direto no item.`
+        : 'Nada desta prova está parado na sua etapa.'}
+      ${semItem.length ? ` Sem item nenhum nesta prova: ${esc(semItem.join(', '))}.` : ''}</p>
+    <div class="fila-acoes">
+      <button class="btn fantasma" data-acao="ir-minha-area">Ver os itens da área →</button>
+      <a class="btn fantasma" href="#/textos" style="text-decoration:none">Textos-base da prova →</a>
+    </div>
+  </div>`;
+}
+// Leva à tela de itens já filtrada pela área, na prova que está na tela — o
+// mesmo cuidado de `ir-fila-itens`: o painel promete uma lista, e quem chega
+// lá tem de encontrá-la montada.
+ACOES['ir-minha-area'] = () => {
+  filtroStatus = 'todos';
+  soMeus = false;
+  soMinhaArea = true;
+  todasAsProvas = false;
+  location.hash = '#/itens';
+  render();
+};
+
 // Visão da coordenação: as quatro provas lado a lado. É o que responde
 // “como está cada série?” sem obrigar a trocar de prova quatro vezes.
 function painelDasProvas() {
@@ -1227,6 +1323,8 @@ function telaPainel() {
     </div>
 
     ${htmlFilaDeRevisao()}
+
+    ${ehCoordArea() ? painelDaArea(p.id) : ''}
 
     ${doPapel ? '' : ehRedacao() ? painelDaRedacao() : painelDoDocente()}
 
@@ -1964,7 +2062,6 @@ function recolherCamposDoTexto() {
   pega('#tx-fonte', 'fonte');
   pega('#tx-regra', 'regra');
   pega('#tx-comando', 'comando');
-  pega('#tx-formato', 'formato');
   const slots = $('#tx-slots');
   if (slots) rascTexto.slots = Math.max(1, parseInt(slots.value, 10) || 6);
   const area = $('[data-rico-campo="txCorpo"]');
@@ -1993,7 +2090,14 @@ function dlgTexto(t, { preservar = false } = {}) {
           <input class="caixa" id="tx-titulo" value="${esc(r.titulo)}" placeholder="ex.: “O Cerrado e as veredas” — Guimarães Rosa (adapt.)"${somenteLeitura ? ' disabled' : ''}></div>
         <div class="campo"><label>Fonte</label><input class="caixa" id="tx-fonte" value="${esc(r.fonte)}" placeholder="autor / obra / veículo, ano"${somenteLeitura ? ' disabled' : ''}></div>
       </div>
-      <div class="campo" style="margin-bottom:12px"><label>Corpo do texto <span class="rot-opcional">— opcional, se houver figura</span></label>
+      <div class="campo" style="margin-bottom:12px">
+        <div class="campo-cab">
+          <label>Corpo do texto <span class="rot-opcional">— opcional, se houver figura</span></label>
+          ${somenteLeitura ? '' : `<div class="seg seg-formato" role="group" aria-label="Formato do texto no caderno">
+            ${FORMATOS.map(f => `<button class="${r.formato === f.k ? 'sel' : ''}"
+              data-acao="tx-formato" data-v="${f.k}" title="${esc(f.dica)}">${esc(f.rot)}</button>`).join('')}
+          </div>`}
+        </div>
         ${editorRico({ campo: 'txCorpo', valor: r.corpo, linhas: 9, soLeitura: somenteLeitura,
                        rotulo: 'Corpo do texto-base', paragrafos: r.formato === 'prosa',
                        previa: somenteLeitura ? null : htmlPreviaDoCorpo(r.corpo, r.formato) })}
@@ -2013,13 +2117,7 @@ function dlgTexto(t, { preservar = false } = {}) {
         <input class="caixa" id="tx-comando" value="${esc(r.comando)}"
           placeholder="Considerando o texto precedente e os múltiplos aspectos a ele relacionados">
         <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">O resto da frase o sistema monta sozinho pelos tipos dos itens alocados —
-          “<em>, julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C.</em>”</p></div>
-      <div class="campo"><label>Formato no caderno</label>
-        <select class="caixa" id="tx-formato" data-mud="tx-formato">
-          <option value="prosa" ${r.formato === 'prosa' ? 'selected' : ''}>Prosa — o texto reflui e é justificado</option>
-          <option value="verso" ${r.formato === 'verso' ? 'selected' : ''}>Verso — mantém as quebras de linha (canções, poemas)</option>
-          <option value="numerado" ${r.formato === 'numerado' ? 'selected' : ''}>Linhas numeradas — só se algum item citar linhas</option>
-        </select></div>` : ''}
+          “<em>, julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C.</em>”</p></div>` : ''}
       ${!daCoord && novo ? '<p style="font-size:12.5px;color:var(--ink-2)">Sua sugestão ficará visível a todos após aprovação da coordenação, que define a quantidade de itens do texto.</p>' : ''}
     </div>
     <div class="dlg-pe">
@@ -2029,14 +2127,69 @@ function dlgTexto(t, { preservar = false } = {}) {
       ${somenteLeitura ? '' : `<button class="btn" data-acao="salvar-texto">${novo && !daCoord ? 'Enviar sugestão' : 'Salvar'}</button>`}
     </div>`);
 }
+// Prosa, verso ou linhas numeradas — a escolha que decide se o poema sai como
+// poema.
+//
+// Ela existia, mas estava enterrada: um <select> no fim do diálogo, DENTRO do
+// bloco que só a coordenação vê, depois de slots, regra e abertura do comando.
+// O resultado está no banco — dos 69 textos-base cadastrados, os 69 estão em
+// `prosa`. Ninguém nunca escolheu outra coisa, e é por isso que os poemas
+// chegavam ao caderno com os versos emendados num parágrafo corrido: em prosa o
+// caderno junta as linhas de propósito, que é o certo para uma reportagem e o
+// errado para “No meio do caminho tinha uma pedra”.
+//
+// Agora ela é um seletor ao lado do próprio rótulo do corpo, visível a quem
+// quer que possa editar o texto — inclusive ao docente que sugere o poema, que
+// antes não tinha como dizer que era um poema.
+const FORMATOS = [
+  { k: 'prosa',    rot: 'Prosa',   dica: 'o texto reflui e é justificado — reportagem, crônica, ensaio' },
+  { k: 'verso',    rot: 'Verso',   dica: 'mantém as quebras de linha — poema, canção, letra' },
+  { k: 'numerado', rot: 'Linhas numeradas', dica: 'cada linha ganha número no caderno, para o item citar a passagem' }
+];
+
 // Trocar o formato muda o que a ajuda do corpo diz e como o Enter se comporta —
 // em prosa ele abre parágrafo, em verso quebra a linha. Recolhe antes de
 // remontar, senão a troca apagaria o que ainda não perdeu o foco.
-MUDS['tx-formato'] = (d, el) => {
+ACOES['tx-formato'] = d => {
+  if (!rascTexto) return;
   recolherCamposDoTexto();
-  rascTexto.formato = el.value;
+  rascTexto.corpo = converterCorpo(rascTexto.corpo, rascTexto.formato, d.v);
+  rascTexto.formato = d.v;
   dlgTexto(null, { preservar: true });
 };
+
+// O corpo, ao mudar de formato. Sem isto, quem digitava o poema e só depois
+// escolhia “verso” terminava com uma linha em branco entre cada dois versos: em
+// prosa o Enter abre parágrafo, e parágrafo é linha em branco. A linha em
+// branco que era marca de parágrafo não é estrofe.
+//
+// A distinção entre as duas está no próprio texto: se NENHUM par de linhas
+// escritas está encostado, cada Enter foi uma quebra de linha e as brancas são
+// só a consequência disso — todas caem. Se há linhas encostadas, o texto tem
+// blocos de verdade, e aí as brancas são separação: sobrevivem, no máximo uma
+// entre dois blocos.
+function converterCorpo(corpo, de, para) {
+  if (de === para || para === 'prosa') return corpo;
+  const linhas = String(corpo || '').split(/<br\s*\/?>/i);
+  const encostadas = linhas.some((l, i) => i > 0 && !ricoVazio(l) && !ricoVazio(linhas[i - 1]));
+  if (!encostadas) return linhas.filter(l => !ricoVazio(l)).join('<br>');
+  const saida = [];
+  for (const l of linhas)
+    if (!ricoVazio(l) || !ricoVazio(saida[saida.length - 1] ?? 'x')) saida.push(l);
+  return saida.join('<br>');
+}
+
+// “Isto parece um poema?” — três linhas ou mais, quase todas curtas. Uma linha
+// de prosa colada de um PDF ou de um site vem com o parágrafo inteiro; verso
+// vem picado. Serve só para OFERECER a troca de formato, nunca para fazê-la:
+// quem decide é quem escreve.
+function pareceVerso(corpo) {
+  const linhas = String(corpo || '').split(/<br\s*\/?>/i)
+    .map(l => simples(l).trim()).filter(Boolean);
+  if (linhas.length < 3) return false;
+  const curtas = linhas.filter(l => l.length <= 62).length;
+  return curtas >= Math.ceil(linhas.length * 0.8);
+}
 ACOES['novo-texto'] = () => dlgTexto(null);
 ACOES['sugerir-texto'] = () => dlgTexto(null);
 ACOES['editar-texto'] = d => {
@@ -2095,34 +2248,51 @@ function htmlPreviaDoCorpo(corpo, formato = 'prosa') {
   const linhas = linhasDoCorpoRico(corpo, formato);
   if (!linhas.length)
     return '<p class="previa-vazia">O corpo ainda está em branco — o texto-base pode ser só a figura.</p>';
-  if (formato !== 'prosa')
-    return `<div class="previa-corpo">${htmlCorpoTexto({ linhas, formato })}</div>`;
+  // Em verso e em linhas numeradas cada quebra é conteúdo, e a prévia a mostra
+  // — o “↵” ao fim de cada linha é a quebra que o caderno vai imprimir. Era o
+  // que faltava para a diferença entre prosa e verso ficar visível ANTES de o
+  // texto ir para o papel: na área de edição as duas se parecem.
+  if (formato !== 'prosa') {
+    const n = linhas.filter(l => !ricoVazio(l)).length;
+    return `<div class="previa-corpo previa-verso">${htmlCorpoTexto({ linhas, formato })}
+      <p class="previa-conta">${n} ${n === 1 ? 'linha' : 'linhas'}, e o caderno respeita ${
+        n === 1 ? 'a quebra' : 'as quebras'} exatamente como ${n === 1 ? 'ela está' : 'elas estão'} aqui.${
+        formato === 'numerado' ? ' Cada uma recebe o seu número.' : ''}</p></div>`;
+  }
   const grupos = paragrafosDoCorpo(corpo);
   const marcados = grupos.map((g, i) =>
     `<p><span class="previa-par">¶${i + 1}</span>${rico(g.join(' '))}</p>`).join('');
+  // A oferta de trocar para verso mora aqui porque a prévia é a única parte do
+  // formulário que se refaz a cada tecla: colar um poema faz o convite aparecer
+  // na hora, ao lado do parágrafão que a prosa produziu.
+  const convite = pareceVerso(corpo) ? `
+    <p class="previa-convite"><span>Estas linhas parecem <b>versos</b> — e em <b>prosa</b> o caderno junta
+      todas num parágrafo corrido, como você vê acima.</span>
+      <button class="btn mini" data-acao="tx-formato" data-v="verso">Manter as quebras de linha</button></p>` : '';
   return `<div class="previa-corpo pas-texto">${marcados}
     <p class="previa-conta">${grupos.length === 1
       ? 'Um parágrafo só. Para abrir outro, tecle <b>Enter</b> — <b>Shift+Enter</b> quebra a linha sem abrir parágrafo.'
-      : `${grupos.length} parágrafos.`}</p></div>`;
+      : `${grupos.length} parágrafos.`}</p>${convite}</div>`;
 }
 
 // A ajuda embaixo do corpo muda com o formato: em prosa o Enter abre parágrafo,
 // em verso e em linhas numeradas cada linha é uma linha, e dizer “linha em
 // branco separa parágrafo” ali só confundiria.
 function htmlAjudaDoCorpo(formato) {
-  const comum = 'Aceita ênfase e notação matemática, como o enunciado do item — a fórmula entre <code>$…$</code>.';
+  const comum = 'Aceita ênfase, tamanho de letra e notação matemática, como o enunciado do item — a fórmula pelo botão <b>ƒ(x)</b>.';
   if (formato === 'verso')
-    return `<p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Cada linha sai como uma linha do poema ou da canção.
-      <b>Enter</b> quebra a linha. ${comum}</p>`;
+    return `<p class="rico-ajuda"><b>Verso:</b> cada linha sai como uma linha do poema ou da canção, sem refluir.
+      <b>Enter</b> quebra a linha; uma linha em branco separa estrofe. ${comum}</p>`;
   if (formato === 'numerado')
-    return `<p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Cada linha recebe um número no caderno, e é por ele
+    return `<p class="rico-ajuda"><b>Linhas numeradas:</b> cada linha recebe um número no caderno, e é por ele
       que o item cita a passagem. <b>Enter</b> começa a linha seguinte. ${comum}</p>`;
-  return `<p style="font-size:12px;color:var(--ink-2);margin:6px 0 0"><b>Enter</b> abre um parágrafo novo;
-    <b>Shift+Enter</b> quebra a linha dentro do mesmo parágrafo. A prévia abaixo mostra a divisão que o caderno vai imprimir.
+  return `<p class="rico-ajuda"><b>Prosa:</b> o caderno junta as linhas num parágrafo corrido e justificado —
+    é o certo para reportagem e crônica, e o errado para poema (para esse, escolha <b>Verso</b> acima).
+    <b>Enter</b> abre um parágrafo novo; <b>Shift+Enter</b> quebra a linha dentro do mesmo parágrafo.
     ${comum}</p>`;
 }
 
-ACOES['salvar-texto'] = () => {
+ACOES['salvar-texto'] = async () => {
   recolherCamposDoTexto();
   const r = rascTexto;
   const anterior = r.id ? S.textos.find(t => t.id === r.id) : null;
@@ -2130,16 +2300,20 @@ ACOES['salvar-texto'] = () => {
     toast('Este texto-base já foi aprovado — só a coordenação o altera.'); return;
   }
   const daCoord = ehQualquerCoord();
+  // Quantos itens cabem, a regra e a abertura do comando continuam sendo
+  // decisão da coordenação. O FORMATO, não: quem escreve é quem sabe se aquilo
+  // é prosa ou verso, e era justamente por essa escolha estar trancada com a
+  // coordenação que o poema sugerido pelo docente chegava ao caderno em prosa.
   const dados = {
     titulo: r.titulo.trim(),
     fonte: r.fonte.trim(),
     // linhas em branco no meio são separadores de parágrafo — só as das pontas caem
-    linhas: linhasDoCorpoRico(r.corpo, daCoord ? (r.formato || 'prosa') : (anterior?.formato || 'prosa')),
+    linhas: linhasDoCorpoRico(r.corpo, r.formato || 'prosa'),
     imagens: todasAsImagens(r.imagens),
     slots: daCoord ? Math.max(1, r.slots || 6) : (anterior?.slots ?? 6),
     regra: daCoord ? String(r.regra || '').trim() : (anterior?.regra || ''),
     comando: daCoord ? String(r.comando || '').trim() : (anterior?.comando || ''),
-    formato: daCoord ? (r.formato || 'prosa') : (anterior?.formato || 'prosa')
+    formato: r.formato || 'prosa'
   };
   // O corpo escrito deixa de ser obrigatório quando há figura: no PAS o
   // texto-base é, muitas vezes, uma obra de arte, uma charge, um infográfico ou
@@ -2171,19 +2345,39 @@ ACOES['salvar-texto'] = () => {
     alvo = { id: uid(), provaId, numero: null, status: 'sugestao', sugeridoPor: `${S.perfil.nome} (${S.perfil.componente || 'docente'})`, autorEmail: eu, ...dados };
     S.textos.push(alvo);
   }
-  $('#dlg').close(); commit(); PERS.texto(alvo);
+  // Esperada, pelo mesmo motivo de `salvarItem()`: se o banco recusar, o texto
+  // volta ao que era e o diálogo continua aberto com o que estava escrito.
+  const antesDaGravacao = anterior ? JSON.parse(JSON.stringify(anterior)) : null;
+  const erro = await PERS.textoAgora(alvo);
+  if (erro) {
+    if (antesDaGravacao) Object.assign(anterior, antesDaGravacao);
+    else S.textos = S.textos.filter(t => t.id !== alvo.id);
+    save(S);
+    toast('⚠ O banco recusou a gravação: ' + erro);
+    dlgTexto(null, { preservar: true });
+    return;
+  }
+  $('#dlg').close(); commit();
   toast(anterior ? 'Texto atualizado.' : (daCoord ? 'Texto criado.' : 'Sugestão enviada à coordenação.'));
 };
-ACOES['aprovar-texto'] = d => {
+ACOES['aprovar-texto'] = async d => {
   const t = S.textos.find(x => x.id === d.id);
   if (!t || !ehQualquerCoord()) return;
+  const antes = JSON.parse(JSON.stringify(t));
   t.status = 'aprovado';
   t.numero = Math.max(0, ...textosAprovados(t.provaId).filter(x => x.id !== t.id).map(x => x.numero)) + 1;
   // Quem aprovou fica registrado: com duas coordenações decidindo sobre o mesmo
   // texto, “quem deixou isto entrar” passa a ser pergunta com resposta.
   t.aprovadoPor = `${S.perfil.nome} (${ehCoord() ? 'coordenação geral' : 'coord. de área — ' + (S.perfil.area || '')})`;
+  const erro = await PERS.textoAgora(t);
+  if (erro) {
+    Object.assign(t, antes);
+    save(S); render();
+    toast('⚠ O banco recusou a aprovação: ' + erro);
+    return;
+  }
   if ($('#dlg')?.open) $('#dlg').close();
-  commit(); PERS.texto(t); toast(`Texto aprovado como Texto ${t.numero}.`);
+  commit(); toast(`Texto aprovado como Texto ${t.numero}.`);
 };
 ACOES['excluir-texto'] = d => {
   const usados = S.itens.filter(i => i.textoId === d.id).length;
@@ -2322,12 +2516,15 @@ const itemOriginalDe = item => item?.derivadoDe ? (S.itens.find(i => i.id === it
 const podeAdaptar = item => !!item?.id && item.versao !== 'adaptada' &&
   !itemAdaptadoDe(item.id) && (souEu(item) || ehQualquerCoord());
 
-ACOES['it-adaptar'] = () => {
+ACOES['it-adaptar'] = async () => {
   const gravado = rasc?.id ? S.itens.find(i => i.id === rasc.id) : null;
   if (!gravado || !podeAdaptar(gravado)) return;
   // Se quem está adaptando também pode editar, o que está na tela é gravado
   // antes — senão a cópia sairia do banco e as alterações abertas se perderiam.
-  if (podeEditarItem(gravado)) { recolherCamposDoItem(); if (!persistirRascunho()) return; }
+  // Gravado e ESPERADO: criar a cópia de um item que o banco acabou de recusar
+  // deixaria as duas versões em desacordo, e a adaptada é a que vai à prova de
+  // inclusão.
+  if (podeEditarItem(gravado) && !await salvarItem({ mensagem: null, fechar: false })) return;
   const base = S.itens.find(i => i.id === gravado.id);
   const copia = JSON.parse(JSON.stringify(base));
   copia.id = uid();
@@ -2748,6 +2945,17 @@ ACOES['it-versao'] = d => mexerNoItem(() => { rasc.versao = d.v; });
 ACOES['it-gab'] = d => mexerNoItem(() => { rasc.gabarito = d.v; });
 
 function persistirRascunho() {
+  // Primeiro o que está na TELA vai para a cópia de trabalho.
+  //
+  // Faltava esta linha, e ela é a mesma lição que `recolherCamposDoTexto()`
+  // aprendeu no formulário do texto-base: o `change` de um <input> só dispara
+  // quando o campo perde o foco, e não dá para contar com essa ordem. Habilidade,
+  // linhas de referência, componente, gabarito do tipo B e a quantidade de
+  // linhas do discursivo vivem em <input> comum — quem digitava num deles e
+  // clicava direto em “Salvar” podia ver o diálogo fechar dizendo “Item salvo”
+  // com o valor antigo gravado. Todas as outras ações do editor já passavam por
+  // `mexerNoItem()`, que recolhe antes; só a gravação não passava.
+  recolherCamposDoItem();
   // Última barreira antes de gravar. A tela já esconde “Salvar” de quem não
   // edita este item, mas a checagem mora aqui também porque as ações de fluxo
   // (`it-devolver`, `it-aprovar`) passam por aqui: quem só decide a etapa de um
@@ -2774,39 +2982,59 @@ function persistirRascunho() {
     const idx = S.itens.findIndex(i => i.id === rasc.id);
     S.itens[idx] = rasc;
   }
-  PERS.item(rasc);
   return true;
 }
-ACOES['it-salvar'] = () => {
-  if (!persistirRascunho()) return;
-  $('#dlg').close(); commit(); toast('Item salvo.');
-};
-ACOES['it-enviar'] = () => {
-  rasc.status = 'area';
-  if (!persistirRascunho()) return;
-  $('#dlg').close(); commit(); toast('Item enviado à coordenação de área.');
-};
-ACOES['it-aprovar-area'] = () => {
-  rasc.status = 'geral';
-  if (!persistirRascunho()) return;
-  $('#dlg').close(); commit(); toast('Item aprovado na área — segue para a coordenação geral.');
-};
-ACOES['it-aprovar'] = () => {
-  rasc.status = 'aprovado';
-  if (!persistirRascunho()) return;
-  $('#dlg').close(); commit(); toast('Item aprovado! Ele já entra no caderno e no cartão.');
-};
-ACOES['it-devolver'] = () => {
-  rasc.status = 'devolvido';
-  if (!persistirRascunho()) return;
-  $('#dlg').close(); commit(); toast('Item devolvido ao docente com ajustes.');
-};
-ACOES['it-reabrir'] = () => {
-  rasc.status = 'area';
-  if (!persistirRascunho()) return;
-  $('#dlg').close(); commit(); toast('Revisão reaberta.');
-};
-ACOES['it-comentar'] = () => {
+
+// Guarda o item e SÓ ENTÃO fecha o diálogo, anuncia e segue.
+//
+// Antes, a gravação na nuvem saía por conta própria (`PERS.item()`, com
+// `.catch` num toast): o diálogo fechava dizendo “Item salvo”, e a recusa do
+// banco chegava segundos depois, sozinha na tela, sem dizer de que item falava.
+// Tela e banco divergiam em silêncio — quem editava lia “salvo”, recarregava no
+// dia seguinte e encontrava o item como estava. Foi assim que a coordenação de
+// área passou semanas sem conseguir aprovar nada sem saber por quê (o motivo
+// era a política de INSERT; ver a migração 0014).
+//
+// Agora a promessa é esperada. Se o banco recusar, o item volta ao que era no
+// estado local — a tela não pode afirmar o que o banco negou —, o diálogo
+// continua aberto com o trabalho todo na tela, e o motivo aparece escrito.
+async function salvarItem({ mensagem, statusNovo = null, fechar = true } = {}) {
+  const statusAnterior = rasc.status;
+  if (statusNovo) rasc.status = statusNovo;
+  const antes = rasc.id ? S.itens.find(i => i.id === rasc.id) : null;
+  const copia = antes ? JSON.parse(JSON.stringify(antes)) : null;
+  const eraNovo = !rasc.id;
+  if (!persistirRascunho()) { rasc.status = statusAnterior; return false; }
+
+  const erro = await PERS.itemAgora(rasc);
+  if (erro) {
+    if (copia) S.itens[S.itens.findIndex(i => i.id === copia.id)] = copia;
+    else { S.itens = S.itens.filter(i => i.id !== rasc.id); if (eraNovo) rasc.id = null; }
+    rasc.status = statusAnterior;
+    save(S);
+    toast('⚠ O banco recusou a gravação: ' + erro);
+    dlgItem();                 // redesenha com o que estava sendo editado
+    return false;
+  }
+  if (fechar) $('#dlg').close();
+  commit();
+  if (mensagem) toast(mensagem);
+  return true;
+}
+
+ACOES['it-salvar'] = () => salvarItem({ mensagem: 'Item salvo.' });
+ACOES['it-enviar'] = () => salvarItem({
+  statusNovo: 'area', mensagem: 'Item enviado à coordenação de área.' });
+ACOES['it-aprovar-area'] = () => salvarItem({
+  statusNovo: 'geral', mensagem: 'Item aprovado na área — segue para a coordenação geral.' });
+ACOES['it-aprovar'] = () => salvarItem({
+  statusNovo: 'aprovado', mensagem: 'Item aprovado! Ele já entra no caderno e no cartão.' });
+ACOES['it-devolver'] = () => salvarItem({
+  statusNovo: 'devolvido', mensagem: 'Item devolvido ao docente com ajustes.' });
+ACOES['it-reabrir'] = () => salvarItem({
+  statusNovo: 'area', mensagem: 'Revisão reaberta.' });
+
+ACOES['it-comentar'] = async () => {
   const inp = $('#it-novo-coment');
   const txt = inp.value.trim();
   if (!txt) return;
@@ -2819,7 +3047,10 @@ ACOES['it-comentar'] = () => {
       : `docente (${S.perfil.componente || ''})`,
     quando: agora(), texto: txt
   });
-  if (rasc.id) { persistirRascunho(); save(S); }
+  // Comentário em item já gravado é gravação como outra qualquer, e agora
+  // também é esperada: se o banco recusar, quem comentou fica sabendo em vez de
+  // ver o recado sumir no recarregar.
+  if (rasc.id) { if (!await salvarItem({ mensagem: 'Comentário registrado.', fechar: false })) return; }
   reabrirDlgItem();
 };
 ACOES['it-excluir'] = () => {
@@ -2957,8 +3188,14 @@ function comandoDoBloco(itens, texto) {
 // aqui, na hora de imprimir, e nunca esteve no banco. A altura de cada peça é
 // medida depois (`medirPecas`), com a fórmula já desenhada, então a paginação
 // continua certa mesmo quando uma fração estica a linha.
+// `data-rev-*` são as etiquetas da revisão na página (ver `telaCaderno`): elas
+// dizem, para cada pedaço de texto impresso, de que item e de que campo ele
+// veio. Sem elas não há como voltar do papel para o registro — e voltar é
+// justamente o que a revisão final da prova precisa fazer. Não mudam nada do
+// que se vê nem do que a régua mede; na impressão são ignoradas.
 function htmlItem({ item, numero }) {
-  const enun = rico(item.enunciado);
+  const enun = `<span class="pas-enun" data-rev="enunciado">${rico(item.enunciado)}</span>`;
+  const marca = item.id ? ` data-rev-item="${esc(item.id)}"` : '';
   // Item que entrou na montagem sem estar aprovado (prévia) sai marcado. A
   // classe só existe nessas montagens: o caderno impresso nunca a recebe,
   // porque `cad-imprimir` monta sem os extras.
@@ -2977,18 +3214,18 @@ function htmlItem({ item, numero }) {
     // papel. O estilo de `.pas-op` não depende da tag.
     const ops = (item.opcoes || []).map((o, i) => {
       const fig = htmlImagens(item.imagensOpcoes?.[i], LARGURA_COLUNA);
-      return `<div class="pas-op"><b>${'ABCD'[i]}</b> ${rico(o)}${fig}</div>`;
+      return `<div class="pas-op" data-rev="opcao" data-rev-i="${i}"><b>${'ABCD'[i]}</b> ${rico(o)}${fig}</div>`;
     }).join('');
-    return `<div class="pas-item${revisao}"><span class="n">${numero}</span> ${enun}${figs}${ops}</div>`;
+    return `<div class="pas-item${revisao}"${marca}><span class="n">${numero}</span> ${enun}${figs}${ops}</div>`;
   }
   if (item.tipo === 'D') {
     const n = Math.max(1, item.dLinhas || 10);
     const pauta = item.dPauta !== false;
     const linhas = Array.from({ length: n }, () => '<i></i>').join('');
-    return `<div class="pas-item${revisao}"><span class="n">${numero}</span> ${enun}${figs}
+    return `<div class="pas-item${revisao}"${marca}><span class="n">${numero}</span> ${enun}${figs}
       <div class="pas-pauta${pauta ? ' numerada' : ' sem-linhas'}">${pauta ? linhas : '<i style="height:' + (n * 17) + 'pt"></i>'}</div></div>`;
   }
-  return `<div class="pas-item${revisao}"><span class="n">${numero}</span> ${enun}${figs}</div>`;
+  return `<div class="pas-item${revisao}"${marca}><span class="n">${numero}</span> ${enun}${figs}</div>`;
 }
 
 // Peças que fluem pelas colunas. Cada peça é indivisível — itens e parágrafos
@@ -3002,23 +3239,33 @@ function htmlItem({ item, numero }) {
 // A linha em branco que separa parágrafo é aferida pelo texto por baixo da
 // marcação (`ricoVazio`), não pela string crua: uma linha com só `<b></b>`
 // continua sendo linha em branco.
+// `de`/`ate` são os índices, em `texto.linhas`, das linhas que cada parágrafo
+// impresso consumiu. Em verso e em linhas numeradas cada parágrafo é uma linha
+// só e os dois coincidem; em prosa um parágrafo junta várias. É esse par que
+// permite à revisão na página devolver o texto corrigido para o lugar certo do
+// registro — sem ele, editar o segundo parágrafo de um texto de nove linhas não
+// teria como saber quais delas substituir.
 function htmlCorpoTexto(texto) {
   const linhas = texto.linhas || [];
   const branca = l => ricoVazio(l);
+  const dono = texto.id ? ` data-rev-texto="${esc(texto.id)}"` : '';
+  const marca = (de, ate) => texto.id ? ` data-rev="linha" data-rev-de="${de}" data-rev-ate="${ate}"` : '';
   if (texto.formato === 'numerado')
-    return `<div class="pas-linhas">${linhas.map(l => `<p>${rico(l)}</p>`).join('')}</div>`;
+    return `<div class="pas-linhas"${dono}>${linhas.map((l, i) =>
+      `<p${marca(i, i)}>${rico(l)}</p>`).join('')}</div>`;
   if (texto.formato === 'verso')
-    return `<div class="pas-texto">${linhas.map(l =>
-      branca(l) ? '<p>&nbsp;</p>' : `<p class="pas-verso">${rico(l)}</p>`).join('')}</div>`;
+    return `<div class="pas-texto"${dono}>${linhas.map((l, i) =>
+      branca(l) ? '<p>&nbsp;</p>' : `<p class="pas-verso"${marca(i, i)}>${rico(l)}</p>`).join('')}</div>`;
   // prosa: linhas em branco separam parágrafos
   const paragrafos = [];
-  let atual = [];
-  for (const l of linhas) {
-    if (!branca(l)) atual.push(l.trim());
-    else if (atual.length) { paragrafos.push(atual.join(' ')); atual = []; }
+  let atual = [], de = 0;
+  for (const [i, l] of linhas.entries()) {
+    if (!branca(l)) { if (!atual.length) de = i; atual.push(l.trim()); }
+    else if (atual.length) { paragrafos.push({ txt: atual.join(' '), de, ate: i - 1 }); atual = []; }
   }
-  if (atual.length) paragrafos.push(atual.join(' '));
-  return `<div class="pas-texto">${paragrafos.map(p => `<p>${rico(p)}</p>`).join('')}</div>`;
+  if (atual.length) paragrafos.push({ txt: atual.join(' '), de, ate: linhas.length - 1 });
+  return `<div class="pas-texto"${dono}>${paragrafos.map(p =>
+    `<p${marca(p.de, p.ate)}>${rico(p.txt)}</p>`).join('')}</div>`;
 }
 
 /* ---------------- prévia: “como sai na prova” ---------------- */
@@ -3255,6 +3502,205 @@ async function prepararFigurasDaProva(provaId) {
   if (telaAtual() === 'caderno') render();
 }
 
+/* ---------------- revisão na página ----------------
+   O pedido: “é comum aparecerem correções na hora da leitura final da prova.
+   Queria poder editar a prova no caderno, in-line, e que isso já valesse para a
+   impressão”.
+
+   O caderno já mostrava a prova como ela sai do papel — e era só isso: para
+   corrigir uma vírgula vista ali era preciso guardar o número do item, ir à
+   tela de itens, achá-lo, abrir o diálogo, corrigir, e voltar ao caderno para
+   conferir. Numa prova de 110 itens isso é o suficiente para a vírgula ficar
+   como está.
+
+   Como funciona: um interruptor põe o caderno em modo de revisão. Nada muda no
+   que se vê — a página continua sendo a página, é isso que se quis preservar —,
+   mas cada enunciado, cada alternativa e cada parágrafo de texto-base passa a
+   responder ao clique, abrindo ali mesmo um editor com o TEXTO DE ORIGEM (não o
+   HTML impresso: o que se edita é o que está guardado, com ênfase, tamanho e
+   fórmula, pelo mesmo editor do resto do sistema).
+
+   Ao salvar, quem muda é o ITEM — como pedido —, não uma cópia do caderno. Por
+   isso não há “versão para impressão” a gerar: o caderno é montado do registro,
+   e a impressão sai corrigida no mesmo instante. A alteração fica registrada no
+   fio da revisão do item, para quem o escreveu saber o que mudou na leitura
+   final e por quem.
+
+   Quem pode: as mesmas regras de sempre (`podeEditarItem`, `podeEditarTexto`).
+   Item aprovado é da coordenação geral, e é ela que faz a leitura final. */
+let cadRevisando = false;
+let revEmEdicao = null;   // { tipo, id, campo, i, de, ate, valor, rotulo, retangulo }
+
+const REV_ROTULOS = { enunciado: 'Enunciado', opcao: 'Alternativa', linha: 'Texto-base' };
+
+// De um pedaço impresso para o registro que o produziu.
+function alvoDaRevisao(el) {
+  const campo = el.dataset.rev;
+  const dono = el.closest('[data-rev-item],[data-rev-texto]');
+  if (!dono) return null;
+  if (dono.dataset.revItem) {
+    const item = S.itens.find(i => i.id === dono.dataset.revItem);
+    if (!item) return null;
+    const i = campo === 'opcao' ? Number(el.dataset.revI) : null;
+    return {
+      tipo: 'item', id: item.id, campo, i,
+      valor: campo === 'opcao' ? (item.opcoes?.[i] || '') : (item.enunciado || ''),
+      rotulo: campo === 'opcao' ? `Alternativa ${'ABCD'[i]}` : REV_ROTULOS[campo],
+      podeEditar: podeEditarItem(item),
+      porque: souEu(item)
+        ? 'Este item já foi aprovado: só a coordenação geral altera o conteúdo dele.'
+        : `Este item é de ${item.autor || 'outra pessoa'} e está ${STATUS_ITEM[item.status].rot.toLowerCase()} — quem pode corrigi-lo agora é a coordenação.`
+    };
+  }
+  const texto = S.textos.find(t => t.id === dono.dataset.revTexto);
+  if (!texto) return null;
+  const de = Number(el.dataset.revDe), ate = Number(el.dataset.revAte);
+  return {
+    tipo: 'texto', id: texto.id, campo, de, ate,
+    valor: (texto.linhas || []).slice(de, ate + 1).join('<br>'),
+    rotulo: `Texto ${texto.numero} — ${ate > de ? 'parágrafo' : 'linha'}`,
+    podeEditar: podeEditarTexto(texto),
+    // O texto-base é guardado linha a linha, e é por essas linhas que o item
+    // cita a passagem (“linhas 5-7”, destacadas em amarelo no editor do item).
+    // Por isso o editor mostra as linhas como elas estão guardadas, e não o
+    // parágrafo já emendado: juntá-las aqui deixaria toda referência de linha
+    // daquele texto apontando para o lugar errado.
+    dica: ate > de
+      ? `as ${ate - de + 1} linhas guardadas aparecem separadas — o caderno as junta neste parágrafo, e as referências de linha dos itens continuam valendo`
+      : 'a correção entra no texto-base e já vale para a impressão',
+    porque: 'Texto-base aprovado é da prova inteira: só a coordenação o altera.'
+  };
+}
+
+function abrirRevisaoInline(el) {
+  const alvo = alvoDaRevisao(el);
+  if (!alvo) return;
+  if (!alvo.podeEditar) { toast(alvo.porque); return; }
+  const r = el.getBoundingClientRect();
+  revEmEdicao = { ...alvo, retangulo: { x: r.left, y: r.bottom, largura: r.width, topo: r.top } };
+  desenharRevisaoInline();
+}
+
+function fecharRevisaoInline() {
+  revEmEdicao = null;
+  $('#rev-caixa')?.remove();
+}
+
+function desenharRevisaoInline() {
+  $('#rev-caixa')?.remove();
+  if (!revEmEdicao) return;
+  const a = revEmEdicao;
+  const caixa = document.createElement('div');
+  caixa.id = 'rev-caixa';
+  caixa.className = 'rev-caixa';
+  caixa.innerHTML = `
+    <div class="rev-cab">
+      <strong>${esc(a.rotulo)}</strong>
+      <span class="rev-dica">${esc(a.dica || 'a correção entra no item e já vale para a impressão')}</span>
+      <button class="fechar-x" data-acao="rev-fechar" aria-label="Fechar sem salvar">✕</button>
+    </div>
+    <div class="rev-corpo">
+      ${editorRico({ campo: 'revLinha', valor: a.valor, linhas: a.campo === 'opcao' ? 2 : 4,
+                     rotulo: a.rotulo })}
+    </div>
+    <div class="rev-pe">
+      <button class="btn fantasma mini" data-acao="rev-fechar">Cancelar</button>
+      <button class="btn mini" data-acao="rev-salvar">Salvar a correção</button>
+    </div>`;
+  document.body.appendChild(caixa);
+
+  // Colada ao pedaço que foi clicado, e presa à janela: a página do caderno
+  // rola dentro de um quadro, e uma caixa que saísse pela borda seria uma caixa
+  // que ninguém alcança.
+  const larg = caixa.offsetWidth, alt = caixa.offsetHeight;
+  const x = Math.max(10, Math.min(a.retangulo.x - 6, innerWidth - larg - 10));
+  const abaixo = a.retangulo.y + 8;
+  const y = abaixo + alt < innerHeight - 10 ? abaixo : Math.max(10, a.retangulo.topo - alt - 8);
+  caixa.style.left = x + 'px';
+  caixa.style.top = y + 'px';
+  caixa.querySelector('.rico-area')?.focus();
+}
+
+ACOES['rev-fechar'] = () => fecharRevisaoInline();
+
+ACOES['rev-salvar'] = async () => {
+  if (!revEmEdicao) return;
+  const a = revEmEdicao;
+  const area = $('#rev-caixa [data-rico-campo="revLinha"]');
+  const valor = area ? valorDoEditorRico(area) : a.valor;
+
+  if (a.tipo === 'item') {
+    const item = S.itens.find(i => i.id === a.id);
+    if (!item || !podeEditarItem(item)) { toast('Este item não está mais aberto para edição.'); return; }
+    if (a.campo === 'enunciado' && ricoVazio(valor)) { toast('O enunciado não pode ficar em branco.'); return; }
+    // Fechar sem ter mudado nada não vira gravação nem recado no fio: numa
+    // leitura final de 110 itens, abrir para conferir é o gesto mais comum.
+    if (valor === a.valor) { fecharRevisaoInline(); return; }
+    const antes = JSON.parse(JSON.stringify(item));
+    if (a.campo === 'opcao') { item.opcoes = item.opcoes || ['', '', '', '']; item.opcoes[a.i] = valor; }
+    else item.enunciado = valor;
+    // O fio da revisão é onde quem escreveu o item fica sabendo. Ajuste feito na
+    // leitura final da prova não pode chegar sem remetente.
+    item.comentarios = item.comentarios || [];
+    item.comentarios.push({
+      autor: S.perfil.nome,
+      papel: ehCoord() ? 'coordenação geral'
+        : ehCoordArea() ? `coord. de área (${S.perfil.area || ''})`
+        : `docente (${S.perfil.componente || ''})`,
+      quando: agora(),
+      texto: `Correção na leitura final do caderno — ${a.rotulo.toLowerCase()}: “${simples(valor).slice(0, 220)}”`
+    });
+    const erro = await PERS.itemAgora(item);
+    if (erro) {
+      Object.assign(item, antes);
+      save(S);
+      toast('⚠ O banco recusou a correção: ' + erro);
+      return;
+    }
+    fecharRevisaoInline();
+    commit();
+    toast(`Item ${a.campo === 'opcao' ? 'com a alternativa corrigida' : 'corrigido'} — a impressão já sai assim.`);
+    return;
+  }
+
+  const texto = S.textos.find(t => t.id === a.id);
+  if (!texto || !podeEditarTexto(texto)) { toast('Este texto-base não está mais aberto para edição.'); return; }
+  if (valor === a.valor) { fecharRevisaoInline(); return; }
+  const novas = linhasDoCorpoRico(valor, texto.formato || 'prosa');
+  if (!novas.length) { toast('O trecho não pode ficar em branco — para remover uma passagem, edite o texto-base.'); return; }
+  const antes = JSON.parse(JSON.stringify(texto));
+  texto.linhas.splice(a.de, a.ate - a.de + 1, ...novas);
+  const erro = await PERS.textoAgora(texto);
+  if (erro) {
+    Object.assign(texto, antes);
+    save(S);
+    toast('⚠ O banco recusou a correção: ' + erro);
+    return;
+  }
+  fecharRevisaoInline();
+  commit();
+  toast('Texto-base corrigido — a impressão já sai assim.');
+};
+
+// Um clique em qualquer pedaço etiquetado, quando o caderno está em revisão.
+// Ouvinte próprio, e não `data-acao`, porque as etiquetas vivem no HTML que
+// também vai para a impressão: `data-acao` ali seria promessa de botão numa
+// folha de papel.
+document.addEventListener('click', e => {
+  if (!cadRevisando) return;
+  if (e.target.closest('#rev-caixa')) return;
+  const el = e.target.closest('.pas-revisando [data-rev]');
+  if (!el) return;
+  e.preventDefault();
+  abrirRevisaoInline(el);
+});
+// Clicar fora fecha, como o diálogo faz. Salvar é sempre explícito: fechar sem
+// salvar não pode perder nada por engano, e por isso a caixa avisa.
+document.addEventListener('mousedown', e => {
+  if (!revEmEdicao || e.target.closest('#rev-caixa') || e.target.closest('[data-rev]')) return;
+  fecharRevisaoInline();
+});
+
 function telaCaderno() {
   const pAtiva = provaAtual();
   if (!pAtiva) {
@@ -3288,6 +3734,9 @@ function telaCaderno() {
           </div>
           <label class="cad-revisao" title="Mostra também os itens que ainda estão na revisão, para conferir a prova antes de aprovar">
             <input type="checkbox" data-mud="cad-revisao" ${cadComRevisao ? 'checked' : ''}> ver o que está em revisão</label>
+          <button class="btn ${cadRevisando ? 'roxo' : 'fantasma'}" data-acao="cad-revisar"
+            title="Corrigir enunciados, alternativas e textos-base clicando neles na própria página">
+            ${cadRevisando ? '✓ Revisando na página' : '✎ Revisar na página'}</button>
           ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-capa">⚙ Capa e instruções</button>' : ''}
           ${cuidaDaRedacao() && provaTemRedacao(pAtiva.id) ? '<button class="btn fantasma" data-acao="cad-redacao">✍ Proposta de redação</button>' : ''}
           <button class="btn rosa" data-acao="cad-imprimir" ${temConteudo ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
@@ -3296,13 +3745,18 @@ function telaCaderno() {
       ${naPrevia ? `<div class="cartao aviso" style="margin:12px 0 0"><p style="font-size:13px;margin:0">
         Os itens em <b style="background:var(--amarelo);padding:0 4px;border-radius:4px">amarelo</b> ainda não foram aprovados
         e estão aqui só para conferência — a numeração muda se algum for devolvido. <b>A impressão sai só com o aprovado.</b></p></div>` : ''}
+      ${cadRevisando ? `<div class="cartao aviso rev-aviso" style="margin:12px 0 0"><p style="font-size:13px;margin:0">
+        <b>Revisão na página:</b> clique num enunciado, numa alternativa ou num parágrafo de texto-base para corrigi-lo
+        aqui mesmo. A correção entra no <b>item</b> (ou no texto-base), fica registrada no fio da revisão dele e
+        <b>vale imediatamente para a impressão</b> — não há versão à parte a gerar.</p></div>` : ''}
     </div>
-    ${temConteudo ? `<div class="pas-previa">${htmlCaderno(pAtiva.id, cadVersao, true, emRevisao)}</div>`
+    ${temConteudo ? `<div class="pas-previa${cadRevisando ? ' pas-revisando' : ''}">${htmlCaderno(pAtiva.id, cadVersao, true, emRevisao)}</div>`
       : '<div class="miolo"><div class="vazio">Nenhum item aprovado para esta versão ainda. Aprove itens na tela “Itens e revisão”.</div></div>'}
   </div>
   <p class="nota-tela"><strong>Diagramação calibrada</strong> contra os cadernos do PAS/CEBRASPE de 2025: A4 com duas colunas de 266pt e fio central, corpo de 10pt, número do item recuado para fora da coluna e crédito da fonte em 6pt. O <strong>comando de cada bloco é montado automaticamente</strong> a partir dos tipos de item — “julgue os itens de 11 a 19 e assinale a opção correta no item 20, que é do tipo C” —, e o texto de abertura é editável em cada texto-base. A <strong>proposta de redação</strong> fecha o caderno, nas últimas páginas, quando a prova tem redação e a proposta está escrita. A quebra de páginas acontece na impressão: use “Imprimir” e escolha “Salvar como PDF”.</p>`;
 }
 ACOES['cad-versao'] = d => { cadVersao = d.v; render(); };
+ACOES['cad-revisar'] = () => { cadRevisando = !cadRevisando; fecharRevisaoInline(); render(); };
 MUDS['cad-revisao'] = (d, el) => { cadComRevisao = el.checked; render(); };
 // A impressão ignora `cadComRevisao` de propósito: item em revisão na tela é
 // conferência, item em revisão no papel seria prova aplicada com item que a

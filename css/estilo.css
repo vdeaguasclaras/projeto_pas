@@ -182,6 +182,7 @@ tr.clic{cursor:pointer}
 .btn.rosa{background:var(--rosa)}
 .btn.verde{background:var(--verde)}
 .btn.vermelho{background:var(--erro)}
+.btn.roxo{background:var(--roxo)}
 /* Destrutivo discreto: contorno, não bloco de cor. Para “Excluir” ficar
    disponível sem competir com a ação que a pessoa veio fazer. */
 .btn.vermelho.fantasma{background:transparent;color:var(--erro);border:2px solid var(--erro)}
@@ -903,6 +904,69 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
 .rico-btn.mat{color:var(--rosa);font-family:var(--mono);font-size:12px}
 .rico-btn.mat:hover{background:var(--rosa-claro);color:var(--rosa)}
 
+/* Tamanho da letra: os quatro botões são a própria escala, desenhados no
+   tamanho que aplicam — “A” pequeno aplica pequeno. Ninguém precisa ler o
+   rótulo para saber o que cada um faz. */
+.rico-grupo-tam .rico-btn{color:var(--ink);padding:0 8px}
+.rico-grupo-tam .rico-btn:hover{background:var(--azul-claro)}
+
+/* O editor de fórmula é o botão mais visível da barra: era o pedido — “a
+   edição de fórmula precisa ser mais destacada”. Ele não é um símbolo entre
+   nove símbolos; é a entrada da bancada onde a fórmula se monta e se confere. */
+.rico-btn.rico-formula{border:1.5px solid var(--rosa);border-radius:9px;background:var(--rosa-claro);
+  color:var(--rosa);height:27px;padding:0 11px;gap:5px;grid-auto-flow:column;font-size:12px}
+.rico-btn.rico-formula b{font-family:var(--mono);font-size:13px}
+.rico-btn.rico-formula:hover{background:var(--rosa);color:#fff}
+
+/* --- a bancada da fórmula --- */
+.rico-mat{border:1.5px solid var(--rosa);border-radius:12px;background:var(--papel);
+  padding:10px 12px 11px;display:flex;flex-direction:column;gap:8px}
+.rico-mat[hidden]{display:none}
+.rico-mat-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rico-mat-cab strong{font-size:12.5px;color:var(--rosa);text-transform:uppercase;letter-spacing:.06em}
+.rico-mat-onde{margin-left:auto}
+.rico-mat-onde button{font-size:11.5px;padding:0 9px;height:24px}
+.rico-mat-x{border:none;background:transparent;color:var(--ink-2);font-size:14px;cursor:pointer;
+  width:24px;height:24px;border-radius:6px}
+.rico-mat-x:hover{background:var(--fundo);color:var(--ink)}
+
+/* O desenho da fórmula vem ANTES do código, e não depois: é ele o resultado, e
+   é por ele que se confere. Altura mínima para o painel não pular de tamanho a
+   cada tecla. */
+.rico-mat-saida{min-height:52px;display:grid;place-items:center;padding:8px 10px;
+  background:var(--fundo);border-radius:9px;overflow-x:auto}
+.rico-mat-saida.com-erro{background:color-mix(in srgb,var(--vermelho) 8%,transparent);place-items:start}
+.rico-mat-erro{margin:0;font-size:12.5px;line-height:1.5;color:var(--vermelho);font-weight:600}
+.rico-mat-fonte{font-family:var(--mono);font-size:13px}
+.rico-mat-abas{display:flex;flex-wrap:wrap;gap:4px}
+.rico-mat-aba{border:1.5px solid var(--borda);background:var(--fundo);color:var(--ink-2);
+  border-radius:20px;padding:3px 10px;font-size:11.5px;font-weight:700;cursor:pointer}
+.rico-mat-aba:hover{border-color:var(--rosa);color:var(--rosa)}
+.rico-mat-aba.sel{background:var(--rosa);border-color:var(--rosa);color:#fff}
+.rico-mat-grade{display:flex;flex-wrap:wrap;gap:5px}
+.rico-mat-simb{min-width:36px;height:30px;padding:0 8px;border:1.5px solid var(--borda);border-radius:8px;
+  background:var(--fundo);cursor:pointer;font-size:13.5px;color:var(--ink)}
+.rico-mat-simb:hover{border-color:var(--rosa);background:var(--rosa-claro);color:var(--rosa)}
+.rico-mat-modelo{height:28px;padding:0 10px;border:1.5px solid var(--borda);border-radius:8px;
+  background:var(--fundo);cursor:pointer;font-size:11.5px;font-weight:700;color:var(--ink-2)}
+.rico-mat-modelo:hover{border-color:var(--rosa);color:var(--rosa)}
+.rico-mat-modelos summary{font-size:11.5px;font-weight:700;color:var(--ink-2);cursor:pointer;margin-bottom:6px}
+.rico-mat-pe{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rico-mat-dica{flex:1;min-width:180px;font-size:11px;line-height:1.45;color:var(--ink-2)}
+.rico-mat-dica code{font-family:var(--mono);background:var(--fundo);border-radius:4px;padding:0 3px}
+
+/* --- tamanho de letra, o vocabulário fechado de js/limpar.js ---
+   Relativos, não absolutos: valem igual no formulário (14px), na prévia e no
+   caderno impresso (10pt), que é onde o pedido nasceu. */
+.tam-pp{font-size:.75em}
+.tam-p{font-size:.87em}
+.tam-g{font-size:1.2em}
+.tam-gg{font-size:1.45em}
+/* Dentro de expoente e índice o tamanho aplicado é o que manda: era ali,
+   justamente, que o número saía pequeno demais para ser lido no papel. */
+.rico-area sup .tam-g,.rico-area sub .tam-g,.pas sup .tam-g,.pas sub .tam-g{font-size:1.5em}
+.rico-area sup .tam-gg,.rico-area sub .tam-gg,.pas sup .tam-gg,.pas sub .tam-gg{font-size:1.8em}
+
 /* A área editável usa a mesma .caixa dos outros campos, para o formulário não
    ter duas aparências de campo de texto. */
 .rico-area{overflow-y:auto;max-height:40vh;line-height:1.55;white-space:pre-wrap;word-break:break-word}
@@ -932,6 +996,25 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
   font-size:11.5px;color:var(--ink-2);text-align:left;text-indent:0}
 .previa-vazia{margin:0;font-size:12.5px;color:var(--ink-2)}
 
+/* Prosa ou verso, ao lado do próprio rótulo do corpo — onde a escolha é feita
+   antes de escrever, e não num seletor no fim do formulário. */
+.campo-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px}
+.campo-cab label{margin-bottom:0}
+.seg-formato{margin-left:auto}
+.seg-formato button{font-size:11.5px;padding:0 10px;height:25px}
+
+/* A prévia do verso: a quebra de linha, que na área de edição é invisível,
+   aparece marcada — é o que responde “o caderno vai respeitar isto?”. */
+.previa-verso p{text-align:left;text-indent:0;padding-left:0}
+.previa-verso .pas-verso::after{content:'↵';margin-left:7px;font-size:10px;color:var(--azul);
+  opacity:.6;user-select:none}
+.previa-convite{margin:8px 0 0;padding-top:8px;border-top:1px dashed var(--borda);
+  font-size:12px;line-height:1.6;color:var(--ink-2);text-indent:0;text-align:left;
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+/* O texto é UM item de flex, não um por palavra em negrito: sem o <span> ao
+   redor, `display:flex` transformava cada <b> em item e espalhava a frase. */
+.previa-convite>span{flex:1;min-width:200px}
+
 /* “Como sai na prova”: uma coluna do caderno, na largura e no corpo reais,
    dentro do diálogo. Mesmas medidas de `.pas-regua`, que é o que a paginação
    usa para medir — o que se vê aqui é o que a régua mediu. */
@@ -940,11 +1023,42 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
   box-shadow:0 3px 14px rgba(0,0,0,.25)}
 .previa-nota{margin:10px 2px 0;font-size:12px;line-height:1.55;color:var(--ink-2)}
 
+/* --- revisão na página ---
+   A página continua sendo a página: nada de moldura permanente nem de campo de
+   formulário por cima do caderno. O que muda é só o cursor e um realce ao
+   passar — o pedaço clicável se anuncia no momento em que a mão chega nele, e
+   some no instante seguinte. É o que mantém a leitura final parecida com ler a
+   prova impressa, que era a condição do pedido. */
+.pas-revisando [data-rev]{cursor:text;border-radius:2pt;
+  transition:background .12s,box-shadow .12s}
+.pas-revisando [data-rev]:hover{background:color-mix(in srgb,var(--roxo) 15%,transparent);
+  box-shadow:0 0 0 2.5pt color-mix(in srgb,var(--roxo) 15%,transparent)}
+.rev-aviso{border-left-color:var(--roxo)}
+
+.rev-caixa{position:fixed;z-index:60;width:min(480px,calc(100vw - 20px));
+  background:var(--papel);border:1.5px solid var(--roxo);border-radius:14px;
+  box-shadow:0 14px 40px rgba(0,0,0,.28);padding:11px 13px 12px;
+  display:flex;flex-direction:column;gap:9px}
+.rev-cab{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.rev-cab strong{font-size:12.5px;color:var(--roxo);text-transform:uppercase;letter-spacing:.05em}
+.rev-dica{flex:1;min-width:140px;font-size:11px;line-height:1.4;color:var(--ink-2)}
+.rev-cab .fechar-x{position:static;margin-left:auto}
+.rev-corpo{max-height:46vh;overflow:auto}
+.rev-pe{display:flex;justify-content:flex-end;gap:8px}
+@media print{.rev-caixa{display:none}}
+
 /* Item que ainda não foi aprovado, na conferência do caderno e na prévia. */
 .pas-item.em-revisao{background:color-mix(in srgb,var(--amarelo) 34%,transparent);
   box-shadow:0 0 0 3pt color-mix(in srgb,var(--amarelo) 34%,transparent);border-radius:2pt}
 .cad-revisao{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;
   white-space:nowrap;cursor:pointer}
+
+/* A área de quem coordena uma. Roxa, como o vínculo de versão: é informação de
+   coordenação, não pendência — a pendência é a fila, logo acima, e ela é
+   amarela. */
+.painel-area{border-left:4px solid var(--roxo)}
+.painel-area td:nth-child(n+3){font-variant-numeric:tabular-nums}
+.fila-n{color:#8a6d00;font-size:14px}
 
 /* Vínculo entre o item regular e a versão adaptada dele. */
 .vinculo-versao{border-left:4px solid var(--roxo);margin-bottom:12px}
