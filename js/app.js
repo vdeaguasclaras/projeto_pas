@@ -29,12 +29,32 @@ const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (v, casas = 2) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Number(v).toFixed(casas).replace('.', ',');
 
+// O aviso da tela — e por que ele muda de casa.
+//
+// O `<dialog>` aberto por `showModal()` vive na *top layer* do navegador: ele é
+// pintado ACIMA de todo o resto da página, e nenhum `z-index` alcança isso.
+// Enquanto o aviso morava solto no corpo, tudo o que o sistema dizia com um
+// diálogo aberto era pintado ATRÁS dele — invisível justamente nas horas em que
+// mais importa, que são as recusas do “Salvar”.
+//
+// Foi assim que “ele edita, mas não salva” chegou como relato, três vezes. O
+// coordenador estava corrigindo um item em que as alternativas tinham sido
+// coladas dentro do enunciado; ao esvaziar o enunciado para escrever o comando
+// de verdade, a validação passou a recusar a gravação — e dizia “Escreva o
+// enunciado do item” num retângulo que a tela nunca mostrou. Do lado de fora
+// era um botão que não fazia nada.
+//
+// Com diálogo aberto, o aviso é anexado DENTRO dele e sobe junto para a top
+// layer. É o mesmo elemento, para nunca haver dois avisos ao mesmo tempo.
 function toast(msg) {
+  const dlg = $('#dlg');
+  const casa = dlg?.open ? dlg : document.body;
   const t = $('#toast');
+  if (t.parentElement !== casa) casa.appendChild(t);
   t.textContent = msg;
   t.classList.add('on');
   clearTimeout(toast._tm);
-  toast._tm = setTimeout(() => t.classList.remove('on'), 2600);
+  toast._tm = setTimeout(() => t.classList.remove('on'), 4200);
 }
 
 function agora() {
@@ -646,6 +666,10 @@ ACOES['tema'] = () => {
 
 function abrirDlg(html, grande = false) {
   const d = $('#dlg');
+  // O aviso pode estar hospedado dentro do diálogo (ver `toast`): ele volta
+  // para o corpo antes da remontagem, senão o `innerHTML` o destruiria.
+  const t = $('#toast');
+  if (t?.parentElement === d) document.body.appendChild(t);
   d.classList.toggle('grande', grande);
   d.innerHTML = html;
   if (!d.open) d.showModal();
@@ -2575,6 +2599,7 @@ ACOES['it-adaptar'] = async () => {
   if (base.versao === 'ambas') { base.versao = 'regular'; PERS.item(base); }
   PERS.item(copia);
   rasc = JSON.parse(JSON.stringify(copia));
+  erroDoItem = null;
   commit();
   dlgItem();
   toast('Versão adaptada criada. Ajuste o que precisar e envie para a revisão.');
@@ -2617,6 +2642,7 @@ function htmlVinculoDaVersao(item) {
 // Abre o diálogo na hora e remonta quando os endereços chegarem: esperar a rede
 // para só então abrir faria o clique parecer perdido.
 function abrirItemComFiguras() {
+  erroDoItem = null;          // item novo na tela, recusa velha não acompanha
   dlgItem();
   if (!modoNuvem) return;
   const listas = [S.textos.find(t => t.id === rasc.textoId)?.imagens,
@@ -2777,17 +2803,19 @@ function dlgItem() {
 
   let respostaHtml = '';
   if (rasc.tipo === 'B') {
-    respostaHtml = `<div class="form-linha"><div class="campo"><label>Gabarito</label>
+    respostaHtml = `<div class="form-linha"><div${marcaDoCampo('gabarito')}><label>Gabarito</label>
       <input class="caixa" style="width:110px;font-family:var(--mono)" maxlength="3" inputmode="numeric"
-        data-mud="it-campo" data-campo="gabarito" value="${esc(rasc.gabarito)}" placeholder="000–999"${trava}></div></div>`;
+        data-mud="it-campo" data-campo="gabarito" value="${esc(rasc.gabarito)}" placeholder="000–999"${trava}>
+      ${avisoDoCampo('gabarito')}</div></div>`;
   } else if (rasc.tipo === 'D') {
     respostaHtml = `
       <div class="campo" style="margin-bottom:12px"><label>Resposta esperada (guia de correção)</label>
         ${editorRico({ campo: 'gabarito', valor: rasc.gabarito || '', linhas: 3, soLeitura: !editavel,
                        rotulo: 'O que se espera na resposta construída do estudante' })}</div>
       <div class="form-linha">
-        <div class="campo" style="flex:0;min-width:160px"><label>Linhas de resposta</label>
-          <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"${trava}></div>
+        <div${marcaDoCampo('dLinhas')} style="flex:0;min-width:160px"><label>Linhas de resposta</label>
+          <input class="caixa" type="number" min="1" max="40" data-mud="it-dlinhas" value="${rasc.dLinhas ?? 10}"${trava}>
+          ${avisoDoCampo('dLinhas')}</div>
         <div class="campo" style="flex:0"><label>Espaço de resposta</label>
           <div class="seg">
             <button class="${rasc.dPauta !== false ? 'sel' : ''}" data-acao="it-dpauta" data-v="1"${trava}>Com linhas</button>
@@ -2909,9 +2937,10 @@ function dlgItem() {
             <div class="campo" style="flex:1 1 100%"><label>Grupo de habilidades</label>
               <div class="seg">${segGrupo}</div></div>
           </div>
-          <div class="campo" style="margin-bottom:12px"><label>Enunciado</label>
+          <div${marcaDoCampo('enunciado')} style="margin-bottom:12px"><label>Enunciado</label>
             ${editorRico({ campo: 'enunciado', valor: rasc.enunciado, linhas: 4,
                            rotulo: 'Enunciado do item', soLeitura: !editavel })}
+            ${avisoDoCampo('enunciado')}
             ${editavel ? `<p class="rico-ajuda">Fórmula entre <code>$…$</code> na linha e <code>$$…$$</code> em
               destaque, na notação do LaTeX — <code>$\\frac{1}{2}$</code>, <code>$x^2$</code>,
               <code>$\\sqrt{3}$</code>, <code>$30^\\circ$</code>. A prévia mostra como sai impresso.
@@ -3070,6 +3099,39 @@ ACOES['it-grupo'] = d => mexerNoItem(() => { rasc.grupo = d.v; });
 ACOES['it-versao'] = d => mexerNoItem(() => { rasc.versao = d.v; });
 ACOES['it-gab'] = d => mexerNoItem(() => { rasc.gabarito = d.v; });
 
+// A recusa do “Salvar” tem de ficar VISÍVEL, e no lugar certo.
+//
+// Um toast não bastava por duas razões, e as duas apareceram no mesmo relato.
+// A primeira é que ele nem chegava à tela (ver `toast`). A segunda é que, mesmo
+// chegando, ele dura poucos segundos no canto de baixo, enquanto o diálogo do
+// item tem duas colunas e rola por três telas — quem está mexendo nas
+// alternativas não olha para o enunciado, que é onde está o problema.
+//
+// Então a recusa faz três coisas: diz o motivo (agora visível), MARCA o campo
+// que a causou, e leva a pessoa até ele. A marca fica até o problema ser
+// resolvido — ela não é um aviso de passagem, é o estado do formulário.
+let erroDoItem = null;   // { campo, msg }
+
+function recusarItem(campo, msg) {
+  erroDoItem = { campo, msg };
+  // Nesta ordem: remontar o diálogo devolve o aviso ao corpo da página (ver
+  // `abrirDlg`), então ele é dito DEPOIS, já com o diálogo novo de pé.
+  dlgItem();
+  toast(msg);
+  const alvo = $(`[data-erro-campo="${campo}"]`);
+  if (alvo) {
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    (alvo.querySelector('.rico-area, input, select') || alvo).focus?.({ preventScroll: true });
+  }
+  return false;
+}
+
+// O aviso desenhado ao pé do campo, quando é ele o recusado.
+const avisoDoCampo = campo => erroDoItem?.campo === campo
+  ? `<p class="campo-erro">⚠ ${esc(erroDoItem.msg)}</p>` : '';
+const marcaDoCampo = campo =>
+  ` data-erro-campo="${campo}"${erroDoItem?.campo === campo ? ' class="campo com-erro"' : ' class="campo"'}`;
+
 function persistirRascunho() {
   // Primeiro o que está na TELA vai para a cópia de trabalho.
   //
@@ -3096,9 +3158,13 @@ function persistirRascunho() {
     rasc = { ...gravado, status: rasc.status, comentarios: rasc.comentarios };
   // Enunciado agora é HTML: “vazio” pode ser <br> ou espaço inquebrável, e
   // `ricoVazio()` olha o texto por baixo da marcação.
-  if (ricoVazio(rasc.enunciado)) { toast('Escreva o enunciado do item.'); return false; }
-  if (rasc.tipo === 'B' && !/^\d{1,3}$/.test(String(rasc.gabarito).trim())) { toast('Gabarito do tipo B: número de 0 a 999.'); return false; }
-  if (rasc.tipo === 'D' && !(rasc.dLinhas >= 1)) { toast('Informe a quantidade de linhas de resposta do item discursivo.'); return false; }
+  if (ricoVazio(rasc.enunciado))
+    return recusarItem('enunciado', 'O enunciado não pode ficar em branco: é o comando do item, a pergunta que vem antes das alternativas.');
+  if (rasc.tipo === 'B' && !/^\d{1,3}$/.test(String(rasc.gabarito).trim()))
+    return recusarItem('gabarito', 'Gabarito do tipo B: um número de 0 a 999.');
+  if (rasc.tipo === 'D' && !(rasc.dLinhas >= 1))
+    return recusarItem('dLinhas', 'Informe a quantidade de linhas de resposta do item discursivo.');
+  erroDoItem = null;
   // Quatro listas vazias em todo item seriam ruído gravado linha a linha: o
   // campo só existe quando alguma alternativa tem figura.
   if (rasc.imagensOpcoes && !rasc.imagensOpcoes.some(l => todasAsImagens(l).length))

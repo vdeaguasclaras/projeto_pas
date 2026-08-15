@@ -133,6 +133,27 @@ Estas três já falharam uma vez. Valem como regra.
   de conteúdo ao item, inclua-o em `campos_do_item()` — senão a alteração dele
   passa sem deixar rastro.
 
+## O aviso precisa CHEGAR à tela
+
+**O `<dialog>` aberto por `showModal()` vive na *top layer* do navegador: ele é
+pintado acima de tudo, e nenhum `z-index` alcança isso.** Enquanto o `#toast`
+morava solto no `<body>`, todo aviso dado com um diálogo aberto era pintado
+ATRÁS dele — invisível justamente nas horas em que mais importa, que são as
+recusas do “Salvar”. Do lado de fora, era um botão que não fazia nada.
+
+Custou três relatos do mesmo defeito (“ele edita, mas não salva”) para achar,
+porque o sintoma aponta para a gravação e a causa estava na mensagem. Hoje
+`toast()` anexa o aviso DENTRO do diálogo quando há um aberto (e `abrirDlg()` o
+devolve ao corpo antes de remontar, senão o `innerHTML` o destrói). Ao criar
+qualquer sobreposição nova, confira se o que ela diz é visível de fato —
+`elementFromPoint` não serve para aferir isso, porque o toast tem
+`pointer-events: none`; compare os retângulos.
+
+E validação de formulário não se diz só de passagem: `recusarItem()` marca o
+campo que causou a recusa, mostra o motivo ao pé dele e rola até lá. Um toast de
+quatro segundos não alcança quem está três telas abaixo, mexendo nas
+alternativas, quando o problema está no enunciado.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável

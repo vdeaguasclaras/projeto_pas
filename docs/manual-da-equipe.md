@@ -212,6 +212,19 @@ Os botões no rodapé do item dizem **para onde a ação leva**:
 Ao escrever um item, o texto-base fica ao lado, e as linhas que você informar em
 “linhas de referência” aparecem destacadas em amarelo.
 
+> **Se o Salvar recusar, ele diz por quê — e onde.** Três coisas são
+> obrigatórias e travam a gravação: o **enunciado** não pode ficar em branco, o
+> gabarito do **tipo B** tem de ser um número de 0 a 999, e o **tipo D** precisa
+> da quantidade de linhas de resposta. Quando alguma falha, a mensagem aparece
+> no alto do próprio item, o **campo fica marcado em vermelho** com o motivo
+> logo abaixo dele, e a tela rola até lá.
+>
+> O **enunciado é o comando do item** — a pergunta que vem *antes* das
+> alternativas. As alternativas têm os campos delas, em “Opções (A a D)”. Item
+> com as cinco alternativas coladas dentro do enunciado é justamente o caso que
+> precisa dessa arrumação: mova cada uma para o seu campo e escreva o comando
+> no enunciado.
+
 Tipos de item: **A** certo/errado · **B** numérico de 000 a 999 · **C** múltipla
 escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
