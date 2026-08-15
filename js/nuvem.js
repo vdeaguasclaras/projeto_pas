@@ -85,6 +85,21 @@ async function comentarItem(itemId, texto) {
   return data;   // { comentario, comentarios }
 }
 
+// Correção feita na leitura final do caderno (migração 0017). Também é função
+// do banco, e pelo mesmo motivo das outras: a coordenação de área precisa
+// alcançar item já aprovado — que a política de UPDATE reserva à coordenação
+// geral —, e o ajuste dela tem de deixar o item pendente da última leitura. As
+// duas coisas acontecem juntas lá dentro, e não dependem do que o cliente
+// resolver mandar. Devolve o item inteiro, já com o histórico atualizado.
+async function ajustarNaLeituraFinal(itemId, campo, indice, valor) {
+  const { data } = checar(await sb.rpc('ajustar_na_leitura_final',
+    { alvo: itemId, campo, indice: indice ?? null, valor }));
+  return data;
+}
+async function confirmarLeituraFinal(itemId) {
+  checar(await sb.rpc('confirmar_leitura_final', { alvo: itemId }));
+}
+
 // Criação/edição de contas passa pela Edge Function `equipe`, única a
 // conhecer a chave de serviço. O navegador só envia o próprio JWT.
 async function chamarEquipe(corpo) {
@@ -270,5 +285,6 @@ export const nuvem = {
   enviarImagem, assinarImagens, apagarImagem,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
-  marcarSenhaTrocada, marcarTutorialVisto, comentarItem
+  marcarSenhaTrocada, marcarTutorialVisto, comentarItem,
+  ajustarNaLeituraFinal, confirmarLeituraFinal
 };
