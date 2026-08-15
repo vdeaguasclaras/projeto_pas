@@ -115,6 +115,13 @@ Estas três já falharam uma vez. Valem como regra.
   para `class` livre: a lista curta é o que sustenta a decisão do `js/rico.js`
   de guardar fórmula como código-fonte em vez de HTML.
 
+- **Comentar não é editar.** O fio da revisão é aberto a toda a equipe, e por
+  isso o comentário NÃO passa pela gravação do item: ele vai pela função
+  `comentar_item` (migração 0016), que só sabe acrescentar ao fio e assina com o
+  nome e o papel lidos de `equipe`. Não tente resolver isso alargando a política
+  de UPDATE — quem barra o resto ali é o `using`, que só enxerga a linha antiga,
+  e afrouxá-lo reabre dois buracos que a 0012 fechou.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável

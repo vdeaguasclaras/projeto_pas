@@ -152,6 +152,11 @@ rascunho → coordenação de área → coordenação geral → aprovado. Quem r
 comenta dentro do item; quem escreveu responde ali mesmo. **Só item aprovado
 entra no caderno, no cartão e na correção.**
 
+> **A conversa da revisão é de todo mundo.** Qualquer pessoa da equipe pode
+> escrever no fio de qualquer item, inclusive num que não pode editar — é o
+> caminho de pedir um ajuste a quem escreveu. O comentário é assinado com o
+> **seu nome e o seu papel**, do cadastro, e com a data e a hora.
+
 Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação da
 área daquele componente** decide a primeira etapa; a **coordenação geral** decide
 a última. Quem coordena área tem o filtro “só a minha área” para ver o que está

@@ -3034,24 +3034,53 @@ ACOES['it-devolver'] = () => salvarItem({
 ACOES['it-reabrir'] = () => salvarItem({
   statusNovo: 'area', mensagem: 'Revisão reaberta.' });
 
-ACOES['it-comentar'] = async () => {
+const meuPapelNoFio = () => ehCoord() ? 'coordenação geral'
+  : ehCoordArea() ? `coord. de área (${S.perfil.area || ''})`
+  : ehRedacao() ? 'redação'
+  : `docente (${S.perfil.componente || ''})`;
+
+// Comentar tem caminho próprio, e não é a gravação do item.
+//
+// O sistema promete em três lugares que a conversa da revisão é de todos —
+// `podeEditarItem()` diz isso em comentário, o campo “Escreva um comentário…”
+// aparece para quem quer que abra o item, e o aviso do item travado manda
+// justamente escrever no fio. O banco recusava: o comentário ia junto com o
+// item inteiro, e a política de escrita de `itens` responde por quem pode mexer
+// no CONTEÚDO. Um docente comentando no item de um colega levava 403, e até a
+// migração 0014 isso sumia em silêncio.
+//
+// Agora o recado vai pela função `comentar_item` (migração 0016), que só sabe
+// acrescentar ao fio e assina com o nome e o papel que estão em `equipe`. Fora
+// do modo nuvem não há banco, e o comentário é montado aqui mesmo.
+ACOES['it-comentar'] = async (d, botao) => {
   const inp = $('#it-novo-coment');
   const txt = inp.value.trim();
   if (!txt) return;
-  rasc.comentarios = rasc.comentarios || [];
-  rasc.comentarios.push({
-    autor: S.perfil.nome,
-    papel: ehCoord() ? 'coordenação geral'
-      : ehCoordArea() ? `coord. de área (${S.perfil.area || ''})`
-      : ehRedacao() ? 'redação'
-      : `docente (${S.perfil.componente || ''})`,
-    quando: agora(), texto: txt
-  });
-  // Comentário em item já gravado é gravação como outra qualquer, e agora
-  // também é esperada: se o banco recusar, quem comentou fica sabendo em vez de
-  // ver o recado sumir no recarregar.
-  if (rasc.id) { if (!await salvarItem({ mensagem: 'Comentário registrado.', fechar: false })) return; }
-  reabrirDlgItem();
+
+  if (!modoNuvem || !rasc.id) {
+    rasc.comentarios = rasc.comentarios || [];
+    rasc.comentarios.push({ autor: S.perfil.nome, papel: meuPapelNoFio(), quando: agora(), texto: txt });
+    if (rasc.id) { const i = S.itens.find(x => x.id === rasc.id); if (i) i.comentarios = rasc.comentarios; save(S); }
+    reabrirDlgItem();
+    return;
+  }
+
+  if (botao) botao.disabled = true;
+  try {
+    const r = await nuvem.comentarItem(rasc.id, txt);
+    // O fio volta do banco inteiro: se alguém comentou enquanto esta janela
+    // estava aberta, o recado dessa pessoa aparece junto em vez de ser
+    // atropelado pela cópia de trabalho.
+    const fio = r?.comentarios || [...(rasc.comentarios || []), r?.comentario].filter(Boolean);
+    rasc.comentarios = fio;
+    const gravado = S.itens.find(i => i.id === rasc.id);
+    if (gravado) gravado.comentarios = fio;
+    save(S);
+    reabrirDlgItem();
+  } catch (e) {
+    if (botao) botao.disabled = false;
+    toast('⚠ O comentário não foi registrado: ' + (e?.message || e));
+  }
 };
 ACOES['it-excluir'] = () => {
   if (!rasc.id) { $('#dlg').close(); return; }
