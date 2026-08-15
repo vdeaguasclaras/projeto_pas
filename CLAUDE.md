@@ -121,6 +121,17 @@ Estas três já falharam uma vez. Valem como regra.
   nome e o papel lidos de `equipe`. Não tente resolver isso alargando a política
   de UPDATE — quem barra o resto ali é o `using`, que só enxerga a linha antiga,
   e afrouxá-lo reabre dois buracos que a 0012 fechou.
+- **Quando a permissão vem junto com uma consequência, é função, não política.**
+  A coordenação de área corrige item aprovado na leitura final do caderno, e
+  esse ajuste tem de deixar o item pendente da releitura da coordenação
+  pedagógica. Política sabe dizer “pode escrever”; não sabe cumprir a segunda
+  metade. `ajustar_na_leitura_final` (migração 0017) faz as duas juntas, e a
+  marca não depende de o cliente lembrar de pô-la.
+- **O histórico do item (`dados.historico`) é escrito por gatilho, nunca pelo
+  cliente** (migração 0017). O gatilho o repõe a partir da linha guardada em
+  toda gravação, então mandá-lo do navegador não adianta. Ao acrescentar campo
+  de conteúdo ao item, inclua-o em `campos_do_item()` — senão a alteração dele
+  passa sem deixar rastro.
 
 ## Gravação: a tela não pode afirmar o que o banco negou
 

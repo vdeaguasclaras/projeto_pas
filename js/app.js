@@ -1135,6 +1135,11 @@ function filaDeRevisao() {
     // Quanto está parado na etapa da área — a coordenação geral precisa ver
     // isto para saber que a revisão emperrou antes de chegar nela.
     naArea: ehCoord() ? S.itens.filter(i => i.status === 'area').length : 0,
+    // Itens que a coordenação de área ajustou na leitura final do caderno e
+    // que esperam a releitura da coordenação pedagógica. Não é a mesma coisa
+    // que a fila de aprovação: o item já está aprovado e já está na prova — o
+    // que falta é alguém confirmar que o ajuste pode ir para o papel assim.
+    releitura: ehCoord() ? S.itens.filter(i => i.aguardaLeituraFinal) : [],
     total: itens.length + textos.length
   };
 }
@@ -1159,16 +1164,45 @@ function pedirEquipeAoFundo() {
     .catch(e => console.warn('equipe não carregada para o painel:', e.message || e));
 }
 
+// Os ajustes feitos na leitura final do caderno pela coordenação de área, à
+// espera da releitura da coordenação pedagógica. Vem dentro da fila porque é
+// fila: é trabalho parado esperando uma decisão dela.
+function htmlReleituraPendente(f) {
+  const n = f.releitura?.length || 0;
+  if (!n) return '';
+  const linhas = f.releitura.slice(0, 8).map(i => {
+    const a = i.aguardaLeituraFinal || {};
+    const pr = provaPorId(i.provaId);
+    return `<tr class="clic" data-acao="abrir-item" data-id="${esc(i.id)}">
+      <td>${discChip(i.componente)}</td>
+      <td>${esc(pr?.serie || '—')}</td>
+      <td>${esc(a.campo || 'conteúdo')}</td>
+      <td>${esc(a.por || '—')}<br><span style="font-size:11px;color:var(--ink-2)">${esc(a.quando || '')}</span></td>
+    </tr>`;
+  }).join('');
+  return `<div class="fila-releitura">
+    <p><b>${n}</b> ${n === 1 ? 'item foi ajustado' : 'itens foram ajustados'} na leitura final do caderno pela
+      coordenação de área e ${n === 1 ? 'espera' : 'esperam'} a sua releitura.
+      ${n === 1 ? 'Ele continua' : 'Eles continuam'} na prova e ${n === 1 ? 'sai' : 'saem'} na impressão com o
+      ajuste — a releitura é a confirmação de que pode ser assim.</p>
+    <table><thead><tr><th>Componente</th><th>Prova</th><th>O que mudou</th><th>Quem ajustou</th></tr></thead>
+      <tbody>${linhas}</tbody></table>
+    ${n > 8 ? `<p style="font-size:12px;color:var(--ink-2);margin:8px 0 0">…e mais ${n - 8}.</p>` : ''}
+  </div>`;
+}
+
 function htmlFilaDeRevisao() {
   const f = filaDeRevisao();
   if (!f) return '';
   const gargalo = htmlGargaloDaArea(f);
+  const releitura = htmlReleituraPendente(f);
   if (!f.total)
-    return `<div class="cartao fila-revisao vazia" style="margin-bottom:16px">
+    return `<div class="cartao fila-revisao${releitura ? '' : ' vazia'}" style="margin-bottom:16px">
       <h3>Sua fila de revisão</h3>
-      <p>Nada esperando por você — ${ehCoord()
+      <p>Nada esperando a sua decisão de aprovação — ${ehCoord()
         ? 'nenhum item chegou à etapa da coordenação geral e não há sugestão de texto pendente'
         : 'todos os itens da sua área e as sugestões de texto já foram decididos'}.</p>
+      ${releitura}
       ${gargalo}
     </div>`;
   const noutrasProvas = f.total - f.itensAqui - f.textosAqui;
@@ -1193,6 +1227,7 @@ function htmlFilaDeRevisao() {
       ${f.itens.length ? `<button class="btn" data-acao="ir-fila-itens">Ver ${f.itens.length === 1 ? 'o item' : `os ${f.itens.length} itens`} →</button>` : ''}
       ${f.textos.length ? `<a class="btn fantasma" href="#/textos" style="text-decoration:none">Ver as sugestões de texto →</a>` : ''}
     </div>
+    ${releitura}
     ${gargalo}
   </div>`;
 }
@@ -2611,6 +2646,95 @@ function faixaLinhas(ref) {
   return um ? [parseInt(um[1], 10), parseInt(um[1], 10)] : null;
 }
 
+/* ---------------- o que mudou neste item ----------------
+   O relato: “o Paulo segue sem conseguir ver as alterações feitas nos itens da
+   professora Fernanda”. Não era acesso — a conta dele não levou um 4xx sequer
+   em 480 requisições. É que não havia o que ver: o item guardava o estado
+   ATUAL e mais nada. Quem revisa 336 itens abria um pela segunda vez sem
+   nenhuma forma de saber o que tinha mudado desde a primeira, nem quem mudou.
+   O fio de comentários só registra o que alguém resolveu escrever à mão.
+
+   O histórico é escrito por gatilho no banco (migração 0017), não pelo cliente:
+   assim ele não se falsifica, e vale para toda porta de gravação — o diálogo do
+   item, a revisão na página do caderno, a adaptação — inclusive as que vierem
+   depois. Guarda as doze últimas alterações e o valor ANTERIOR de cada campo
+   mexido, que é o que responde “como estava antes?”. */
+const ROTULO_CAMPO = {
+  enunciado: 'enunciado', opcoes: 'alternativas', gabarito: 'gabarito', tipo: 'tipo de item',
+  versao: 'versão da prova', componente: 'componente', habilidade: 'habilidade',
+  grupo: 'grupo de habilidades', linhasRef: 'linhas de referência',
+  dLinhas: 'linhas de resposta', dPauta: 'espaço de resposta', textoId: 'texto-base',
+  status: 'etapa da revisão', imagens: 'figuras', imagensOpcoes: 'figuras das alternativas'
+};
+
+// Como um valor guardado se lê na tela. Texto rico sai desenhado; o resto sai
+// pelo que é — status pelo rótulo do fluxo, lista pela contagem.
+function valorDoHistorico(campo, v) {
+  if (v === null || v === undefined) return '<i>(vazio)</i>';
+  if (campo === 'status') return esc(STATUS_ITEM[v]?.rot || String(v));
+  if (campo === 'textoId') {
+    const t = S.textos.find(x => x.id === v);
+    return t ? `Texto ${t.numero} — ${esc(String(t.titulo).slice(0, 40))}` : esc(String(v));
+  }
+  if (Array.isArray(v)) {
+    if (campo === 'opcoes') return v.map((o, i) => `<b>${'ABCD'[i]}</b> ${rico(o)}`).join('<br>');
+    return `${v.length} ${v.length === 1 ? 'figura' : 'figuras'}`;
+  }
+  if (typeof v === 'boolean') return v ? 'sim' : 'não';
+  if (typeof v === 'string') return rico(v) || '<i>(vazio)</i>';
+  return esc(String(v));
+}
+
+function htmlHistoricoDoItem(item) {
+  const h = Array.isArray(item?.historico) ? item.historico : [];
+  const espera = item?.aguardaLeituraFinal;
+  const aviso = espera ? `
+    <div class="cartao aviso rev-pendente" style="margin:0 0 10px">
+      <p style="font-size:13px;margin:0"><b>Aguardando a última leitura.</b>
+        ${esc(espera.por || 'A coordenação de área')} ajustou ${esc(espera.campo || 'o item')} na leitura final
+        do caderno${espera.quando ? ` (${esc(espera.quando)})` : ''}, e o item está esperando a conferência da
+        coordenação pedagógica.
+        ${ehCoord() && item.id ? `<button class="btn mini verde" data-acao="it-leitura-ok" data-id="${esc(item.id)}"
+          style="margin-left:6px">Dar a leitura por concluída</button>` : ''}</p>
+    </div>` : '';
+  if (!h.length) return aviso;
+
+  const linhas = h.slice().reverse().map((e, n) => {
+    const campos = (e.campos || []).map(c => ROTULO_CAMPO[c] || c);
+    const antes = Object.entries(e.antes || {}).map(([c, v]) =>
+      `<div class="hist-antes"><span>${esc(ROTULO_CAMPO[c] || c)}, antes:</span>
+        <div>${valorDoHistorico(c, v)}</div></div>`).join('');
+    return `<li${n === 0 ? ' class="ultima"' : ''}>
+      <div class="hist-cab"><b>${esc(e.quem || '—')}</b>
+        <span class="hist-papel">${esc(e.papel || '')}</span>
+        <span class="hist-quando">${esc(e.quando || '')}</span></div>
+      <div class="hist-campos">mexeu em ${esc(campos.join(', ') || '—')}</div>
+      ${antes ? `<details class="hist-det"><summary>como estava</summary>${antes}</details>` : ''}
+    </li>`;
+  }).join('');
+
+  return `${aviso}
+    <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">
+      O que mudou neste item</h3>
+    <ol class="historico">${linhas}</ol>
+    <p class="hist-nota">Registrado pelo próprio banco a cada gravação, com as doze alterações mais recentes.
+      Só mudança de conteúdo entra — reordenar o item na prova, não.</p>`;
+}
+
+ACOES['it-leitura-ok'] = async d => {
+  const item = S.itens.find(i => i.id === d.id);
+  if (!item || !ehCoord()) return;
+  if (modoNuvem) {
+    try { await nuvem.confirmarLeituraFinal(item.id); }
+    catch (e) { toast('⚠ ' + (e?.message || e)); return; }
+  }
+  delete item.aguardaLeituraFinal;
+  if (rasc && rasc.id === item.id) delete rasc.aguardaLeituraFinal;
+  save(S);
+  if ($('#dlg').open && rasc?.id === item.id) dlgItem(); else render();
+  toast('Leitura confirmada — o item sai da sua lista de releitura.');
+};
+
 function dlgItem() {
   const t = S.textos.find(x => x.id === rasc.textoId);
   const st = STATUS_ITEM[rasc.status];
@@ -2797,6 +2921,8 @@ function dlgItem() {
             <p style="font-size:12px;color:var(--ink-2);margin:6px 0 0">Figura de geometria, estrutura química,
               gráfico. Sai no caderno depois do enunciado${rasc.tipo === 'C' ? ' e antes das opções — a figura que pertence a uma <b>alternativa</b> vai no campo dela, logo abaixo' : ''}.</p></div>
           ${opcoesHtml}${respostaHtml}
+
+          ${htmlHistoricoDoItem(rasc)}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
           <div class="fio">${fio || '<span style="font-size:13px;color:var(--ink-2)">Nenhum comentário ainda.</span>'}</div>
@@ -3228,7 +3354,12 @@ function htmlItem({ item, numero }) {
   // Item que entrou na montagem sem estar aprovado (prévia) sai marcado. A
   // classe só existe nessas montagens: o caderno impresso nunca a recebe,
   // porque `cad-imprimir` monta sem os extras.
-  const revisao = item.status && item.status !== 'aprovado' ? ' em-revisao' : '';
+  const revisao = (item.status && item.status !== 'aprovado' ? ' em-revisao' : '') +
+    // Ajustado pela coordenação de área na leitura final e ainda não relido.
+    // Este item ESTÁ aprovado e SAI na impressão — a marca é só da tela, e por
+    // isso o realce dela mora sob `.pas-previa` no CSS, que a folha impressa
+    // não tem. Marcar o papel seria imprimir uma anotação interna na prova.
+    (item.aguardaLeituraFinal ? ' aguarda-leitura' : '');
   // A figura do item (geometria, estrutura química, gráfico) vem depois do
   // enunciado e antes das opções: é o enunciado que a apresenta.
   const figs = htmlImagens(item.imagens, LARGURA_COLUNA);
@@ -3562,6 +3693,23 @@ let revEmEdicao = null;   // { tipo, id, campo, i, de, ate, valor, rotulo, retan
 
 const REV_ROTULOS = { enunciado: 'Enunciado', opcao: 'Alternativa', linha: 'Texto-base' };
 
+// Quem faz a leitura final da prova montada.
+//
+// É mais gente do que quem edita o item pela tela de itens, e de propósito. O
+// caderno é feito de itens APROVADOS, e item aprovado só a coordenação geral
+// altera (migração 0012) — então, na prática, a revisão na página nascia só
+// para ela. A coordenação de área abria o caderno, via o problema na página e
+// não tinha o que fazer com ele, que é o contrário de ler a prova junto.
+//
+// Agora quem coordena a área do item também corrige. O que muda é o que
+// ACONTECE depois: o ajuste dela deixa o item pendente da última leitura da
+// coordenação pedagógica (`aguardaLeituraFinal`, posto pelo banco na migração
+// 0017). O item não sai da prova nem volta de status — sair renumeraria a prova
+// inteira por causa de uma vírgula, no meio da leitura final.
+const coordenaAArea = item => ehCoordArea() && !!S.perfil.area &&
+  areaDoComponente(item?.componente) === S.perfil.area;
+const podeRevisarNoCaderno = item => !!item && (ehCoord() || coordenaAArea(item) || podeEditarItem(item));
+
 // De um pedaço impresso para o registro que o produziu.
 function alvoDaRevisao(el) {
   const campo = el.dataset.rev;
@@ -3571,14 +3719,21 @@ function alvoDaRevisao(el) {
     const item = S.itens.find(i => i.id === dono.dataset.revItem);
     if (!item) return null;
     const i = campo === 'opcao' ? Number(el.dataset.revI) : null;
+    // A coordenação de área que não fez a última leitura é avisada do que o
+    // ajuste dela provoca — antes de fazê-lo, não depois.
+    const marca = !ehCoord() && coordenaAArea(item) && item.status === 'aprovado';
     return {
       tipo: 'item', id: item.id, campo, i,
       valor: campo === 'opcao' ? (item.opcoes?.[i] || '') : (item.enunciado || ''),
       rotulo: campo === 'opcao' ? `Alternativa ${'ABCD'[i]}` : REV_ROTULOS[campo],
-      podeEditar: podeEditarItem(item),
+      podeEditar: podeRevisarNoCaderno(item),
+      pendura: marca,
+      dica: marca
+        ? 'o ajuste entra no item e volta como pendência para a última leitura da coordenação pedagógica'
+        : 'a correção entra no item e já vale para a impressão',
       porque: souEu(item)
-        ? 'Este item já foi aprovado: só a coordenação geral altera o conteúdo dele.'
-        : `Este item é de ${item.autor || 'outra pessoa'} e está ${STATUS_ITEM[item.status].rot.toLowerCase()} — quem pode corrigi-lo agora é a coordenação.`
+        ? 'Este item já foi aprovado: quem o altera agora é a coordenação pedagógica ou a coordenação da sua área.'
+        : `Este item é de ${item.autor || 'outra pessoa'}, do componente ${item.componente || '—'}, e está ${STATUS_ITEM[item.status].rot.toLowerCase()} — quem pode corrigi-lo na leitura final é a coordenação pedagógica ou a coordenação da área dele.`
     };
   }
   const texto = S.textos.find(t => t.id === dono.dataset.revTexto);
@@ -3660,35 +3815,30 @@ ACOES['rev-salvar'] = async () => {
 
   if (a.tipo === 'item') {
     const item = S.itens.find(i => i.id === a.id);
-    if (!item || !podeEditarItem(item)) { toast('Este item não está mais aberto para edição.'); return; }
+    if (!item || !podeRevisarNoCaderno(item)) { toast('Este item não está mais aberto para edição.'); return; }
     if (a.campo === 'enunciado' && ricoVazio(valor)) { toast('O enunciado não pode ficar em branco.'); return; }
-    // Fechar sem ter mudado nada não vira gravação nem recado no fio: numa
-    // leitura final de 110 itens, abrir para conferir é o gesto mais comum.
+    // Fechar sem ter mudado nada não vira gravação nem pendência: numa leitura
+    // final de 110 itens, abrir para conferir é o gesto mais comum.
     if (valor === a.valor) { fecharRevisaoInline(); return; }
-    const antes = JSON.parse(JSON.stringify(item));
-    if (a.campo === 'opcao') { item.opcoes = item.opcoes || ['', '', '', '']; item.opcoes[a.i] = valor; }
-    else item.enunciado = valor;
-    // O fio da revisão é onde quem escreveu o item fica sabendo. Ajuste feito na
-    // leitura final da prova não pode chegar sem remetente.
-    item.comentarios = item.comentarios || [];
-    item.comentarios.push({
-      autor: S.perfil.nome,
-      papel: ehCoord() ? 'coordenação geral'
-        : ehCoordArea() ? `coord. de área (${S.perfil.area || ''})`
-        : `docente (${S.perfil.componente || ''})`,
-      quando: agora(),
-      texto: `Correção na leitura final do caderno — ${a.rotulo.toLowerCase()}: “${simples(valor).slice(0, 220)}”`
-    });
-    const erro = await PERS.itemAgora(item);
-    if (erro) {
-      Object.assign(item, antes);
-      save(S);
-      toast('⚠ O banco recusou a correção: ' + erro);
-      return;
+
+    // A gravação passa pela função do banco (migração 0017): é ela que alcança
+    // o item aprovado quando quem corrige coordena a área, e é ela que marca a
+    // pendência da última leitura. Sem nuvem não há função — e não há também
+    // ninguém a quem devolver a pendência.
+    if (modoNuvem) {
+      try {
+        const dados = await nuvem.ajustarNaLeituraFinal(a.id, a.campo, a.i, valor);
+        Object.assign(item, dados);
+      } catch (e) { toast('⚠ O banco recusou a correção: ' + (e?.message || e)); return; }
+    } else {
+      if (a.campo === 'opcao') { item.opcoes = item.opcoes || ['', '', '', '']; item.opcoes[a.i] = valor; }
+      else item.enunciado = valor;
     }
     fecharRevisaoInline();
     commit();
-    toast(`Item ${a.campo === 'opcao' ? 'com a alternativa corrigida' : 'corrigido'} — a impressão já sai assim.`);
+    toast(item.aguardaLeituraFinal
+      ? 'Corrigido. O item volta como pendência da última leitura da coordenação pedagógica.'
+      : `Item ${a.campo === 'opcao' ? 'com a alternativa corrigida' : 'corrigido'} — a impressão já sai assim.`);
     return;
   }
 
@@ -3748,6 +3898,10 @@ function telaCaderno() {
   // o documento, e a sua falta é avisada em vez de ficar em silêncio.
   const comRedacao = propostaEscrita(pAtiva.id);
   const temConteudo = pv.length > 0 || comRedacao;
+  // Ajustes da coordenação de área à espera da releitura — só quem faz a última
+  // leitura precisa vê-los anunciados.
+  const aguardando = ehCoord()
+    ? pv.filter(e => e.item.aguardaLeituraFinal).map(e => e.item) : [];
   $('#app').innerHTML = `
   <div class="quadro">
     <div class="miolo" style="padding-bottom:0">
@@ -3776,8 +3930,16 @@ function telaCaderno() {
         e estão aqui só para conferência — a numeração muda se algum for devolvido. <b>A impressão sai só com o aprovado.</b></p></div>` : ''}
       ${cadRevisando ? `<div class="cartao aviso rev-aviso" style="margin:12px 0 0"><p style="font-size:13px;margin:0">
         <b>Revisão na página:</b> clique num enunciado, numa alternativa ou num parágrafo de texto-base para corrigi-lo
-        aqui mesmo. A correção entra no <b>item</b> (ou no texto-base), fica registrada no fio da revisão dele e
-        <b>vale imediatamente para a impressão</b> — não há versão à parte a gerar.</p></div>` : ''}
+        aqui mesmo. A correção entra no <b>item</b> (ou no texto-base), fica registrada no histórico dele e
+        <b>vale imediatamente para a impressão</b> — não há versão à parte a gerar.${ehCoordArea()
+          ? ' Você corrige os itens da <b>sua área</b>; o que você ajustar volta como pendência para a última leitura da coordenação pedagógica.'
+          : ''}</p></div>` : ''}
+      ${aguardando.length ? `<div class="cartao aviso rev-pendente" style="margin:12px 0 0"><p style="font-size:13px;margin:0">
+        <b>${aguardando.length} ${aguardando.length === 1 ? 'item ajustado' : 'itens ajustados'}
+        pela coordenação de área</b> na leitura final ${aguardando.length === 1 ? 'espera' : 'esperam'} a sua releitura,
+        ${aguardando.length === 1 ? 'marcado' : 'marcados'} em roxo na página.
+        ${aguardando.length === 1 ? 'Ele já está' : 'Eles já estão'} na prova e ${aguardando.length === 1 ? 'sai' : 'saem'}
+        assim na impressão — abra ${aguardando.length === 1 ? 'o item' : 'os itens'} e confirme a leitura.</p></div>` : ''}
     </div>
     ${temConteudo ? `<div class="pas-previa${cadRevisando ? ' pas-revisando' : ''}">${htmlCaderno(pAtiva.id, cadVersao, true, emRevisao)}</div>`
       : '<div class="miolo"><div class="vazio">Nenhum item aprovado para esta versão ainda. Aprove itens na tela “Itens e revisão”.</div></div>'}

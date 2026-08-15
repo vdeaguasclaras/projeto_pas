@@ -157,6 +157,25 @@ entra no caderno, no cartão e na correção.**
 > caminho de pedir um ajuste a quem escreveu. O comentário é assinado com o
 > **seu nome e o seu papel**, do cadastro, e com a data e a hora.
 
+### “O que mudou neste item?”
+
+Todo item guarda o próprio **histórico de alterações**, logo acima da conversa
+da revisão. Cada linha diz **quem** mexeu, **em que papel**, **quando** e **em
+quais campos** — e o “como estava” abre o valor anterior de cada um.
+
+É o que responde a pergunta de quem revisa pela segunda vez: o item voltou
+ajustado, mas ajustado onde? Sem isso, a única saída era reler o item inteiro
+tentando lembrar como ele era.
+
+Três coisas que vale saber:
+
+- o registro é feito pelo **próprio banco**, a cada gravação — não depende de
+  ninguém escrever nada, e não se falsifica;
+- vale para **toda forma de alterar o item**: o diálogo, a revisão na página do
+  caderno, a criação da versão adaptada;
+- guarda as **doze alterações mais recentes**, e só de conteúdo — reordenar o
+  item dentro da prova não entra, senão o que interessa se perderia no meio.
+
 Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação da
 área daquele componente** decide a primeira etapa; a **coordenação geral** decide
 a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
@@ -346,10 +365,33 @@ Ao clicar em **Salvar a correção**:
 - fica um registro no **fio da revisão do item**, com quem corrigiu, quando e o
   quê — quem escreveu o item vê o recado da leitura final ao abri-lo.
 
-Valem as regras de sempre: item aprovado só a **coordenação geral** altera;
-item na etapa de área, a **coordenação daquela área**; item de outra pessoa
-ainda em elaboração abre com um aviso dizendo por que não dá. Clicar num trecho
-que você não pode editar explica o motivo em vez de simplesmente não responder.
+#### Quem lê a prova no fim, e o que acontece com o ajuste
+
+A leitura final é **a quatro mãos**:
+
+| Quem | O que pode corrigir na página | O que acontece ao salvar |
+|---|---|---|
+| **Coordenação pedagógica** | qualquer item da prova, e os textos-base | vale de imediato; nada fica pendente |
+| **Coordenação de área** | os itens **da sua área**, e os textos-base | vale de imediato **e** o item volta como pendência da última leitura |
+
+Ou seja: a coordenação de área não precisa mais pedir a alguém para arrumar o
+que ela enxergou na página — ela arruma. Mas o ajuste dela **não passa direto**:
+o item fica marcado como *aguardando a última leitura*, e a coordenação
+pedagógica vê essa lista na fila do Painel e no alto do Caderno, com os itens
+marcados **em roxo** na própria página.
+
+O item **continua na prova** e sai na impressão já com o ajuste — ele não volta
+de etapa nem sai do caderno. Isso é proposital: tirar um item da montagem no
+meio da leitura final renumeraria a prova inteira por causa de uma vírgula. A
+releitura é a confirmação de que pode ir ao papel assim, e se dá pelo botão
+**“Dar a leitura por concluída”**, dentro do item.
+
+Se quem ajusta é a própria coordenação pedagógica, não fica pendência nenhuma —
+ela **é** a última leitura. E um ajuste dela num item que estava pendente já
+resolve a pendência.
+
+Clicar num trecho que você não pode editar explica o motivo em vez de
+simplesmente não responder.
 
 Parágrafo de texto-base em **prosa** abre com as linhas guardadas separadas —
 elas são as linhas que os itens citam em “linhas de referência”, e por isso não
