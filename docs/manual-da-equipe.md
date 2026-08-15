@@ -110,9 +110,27 @@ O botão **👁 Como sai na prova**, no rodapé do texto, mostra o bloco já
 diagramado — mesma coluna, mesmo corpo de letra e mesmo comando do caderno
 impresso —, com os itens aprovados daquele texto embaixo.
 
-### Parágrafos do texto-base
+### Prosa, verso ou linhas numeradas
 
-No corpo do texto, em **prosa**:
+Ao lado do rótulo **Corpo do texto** há três botões, e **eles decidem como o
+texto sai impresso**:
+
+| Formato | O que o caderno faz | Para quê |
+|---|---|---|
+| **Prosa** | junta as linhas num parágrafo corrido e justificado | reportagem, crônica, ensaio |
+| **Verso** | **mantém cada quebra de linha** | poema, canção, letra |
+| **Linhas numeradas** | cada linha ganha um número | quando o item cita “linhas 5-7” |
+
+> **Poema colado vira prosa se você não avisar.** É o padrão do sistema, e é o
+> certo para a maior parte dos textos — mas emenda os versos num parágrafo só.
+> Quando o corpo tem cara de poema, o quadro **“como sai no caderno”** oferece
+> o botão **Manter as quebras de linha**: um clique põe o texto em verso e
+> arruma as linhas de uma vez.
+
+A escolha é de **quem escreve o texto**, docente ou coordenação — inclusive na
+sugestão que o docente manda para aprovação.
+
+Em **prosa**:
 
 - **Enter** abre um **parágrafo novo**;
 - **Shift+Enter** quebra a linha **dentro do mesmo parágrafo**;
@@ -120,21 +138,36 @@ No corpo do texto, em **prosa**:
 
 Logo abaixo do campo, o quadro **“como sai no caderno”** mostra a divisão que
 vai ser impressa, com cada parágrafo numerado (¶1, ¶2, ¶3) e a contagem no pé.
-Se o texto que você colou aparecer como um parágrafo só, é ali que se vê — e o
-Enter no lugar certo resolve.
 
-Em **verso** (poema, canção) e em **linhas numeradas**, cada linha continua
-sendo uma linha, e o Enter só quebra a linha.
+Em **verso** e em **linhas numeradas**, o mesmo quadro marca cada quebra com um
+**↵** no fim da linha — é a conferência de que o caderno vai respeitar o poema
+como ele foi escrito.
+
+Trocar de formato depois de escrever é seguro: ao passar de prosa para verso, o
+sistema **tira as linhas em branco que o Enter da prosa criou**, para o poema
+não sair com um vão entre cada dois versos.
 
 **4 · Itens e revisão** — a lista de todos os itens e o fluxo de aprovação:
 rascunho → coordenação de área → coordenação geral → aprovado. Quem revisa
 comenta dentro do item; quem escreveu responde ali mesmo. **Só item aprovado
 entra no caderno, no cartão e na correção.**
 
+> **A conversa da revisão é de todo mundo.** Qualquer pessoa da equipe pode
+> escrever no fio de qualquer item, inclusive num que não pode editar — é o
+> caminho de pedir um ajuste a quem escreveu. O comentário é assinado com o
+> **seu nome e o seu papel**, do cadastro, e com a data e a hora.
+
 Cada etapa tem o seu dono: quem escreveu envia para revisão; a **coordenação da
 área daquele componente** decide a primeira etapa; a **coordenação geral** decide
 a última. Quem coordena área tem o filtro “só a minha área” para ver o que está
 na sua mão.
+
+> **Coordenação de área: a sua área fica no Painel.** Logo abaixo da fila, um
+> quadro roxo mostra a **área inteira na prova que está na tela** — cada
+> componente, quem escreve nele, quantos itens existem, quantos estão aprovados,
+> quantos esperam a sua decisão e quantos foram devolvidos —, além dos
+> componentes que ainda não entregaram nada. O botão leva à lista já filtrada
+> pela sua área.
 
 > **A sua fila fica no Painel.** Quem revisa abre o sistema e vê, no alto,
 > quantos itens e quantas sugestões de texto estão esperando a **sua** decisão —
@@ -201,8 +234,38 @@ de ferramentas**. Passe o mouse em cada botão para ver o que ele faz.
 O primeiro grupo é **ênfase**: negrito (Ctrl+B), itálico (Ctrl+I), sublinhado
 (Ctrl+U), sobrescrito (m², 3ª) e subscrito (H₂O, CO₂).
 
-O segundo grupo é **notação matemática**. A fórmula se escreve entre sinais de
-dólar, na notação do LaTeX, e o sistema a desenha:
+O segundo grupo é o **tamanho da letra** — quatro **A** desenhados no tamanho
+que aplicam. Selecione o trecho e clique: o **A** menor diminui, o segundo volta
+ao normal (é ele que **desfaz**), e os dois maiores aumentam. Serve para o que os
+professores pediram: **número que sai pequeno demais no papel** — expoente,
+índice, o algarismo dentro de uma fórmula química. O tamanho vale na tela, na
+prévia e no caderno impresso.
+
+#### O botão ƒ(x) Fórmula
+
+O botão rosa **ƒ(x) Fórmula** abre uma bancada logo abaixo da barra — é por ela
+que se monta fórmula sem escrever LaTeX de cabeça:
+
+- em cima, a fórmula **desenhada**, como vai sair no papel;
+- embaixo, o **código**, que você pode digitar direto;
+- as **abas** (Básico, Relações, Potências e raízes, Cálculo, Conjuntos e lógica,
+  Geometria, Grego, Química, Estruturas) com os símbolos de cada assunto —
+  clicar encaixa o símbolo onde está o cursor;
+- **Fórmulas prontas**: Bhaskara, velocidade média, energia cinética,
+  concentração, equilíbrio químico, área do círculo e outras, inteiras;
+- **na linha** ou **em destaque** (centralizada na própria linha);
+- **Inserir** — ou **Substituir**, quando o cursor estava em cima de uma fórmula
+  já escrita: nesse caso a bancada abre com ela dentro, e você corrige em vez de
+  apagar e refazer.
+
+Se o código estiver errado, a bancada diz **qual é o erro** e o botão de inserir
+fica travado — a fórmula quebrada não chega ao item. Chave `{` que não fechou é
+a causa mais comum.
+
+Atalho: **Ctrl+M** com o cursor no campo abre a mesma bancada.
+
+Quem preferir escrever à mão continua podendo: a fórmula se escreve entre sinais
+de dólar, na notação do LaTeX, e o sistema a desenha:
 
 | Você escreve | Sai impresso |
 |---|---|
@@ -261,10 +324,39 @@ que é do tipo C”. Você só escreve a abertura da frase, no cadastro do texto
 (campo “Abertura do comando no caderno”). Os itens saem agrupados por tipo
 dentro de cada texto, como no PAS.
 
-Ainda no cadastro do texto-base, o campo **“Formato no caderno”** define como o
-texto é impresso: *prosa* (reflui e é justificado — o padrão), *verso* (mantém
-as quebras, para canções e poemas) ou *linhas numeradas* (só quando algum item
-precisa citar linhas; o PAS não numera).
+Ainda no cadastro do texto-base, os botões **Prosa / Verso / Linhas numeradas**
+definem como o texto é impresso (ver *Prosa, verso ou linhas numeradas*, acima).
+
+### Revisar na página, na leitura final
+
+Muita coisa só aparece quando a prova é lida inteira, montada. Para isso existe
+o botão **✎ Revisar na página**, no alto do Caderno.
+
+Com ele ligado a prova continua exatamente como está — é a mesma página, na
+mesma diagramação —, mas **cada enunciado, cada alternativa e cada parágrafo de
+texto-base responde ao clique**. Passe o mouse e o trecho se acende; clique e
+abre, ali mesmo, um editor com o texto, a barra de ênfase, o tamanho de letra e
+o **ƒ(x) Fórmula**.
+
+Ao clicar em **Salvar a correção**:
+
+- **quem muda é o item** (ou o texto-base) — não uma cópia do caderno;
+- a alteração **já vale para a impressão**: o caderno é montado do registro, e
+  não há versão à parte a gerar;
+- fica um registro no **fio da revisão do item**, com quem corrigiu, quando e o
+  quê — quem escreveu o item vê o recado da leitura final ao abri-lo.
+
+Valem as regras de sempre: item aprovado só a **coordenação geral** altera;
+item na etapa de área, a **coordenação daquela área**; item de outra pessoa
+ainda em elaboração abre com um aviso dizendo por que não dá. Clicar num trecho
+que você não pode editar explica o motivo em vez de simplesmente não responder.
+
+Parágrafo de texto-base em **prosa** abre com as linhas guardadas separadas —
+elas são as linhas que os itens citam em “linhas de referência”, e por isso não
+são emendadas.
+
+Fechar sem salvar não muda nada, e conferir sem alterar não gera recado nenhum
+no fio.
 
 A coordenação ajusta a **capa** pelo botão “Capa e instruções”: o endereço de
 uma imagem temática e o texto das instruções ao estudante.
@@ -357,13 +449,15 @@ O painel mostra cada versão com o seu número (“5 de 100 itens aprovados”),
 conferência avisa quando a adaptada já tem item aprovado mas ainda não tem
 tamanho.
 
-## Escrever com ênfase e fórmula
+## Escrever com ênfase, tamanho e fórmula
 
 O **enunciado, as opções e a resposta esperada** do item, e também o **corpo do
-texto-base**, aceitam negrito, itálico, sobrescrito, subscrito e **notação
-matemática**. A fórmula vai entre `$…$` na notação do LaTeX — `$\frac{1}{2}$`,
-`$x^2$`, `$\sqrt{3}$`, `$30^\circ$` — e a **prévia** logo abaixo do campo mostra
-como sai impresso.
+texto-base**, aceitam negrito, itálico, sobrescrito, subscrito, **tamanho de
+letra** e **notação matemática**. Para a fórmula, o caminho mais curto é o botão
+**ƒ(x) Fórmula**, que monta e confere antes de inserir; escrever à mão também
+funciona, entre `$…$` na notação do LaTeX — `$\frac{1}{2}$`, `$x^2$`,
+`$\sqrt{3}$`, `$30^\circ$` — e a **prévia** logo abaixo do campo mostra como sai
+impresso.
 
 Valor em real não vira fórmula: “R$ 50,00 e R$ 30,00” atravessa intacto.
 

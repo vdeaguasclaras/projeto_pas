@@ -40,6 +40,17 @@ o menu mostra só as do papel de quem entrou.
   deixou oito arquivos órfãos no bucket. Antes de remontar, chame
   `recolherCamposDoTexto()` / `mexerNoItem()`: o `change` de um `<input>` só
   dispara ao perder o foco, e não dá para contar com essa ordem.
+- **Antes de gravar, recolha a tela.** Vale para `persistirRascunho()` como já
+  valia para `recolherCamposDoTexto()`: `<input>` avisa no `change`, que só
+  acontece ao perder o foco, e não dá para contar com essa ordem. Habilidade,
+  linhas de referência, componente e gabarito do tipo B vivem em `<input>`
+  comum — sem o recolhimento, quem digitava e clicava direto em “Salvar” podia
+  gravar o valor antigo.
+- **`coordenacao_area` é dois papéis na mesma pessoa**: ela dá aula E coordena.
+  `nomePerfil()` mostra área e componente, o Painel traz `painelDaArea()` (a
+  área) acima de `painelDoDocente()` (a entrega dela), e qualquer coisa que
+  pergunte só `ehCoord()` está deixando essa pessoa de fora — verifique se o
+  certo não é `ehQualquerCoord()` ou `revisaArea()`.
 - A **pastilha do menu é a posição na lista daquela pessoa**, não um número
   fixo — quando era fixo, o docente lia “1, 3, 4…” e procurava a tela 2, que é
   da coordenação. O manual (`docs/manual-da-equipe.md`) chama as telas pelo
@@ -56,6 +67,22 @@ Supabase, projeto `pas-marista` (ref `wtlmkyeukkvviqqrgiei`).
   numerado, **além de** aplicada no projeto. Isso já se perdeu uma vez (a 0008
   existia no banco e não na pasta): ao mexer no esquema, confira
   `list_migrations` contra o conteúdo de `supabase/migrations/`.
+- **O cliente grava tudo por `upsert`, e o Postgres julga o upsert como
+  INSERT.** `nuvem.gravarLinha()` manda `insert ... on conflict do update`, e o
+  banco avalia o `with check` da política de INSERT — e dispara os gatilhos
+  `before insert` — sobre a linha proposta, **antes** de descobrir que ela já
+  existe. Ou seja: toda edição chega vestida de criação. Foi assim que a
+  coordenação de área ficou semanas sem conseguir aprovar item nenhum (151
+  respostas 403 em 24h) enquanto a tela dizia “Item salvo”, e assim que o
+  gatilho de fluxo passou a ler cada gravação como transição de status,
+  travando o docente que ia corrigir o próprio item devolvido. As migrações
+  0014 e 0015 consertam as duas pontas. **Ao escrever política de INSERT ou
+  gatilho `before insert` nestas tabelas, lembre que “inserir” aqui quase sempre
+  quer dizer “editar”** — use `item_existe()` / `texto_existe()` para separar os
+  dois casos.
+- Ao mexer em RLS, confira o efeito com o papel de verdade:
+  `begin; set local role authenticated; set local request.jwt.claims = '{"email":"…"}'; …; rollback;`
+  E confira os dois lados — o que passou a funcionar **e** o que continua barrado.
 - A chave em `js/config-supabase.js` é a **publicável** — pode ficar no
   navegador. A chave de serviço só existe dentro da Edge Function `equipe`;
   nunca a coloque no código do cliente.
@@ -81,6 +108,30 @@ Estas três já falharam uma vez. Valem como regra.
 - **A Edge Function não é publicada pela Vercel.** Ela vive no Supabase, e
   mesclar o PR não a atualiza — é preciso publicá-la à parte
   (`deploy_edge_function`). O CORS dela é restrito aos endereços do sistema.
+- **`js/limpar.js` aceita um atributo, e ele tem vocabulário fechado.** É
+  `class`, só em `<span>`, e só com um dos nomes de `CLASSES` (os tamanhos de
+  letra). Um nome a mais, um nome desconhecido ou um nome de classe do próprio
+  menu desmancha o `<span>` e deixa o texto. Não alargue isso para `style`, nem
+  para `class` livre: a lista curta é o que sustenta a decisão do `js/rico.js`
+  de guardar fórmula como código-fonte em vez de HTML.
+
+- **Comentar não é editar.** O fio da revisão é aberto a toda a equipe, e por
+  isso o comentário NÃO passa pela gravação do item: ele vai pela função
+  `comentar_item` (migração 0016), que só sabe acrescentar ao fio e assina com o
+  nome e o papel lidos de `equipe`. Não tente resolver isso alargando a política
+  de UPDATE — quem barra o resto ali é o `using`, que só enxerga a linha antiga,
+  e afrouxá-lo reabre dois buracos que a 0012 fechou.
+
+## Gravação: a tela não pode afirmar o que o banco negou
+
+`PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável
+para o que não tem dono na tela (ordem dos itens, elenco), e **é veneno para o
+que a pessoa acabou de escrever**: o diálogo fechava dizendo “Item salvo”, o erro
+chegava segundos depois sem dizer de qual item falava, e quem editou só descobria
+no dia seguinte. Quem grava conteúdo de item ou de texto-base usa
+`salvarItem()` / `PERS.itemAgora()` / `PERS.textoAgora()`: espera a resposta,
+desfaz o estado local se o banco recusar, mantém o diálogo aberto com o trabalho
+na tela e escreve o motivo.
 
 ## Rodar e testar
 

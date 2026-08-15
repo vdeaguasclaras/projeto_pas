@@ -7,10 +7,34 @@
 // conta grava HTML que roda no navegador de todas as outras.
 //
 // A lista abaixo é deliberadamente curta — só ênfase tipográfica, nada que
-// carregue recurso externo, execute código ou posicione elemento. Atributo
-// nenhum passa, em tag nenhuma.
+// carregue recurso externo, execute código ou posicione elemento.
+//
+// ATRIBUTO: um só, e com vocabulário fechado.
+//
+// Até aqui a regra era “atributo nenhum passa, em tag nenhuma”, e ela vale
+// inteira para as tags de ênfase. O tamanho de fonte pedido pelos professores
+// (número de expoente saindo pequeno demais no papel) precisava de alguma
+// marca, e as duas saídas óbvias eram ruins: `style` é a porta por onde se
+// injeta, e `<font size>` é tag obsoleta que ninguém mais estiliza direito.
+//
+// Então passa `class` — e só em <span>, e só com um destes quatro nomes, que
+// são os nomes de classes do próprio CSS do sistema. Não é “aceitar class”: é
+// aceitar quatro palavras conhecidas. Qualquer outra coisa dentro do atributo
+// (uma a mais, uma diferente, um nome de classe do menu) desmancha o <span> e
+// deixa só o texto, como acontece com qualquer tag fora da lista.
+const PERMITIDAS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'SUB', 'SUP', 'BR', 'SPAN']);
 
-const PERMITIDAS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'SUB', 'SUP', 'BR']);
+// O vocabulário fechado de `class`. Ver `.tam-*` em css/estilo.css — os mesmos
+// nomes valem na tela, na prévia e no caderno impresso.
+const CLASSES = new Set(['tam-pp', 'tam-p', 'tam-g', 'tam-gg']);
+
+// <span> não é ênfase: sozinho ele não quer dizer nada, e o Chrome cria um a
+// cada colagem e a cada comando de formatação. Ele só sobrevive carregando uma
+// das classes de tamanho — e nada além dela.
+function classePermitida(el) {
+  const nomes = (el.getAttribute('class') || '').trim().split(/\s+/).filter(Boolean);
+  return nomes.length === 1 && CLASSES.has(nomes[0]) ? nomes[0] : null;
+}
 
 // Nestas o conteúdo é código, não texto: desembrulhar despejaria `alert(1)` no
 // meio da instrução impressa. Saem inteiras, com filhos e tudo.
@@ -23,10 +47,15 @@ function podar(no) {
   for (const filho of [...no.children]) {
     if (DESCARTADAS.has(filho.tagName)) { filho.remove(); continue; }
     podar(filho);
-    if (PERMITIDAS.has(filho.tagName)) {
-      for (const attr of [...filho.attributes]) filho.removeAttribute(attr.name);
-    } else {
-      filho.replaceWith(...filho.childNodes);
+    if (!PERMITIDAS.has(filho.tagName)) { filho.replaceWith(...filho.childNodes); continue; }
+    // O <span> só fica se trouxer uma das classes de tamanho; a classe é lida
+    // ANTES de os atributos caírem e reposta depois, para que nem ela escape do
+    // caminho comum (tudo sai, e só isto volta).
+    const classe = filho.tagName === 'SPAN' ? classePermitida(filho) : null;
+    for (const attr of [...filho.attributes]) filho.removeAttribute(attr.name);
+    if (filho.tagName === 'SPAN') {
+      if (!classe) { filho.replaceWith(...filho.childNodes); continue; }
+      filho.setAttribute('class', classe);
     }
   }
 }
@@ -52,4 +81,4 @@ function limpar(html) {
   return limparArvore(html)?.innerHTML ?? '';
 }
 
-export { limpar, limparArvore, PERMITIDAS };
+export { limpar, limparArvore, PERMITIDAS, CLASSES };

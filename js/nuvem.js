@@ -75,6 +75,16 @@ async function gravarMembro(m) {
 async function marcarSenhaTrocada() { checar(await sb.rpc('marcar_senha_trocada')); }
 async function marcarTutorialVisto() { checar(await sb.rpc('marcar_tutorial_visto')); }
 
+// Comentar no fio da revisão de um item, pelo mesmo motivo das duas acima: a
+// política de escrita de `itens` responde por quem pode mexer no CONTEÚDO, e
+// comentar não é mexer no conteúdo. A função do banco (migração 0016) só sabe
+// acrescentar ao fio, e assina o comentário com o nome e o papel que estão em
+// `equipe` — não com o que o navegador afirmar.
+async function comentarItem(itemId, texto) {
+  const { data } = checar(await sb.rpc('comentar_item', { alvo: itemId, texto }));
+  return data;   // { comentario, comentarios }
+}
+
 // Criação/edição de contas passa pela Edge Function `equipe`, única a
 // conhecer a chave de serviço. O navegador só envia o próprio JWT.
 async function chamarEquipe(corpo) {
@@ -260,5 +270,5 @@ export const nuvem = {
   enviarImagem, assinarImagens, apagarImagem,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
-  marcarSenhaTrocada, marcarTutorialVisto
+  marcarSenhaTrocada, marcarTutorialVisto, comentarItem
 };

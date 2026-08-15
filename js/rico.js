@@ -37,7 +37,7 @@
 // E o KaTeX é chamado com as opções de segurança dele ligadas — ver
 // `OPCOES_KATEX` abaixo.
 
-import { limpar, limparArvore } from './limpar.js';
+import { limpar, limparArvore, CLASSES as CLASSES_TAMANHO } from './limpar.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -151,6 +151,12 @@ function acharFechamento(txt, desde) {
 }
 
 // Quebra o texto em pedaços de texto comum e pedaços de fórmula.
+//
+// Cada pedaço de fórmula carrega `ini` e `fim` — os índices, no texto original,
+// do `$` que abre e do caractere seguinte ao que fecha. É por eles que o editor
+// de fórmula sabe que o cursor está DENTRO de uma fórmula já escrita e a abre
+// para edição em vez de encaixar outra ao lado. Sem isso, corrigir um expoente
+// exigia apagar a fórmula inteira na mão.
 function fatiar(txt) {
   const partes = [];
   let solto = '';
@@ -168,7 +174,7 @@ function fatiar(txt) {
       const codigo = fim < 0 ? '' : txt.slice(i + 2, fim);
       if (fim > 0 && codigo.trim() && !codigo.includes('$')) {
         despejar();
-        partes.push({ tipo: 'bloco', valor: codigo.trim() });
+        partes.push({ tipo: 'bloco', valor: codigo.trim(), ini: i, fim: fim + 2 });
         i = fim + 2;
         continue;
       }
@@ -180,11 +186,36 @@ function fatiar(txt) {
     const fim = acharFechamento(txt, i + 1);
     if (fim < 0) { solto += c; i++; continue; }
     despejar();
-    partes.push({ tipo: 'linha', valor: txt.slice(i + 1, fim) });
+    partes.push({ tipo: 'linha', valor: txt.slice(i + 1, fim), ini: i, fim: fim + 1 });
     i = fim + 1;
   }
   despejar();
   return partes;
+}
+
+// A fórmula sob o cursor, se houver. `pos` é a posição do cursor dentro de
+// `txt`. Vale também quando o cursor está encostado no `$` que fecha, que é
+// onde ele fica logo depois de a pessoa terminar de digitar a fórmula.
+function formulaEm(txt, pos) {
+  return fatiar(String(txt ?? '')).find(p =>
+    p.tipo !== 'texto' && pos >= p.ini && pos <= p.fim) || null;
+}
+
+// O KaTeX aceita este código? Devolve null quando sim e a mensagem do erro
+// quando não. É o que o editor de fórmula mostra em vermelho enquanto se
+// digita — “algumas saem com erros” era, quase sempre, chave que não fechou ou
+// comando escrito com um caractere a menos, e nada dizia isso na hora.
+function erroDaFormula(codigo) {
+  if (!katex) return null;                       // sem KaTeX não há o que aferir
+  if (!String(codigo).trim()) return 'A fórmula está em branco.';
+  try {
+    katex.renderToString(String(codigo), { ...OPCOES_KATEX, throwOnError: true });
+    return null;
+  } catch (e) {
+    return String(e?.message || e)
+      .replace(/^KaTeX parse error:\s*/, '')
+      .replace(/\bat position (\d+)/, 'na posição $1');
+  }
 }
 
 const temFormula = txt => String(txt ?? '').includes('$') &&
@@ -282,6 +313,87 @@ const SIMBOLOS = [
     partes: ['$$', 'x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}', '$$'] }
 ];
 
+/* ---------------- a paleta do editor de fórmula ---------------- */
+// Os atalhos da barra (SIMBOLOS, acima) resolvem a fração e o expoente, que são
+// o dia a dia. O que faltava era o resto: somatório, integral, limite, matriz,
+// sistema, conjunto numérico, equação química com seta de equilíbrio — e um
+// lugar onde a fórmula pudesse ser MONTADA e CONFERIDA antes de entrar no
+// enunciado. Era daí que vinham as fórmulas com erro: escrever LaTeX às cegas
+// no meio da frase e só descobrir o problema na prévia do caderno.
+//
+// Cada entrada é [rótulo, código]. O código entra no campo do editor, na
+// posição do cursor; quem monta vê o resultado desenhado embaixo, na hora.
+const PALETA_MAT = [
+  { nome: 'Básico', itens: [
+    ['a/b', '\\frac{a}{b}'], ['x²', 'x^{2}'], ['xₙ', 'x_{1}'], ['√', '\\sqrt{x}'],
+    ['ⁿ√', '\\sqrt[3]{x}'], ['±', '\\pm'], ['∓', '\\mp'], ['×', '\\times'],
+    ['÷', '\\div'], ['·', '\\cdot'], ['%', '\\%'], ['…', '\\dots']
+  ] },
+  { nome: 'Relações', itens: [
+    ['≠', '\\neq'], ['≈', '\\approx'], ['≡', '\\equiv'], ['≤', '\\le'], ['≥', '\\ge'],
+    ['≪', '\\ll'], ['≫', '\\gg'], ['∝', '\\propto'], ['∼', '\\sim'], ['≅', '\\cong']
+  ] },
+  { nome: 'Potências e raízes', itens: [
+    ['10ⁿ', '10^{3}'], ['e^x', 'e^{x}'], ['aⁿ/ᵐ', 'a^{n/m}'], ['√(a+b)', '\\sqrt{a+b}'],
+    ['log', '\\log_{10} x'], ['ln', '\\ln x'], ['|x|', '\\left| x \\right|'],
+    ['(  )', '\\left( x \\right)'], ['[  ]', '\\left[ x \\right]']
+  ] },
+  { nome: 'Cálculo', itens: [
+    ['∑', '\\sum_{i=1}^{n}'], ['∏', '\\prod_{i=1}^{n}'], ['∫', '\\int_{a}^{b} f(x)\\,dx'],
+    ['lim', '\\lim_{x \\to 0}'], ['dy/dx', '\\frac{dy}{dx}'], ['∂', '\\partial'],
+    ['∞', '\\infty'], ["ƒ'", "f'(x)"], ['Δ', '\\Delta']
+  ] },
+  { nome: 'Conjuntos e lógica', itens: [
+    ['∈', '\\in'], ['∉', '\\notin'], ['⊂', '\\subset'], ['⊆', '\\subseteq'],
+    ['∪', '\\cup'], ['∩', '\\cap'], ['∅', '\\emptyset'], ['ℕ', '\\mathbb{N}'],
+    ['ℤ', '\\mathbb{Z}'], ['ℚ', '\\mathbb{Q}'], ['ℝ', '\\mathbb{R}'],
+    ['∀', '\\forall'], ['∃', '\\exists'], ['¬', '\\neg']
+  ] },
+  { nome: 'Geometria', itens: [
+    ['°', '^\\circ'], ['∠', '\\angle'], ['△', '\\triangle ABC'], ['∥', '\\parallel'],
+    ['⊥', '\\perp'], ['π', '\\pi'], ['→v', '\\vec{v}'], ['AB', '\\overline{AB}'],
+    ['sen', '\\operatorname{sen}\\theta'], ['cos', '\\cos\\theta'], ['tg', '\\operatorname{tg}\\theta']
+  ] },
+  { nome: 'Grego', itens: [
+    ['α', '\\alpha'], ['β', '\\beta'], ['γ', '\\gamma'], ['δ', '\\delta'], ['ε', '\\varepsilon'],
+    ['θ', '\\theta'], ['λ', '\\lambda'], ['μ', '\\mu'], ['ρ', '\\rho'], ['σ', '\\sigma'],
+    ['φ', '\\varphi'], ['ω', '\\omega'], ['Δ', '\\Delta'], ['Σ', '\\Sigma'], ['Ω', '\\Omega']
+  ] },
+  { nome: 'Química', itens: [
+    ['H₂O', '\\mathrm{H_2O}'], ['CO₂', '\\mathrm{CO_2}'], ['Na⁺', '\\mathrm{Na^{+}}'],
+    ['SO₄²⁻', '\\mathrm{SO_4^{2-}}'], ['⇌', '\\rightleftharpoons'], ['→', '\\to'],
+    ['↑', '\\uparrow'], ['↓', '\\downarrow'], ['mol/L', '\\mathrm{mol/L}'],
+    ['ΔH', '\\Delta H'], ['x·10ⁿ', '2{,}5 \\times 10^{-3}']
+  ] },
+  { nome: 'Estruturas', itens: [
+    ['matriz', '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}'],
+    ['determinante', '\\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix}'],
+    ['sistema', '\\begin{cases} x + y = 3 \\\\ x - y = 1 \\end{cases}'],
+    ['fração dupla', '\\frac{\\frac{a}{b}}{c}'],
+    ['texto dentro', '\\text{, em metros}'],
+    ['unidade', '\\,\\mathrm{m/s^2}'],
+    ['espaço', '\\quad'],
+    ['sobrescrito e índice', 'x_{1}^{2}']
+  ] }
+];
+
+// Modelos prontos — a fórmula inteira, não o símbolo. É o atalho de quem sabe
+// qual conta quer e não quer montá-la peça por peça.
+const MODELOS_MAT = [
+  ['Bhaskara',        'x = \\frac{-b \\pm \\sqrt{b^{2}-4ac}}{2a}'],
+  ['Equação da reta', 'y = ax + b'],
+  ['Regra de três',   '\\frac{a}{b} = \\frac{c}{d}'],
+  ['Porcentagem',     'p = \\frac{parte}{todo} \\times 100\\%'],
+  ['Juros compostos', 'M = C\\left(1 + i\\right)^{t}'],
+  ['Velocidade média', 'v_{m} = \\frac{\\Delta s}{\\Delta t}'],
+  ['2ª lei de Newton', '\\vec{F} = m\\,\\vec{a}'],
+  ['Energia cinética', 'E_{c} = \\frac{m v^{2}}{2}'],
+  ['Concentração',    'C = \\frac{n}{V}'],
+  ['Equilíbrio químico', '\\mathrm{N_2} + 3\\,\\mathrm{H_2} \\rightleftharpoons 2\\,\\mathrm{NH_3}'],
+  ['Probabilidade',   'P(A) = \\frac{casos\\ favor\\acute{a}veis}{casos\\ poss\\acute{i}veis}'],
+  ['Área do círculo', 'A = \\pi r^{2}']
+];
+
 
 // A área editável e a prévia. `campo` e `i` voltam no aviso de mudança para
 // quem chamou saber o que atualizar.
@@ -313,6 +425,9 @@ function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '', soLeit
   const enfases = ENFASES.map(e =>
     `<button type="button" class="rico-btn" data-rico-cmd="${e.cmd}"
       title="${esc(e.nome)}" aria-label="${esc(e.nome)}" style="${e.estilo}">${e.rot}</button>`).join('');
+  const tamanhos = TAMANHOS.map((t, n) =>
+    `<button type="button" class="rico-btn rico-tam" data-rico-tamanho="${n}"
+      title="${esc(t.nome)}" aria-label="Tamanho: ${esc(t.nome)}" style="${t.estilo}">${t.rot}</button>`).join('');
   const simbolos = SIMBOLOS.map((s, n) =>
     `<button type="button" class="rico-btn mat" data-rico-simbolo="${n}"
       title="${esc(s.nome)}" aria-label="${esc(s.nome)}">${s.rot}</button>`).join('');
@@ -324,10 +439,15 @@ function editorRico({ campo, i = '', valor = '', linhas = 3, rotulo = '', soLeit
   const mostraPrevia = previa !== null || temFormula(valor);
   return `
   <div class="rico">
-    <div class="rico-barra" role="toolbar" aria-label="Ênfase e notação matemática">
+    <div class="rico-barra" role="toolbar" aria-label="Ênfase, tamanho e notação matemática">
       <span class="rico-grupo">${enfases}</span>
+      <span class="rico-grupo rico-grupo-tam" title="Tamanho da letra">${tamanhos}</span>
+      <button type="button" class="rico-btn rico-formula" data-rico-formula="1"
+        title="Montar uma fórmula com paleta e conferência (Ctrl+M)"
+        aria-label="Editor de fórmula matemática"><b>ƒ(x)</b> Fórmula</button>
       <span class="rico-grupo">${simbolos}</span>${paragrafo}
     </div>
+    <div class="rico-mat" hidden></div>
     <div class="rico-area caixa${vazio(valor) ? ' vazia' : ''}" contenteditable="true"
       role="textbox" aria-multiline="true" spellcheck="true"
       ${rotulo ? `aria-label="${esc(rotulo)}"` : ''}
@@ -357,8 +477,65 @@ function valorDoEditor(area) {
   const copia = area.cloneNode(true);
   achatarBlocos(copia);
   quebrasEmBr(copia);
+  tamanhosEmSpan(copia);
   podarFimVazio(copia);
   return limpar(copia.innerHTML).trim();
+}
+
+/* ---------------- tamanho de fonte ---------------- */
+// O pedido: “alguns números aparecem bem pequenos”. Sai em expoente de
+// Matemática, em índice de Química e em número de linha citado no enunciado —
+// e no papel, a 10pt, um algarismo a 0,75em fica no limite do legível.
+//
+// O comando do navegador para isto é `fontSize`, e ele produz <font size="n">,
+// tag obsoleta que `js/limpar.js` não aceita — nem deveria. Então o <font> é
+// traduzido aqui, na hora de guardar, para <span class="tam-…">, que é o
+// vocabulário fechado que o higienizador conhece. O que vai ao banco é sempre
+// o span; o <font> não sobrevive a uma gravação.
+//
+// `3` e `4` são o tamanho normal: eles não viram classe nenhuma, e servem
+// justamente para DESFAZER — daí a regra do meio, que tira o tamanho de quem
+// envolve o trecho recém-marcado. Sem ela, marcar “maior” e depois “normal”
+// deixava o texto grande, porque o span de fora continuava lá.
+const TAM_DE_FONT = { 1: 'tam-pp', 2: 'tam-p', 3: '', 4: '', 5: 'tam-g', 6: 'tam-gg', 7: 'tam-gg' };
+
+// Os tamanhos oferecidos na barra, do menor para o maior. `font` é o número que
+// vai ao `execCommand`; `classe` é o que sobra no HTML guardado.
+const TAMANHOS = [
+  { font: 2, classe: 'tam-p',  rot: 'A', estilo: 'font-size:10px', nome: 'Menor' },
+  { font: 3, classe: '',       rot: 'A', estilo: 'font-size:13px', nome: 'Tamanho normal — desfaz o tamanho aplicado' },
+  { font: 5, classe: 'tam-g',  rot: 'A', estilo: 'font-size:16px', nome: 'Maior' },
+  { font: 6, classe: 'tam-gg', rot: 'A', estilo: 'font-size:19px', nome: 'Bem maior — para número que precisa ser lido de longe' }
+];
+
+const ehTamanho = el => el?.tagName === 'SPAN' &&
+  CLASSES_TAMANHO.has((el.getAttribute('class') || '').trim());
+
+function tamanhosEmSpan(raiz) {
+  const doc = raiz.ownerDocument;
+  for (const f of [...raiz.querySelectorAll('font')]) {
+    const s = doc.createElement('span');
+    s.setAttribute('data-tam', TAM_DE_FONT[Number(f.getAttribute('size'))] ?? '');
+    s.append(...f.childNodes);
+    f.replaceWith(s);
+  }
+  // O tamanho recém-aplicado manda sobre o trecho inteiro: quem o envolve e
+  // quem está dentro dele perdem o seu. Sem a segunda metade, marcar “maior” e
+  // depois “normal” não desfazia nada — o comando do navegador embrulha o span
+  // antigo em vez de desmanchá-lo, e o tamanho de dentro continuava valendo.
+  for (const s of [...raiz.querySelectorAll('span[data-tam]')]) {
+    for (let p = s.parentElement; p && p !== raiz; p = p.parentElement)
+      if (ehTamanho(p)) p.removeAttribute('class');
+    for (const d of s.querySelectorAll('span')) if (ehTamanho(d)) d.removeAttribute('class');
+  }
+  for (const s of [...raiz.querySelectorAll('span[data-tam]')]) {
+    const classe = s.getAttribute('data-tam');
+    s.removeAttribute('data-tam');
+    if (classe) s.setAttribute('class', classe);
+    else s.replaceWith(...s.childNodes);
+  }
+  // <span> sem classe não quer dizer nada — e o Chrome cria um a cada colagem.
+  for (const s of [...raiz.querySelectorAll('span:not([class])')]) s.replaceWith(...s.childNodes);
 }
 
 // Texto colado de fora traz "\n". Dentro do editor ele aparece como quebra
@@ -447,6 +624,148 @@ function atualizarPrevia(caixa, valor, html = null) {
   if (mostra) previa.querySelector('.rico-saida').innerHTML = html ?? rico(valor);
 }
 
+/* ---------------- o editor de fórmula ---------------- */
+// Um painel que abre DENTRO do editor, logo abaixo da barra — não um diálogo.
+// A razão é concreta: o editor rico vive dentro do diálogo do item, e este
+// sistema tem um `<dialog>` só. Abrir outro por cima exigiria empilhá-los, e
+// remontar o diálogo destruiria a área de edição e o cursor junto — que é
+// justamente o lugar onde a fórmula precisa entrar.
+//
+// O painel guarda, ao abrir, o nó de texto e a faixa de caracteres que ele vai
+// substituir. Daí em diante ele não depende mais da seleção viva, e o foco pode
+// ir para o campo do código sem perder o lugar de destino.
+let painel = null;   // { area, codigo, bloco, cat, alvo: {no, ini, fim} | null }
+
+function caixaDoPainel() {
+  return painel ? caixaDe(painel.area)?.querySelector('.rico-mat') : null;
+}
+
+function fecharPainelFormula() {
+  const caixa = caixaDoPainel();
+  if (caixa) { caixa.hidden = true; caixa.innerHTML = ''; }
+  painel = null;
+}
+
+function abrirPainelFormula(area) {
+  const r = ultimaSelecao.get(area);
+  let alvo = null, codigo = '', bloco = false;
+  // Cursor dentro de uma fórmula já escrita: abre AQUELA fórmula para edição.
+  if (r && r.startContainer.nodeType === 3) {
+    const f = formulaEm(r.startContainer.nodeValue, r.startOffset);
+    if (f) {
+      alvo = { no: r.startContainer, ini: f.ini, fim: f.fim };
+      codigo = f.valor;
+      bloco = f.tipo === 'bloco';
+    }
+  }
+  // Texto selecionado sem fórmula: entra como ponto de partida do código.
+  if (!alvo && r && !r.collapsed) codigo = String(r).trim();
+  painel = { area, codigo, bloco, cat: 0, alvo };
+  desenharPainelFormula();
+  caixaDoPainel()?.querySelector('.rico-mat-fonte')?.focus();
+}
+
+function desenharPainelFormula() {
+  const caixa = caixaDoPainel();
+  if (!caixa || !painel) return;
+  const erro = erroDaFormula(painel.codigo);
+  const abas = PALETA_MAT.map((g, i) =>
+    `<button type="button" class="rico-mat-aba${i === painel.cat ? ' sel' : ''}"
+      data-rico-mat-cat="${i}">${esc(g.nome)}</button>`).join('');
+  const grade = (PALETA_MAT[painel.cat]?.itens || []).map(([rot, cod], i) =>
+    `<button type="button" class="rico-mat-simb" data-rico-mat-add="${i}"
+      title="${esc(cod)}">${esc(rot)}</button>`).join('');
+  const modelos = MODELOS_MAT.map(([rot], i) =>
+    `<button type="button" class="rico-mat-modelo" data-rico-mat-modelo="${i}">${esc(rot)}</button>`).join('');
+  caixa.hidden = false;
+  caixa.innerHTML = `
+    <div class="rico-mat-cab">
+      <strong>Fórmula matemática</strong>
+      <span class="seg rico-mat-onde">
+        <button type="button" class="${painel.bloco ? '' : 'sel'}" data-rico-mat-bloco="0">na linha</button>
+        <button type="button" class="${painel.bloco ? 'sel' : ''}" data-rico-mat-bloco="1">em destaque</button>
+      </span>
+      <button type="button" class="rico-mat-x" data-rico-mat-fechar="1" aria-label="Fechar">✕</button>
+    </div>
+    <div class="rico-mat-saida ${erro ? 'com-erro' : ''}">
+      ${erro ? '' : htmlDaFormula(painel.codigo, painel.bloco)}
+      ${erro ? `<p class="rico-mat-erro">⚠ ${esc(erro)}</p>` : ''}
+    </div>
+    <input class="caixa rico-mat-fonte" spellcheck="false" value="${esc(painel.codigo)}"
+      placeholder="ex.: \\frac{1}{2}  ·  x^{2}  ·  \\sqrt{3}" aria-label="Código da fórmula, em LaTeX">
+    <div class="rico-mat-abas">${abas}</div>
+    <div class="rico-mat-grade">${grade}</div>
+    <details class="rico-mat-modelos"><summary>Fórmulas prontas</summary>
+      <div class="rico-mat-grade">${modelos}</div></details>
+    <div class="rico-mat-pe">
+      <span class="rico-mat-dica">A fórmula é guardada como código entre <code>$…$</code>; o desenho é feito na hora de mostrar.</span>
+      <button type="button" class="btn fantasma mini" data-rico-mat-fechar="1">Cancelar</button>
+      <button type="button" class="btn mini" data-rico-mat-ok="1" ${erro ? 'disabled' : ''}>
+        ${painel.alvo ? 'Substituir' : 'Inserir'}</button>
+    </div>`;
+}
+
+// Só o desenho e o botão de confirmar — o resto do painel fica onde está, com
+// o cursor de quem digita dentro do campo.
+function atualizarSaidaDaFormula() {
+  const caixa = caixaDoPainel();
+  if (!caixa || !painel) return;
+  const erro = erroDaFormula(painel.codigo);
+  const saida = caixa.querySelector('.rico-mat-saida');
+  if (saida) {
+    saida.classList.toggle('com-erro', !!erro);
+    saida.innerHTML = erro
+      ? `<p class="rico-mat-erro">⚠ ${esc(erro)}</p>`
+      : htmlDaFormula(painel.codigo, painel.bloco);
+  }
+  const ok = caixa.querySelector('[data-rico-mat-ok]');
+  if (ok) ok.disabled = !!erro;
+}
+
+// Encaixa um trecho de código no campo, onde está o cursor.
+function encaixarNoCodigo(caixa, trecho) {
+  const campo = caixa.querySelector('.rico-mat-fonte');
+  if (!campo) return;
+  const i = campo.selectionStart ?? campo.value.length;
+  const f = campo.selectionEnd ?? i;
+  campo.setRangeText(trecho, i, f, 'end');
+  painel.codigo = campo.value;
+  campo.focus();
+  atualizarSaidaDaFormula();
+}
+
+// Escreve a fórmula na área de edição, no lugar guardado ao abrir o painel.
+function aplicarFormula(avisar) {
+  if (!painel) return;
+  const { area, alvo } = painel;
+  const fonte = painel.bloco ? `$$${painel.codigo}$$` : `$${painel.codigo}$`;
+  area.focus();
+  const sel = getSelection();
+  sel.removeAllRanges();
+  if (alvo && alvo.no.isConnected) {
+    const r = document.createRange();
+    // A faixa pode ter encolhido se a pessoa digitou na área com o painel
+    // aberto; os limites são presos ao tamanho atual do nó para o intervalo
+    // nunca apontar para fora dele.
+    const fim = Math.min(alvo.fim, alvo.no.nodeValue.length);
+    r.setStart(alvo.no, Math.min(alvo.ini, fim));
+    r.setEnd(alvo.no, fim);
+    sel.addRange(r);
+  } else {
+    devolverSelecao(area);
+    if (!sel.rangeCount) {                       // sem cursor conhecido: no fim
+      const r = document.createRange();
+      r.selectNodeContents(area);
+      r.collapse(false);
+      sel.addRange(r);
+    }
+  }
+  document.execCommand('insertText', false, fonte);
+  const alvoArea = area;
+  fecharPainelFormula();
+  avisar(alvoArea);
+}
+
 // Um único ouvinte por evento, no document: o diálogo do item é remontado
 // inteiro a cada ação (`reabrirDlgItem`), e ouvinte preso ao elemento morreria
 // junto. Nada aqui remonta a tela — remontar mataria o cursor de quem digita.
@@ -479,9 +798,11 @@ function ligarEditoresRicos(aoMudar, previaDe = null) {
   });
 
   // Clicar num botão da barra não pode roubar a seleção da área de edição —
-  // sem isto, “selecionar e clicar em N” não negrita nada.
+  // sem isto, “selecionar e clicar em N” não negrita nada. Vale também para os
+  // botões do painel de fórmula; o campo de código dele, não: ali o foco tem de
+  // ir mesmo, e o destino da fórmula já está guardado em `painel.alvo`.
   document.addEventListener('mousedown', e => {
-    if (e.target.closest?.('.rico-barra button')) e.preventDefault();
+    if (e.target.closest?.('.rico-barra button, .rico-mat button')) e.preventDefault();
   });
 
   document.addEventListener('click', e => {
@@ -490,18 +811,68 @@ function ligarEditoresRicos(aoMudar, previaDe = null) {
     e.preventDefault();
     const area = caixaDe(b)?.querySelector('.rico-area');
     if (!area) return;
+    // O painel de fórmula é o único botão da barra que não escreve na hora: ele
+    // abre (ou fecha) a bancada onde a fórmula é montada.
+    if (b.dataset.ricoFormula) {
+      if (painel && painel.area === area) fecharPainelFormula();
+      else { fecharPainelFormula(); abrirPainelFormula(area); }
+      return;
+    }
     desligarStyleWithCSS();
     area.focus();
     devolverSelecao(area);
     if (b.dataset.ricoCmd) document.execCommand(b.dataset.ricoCmd);
+    else if (b.dataset.ricoTamanho) document.execCommand('fontSize', false, TAMANHOS[Number(b.dataset.ricoTamanho)].font);
     else if (b.dataset.ricoParagrafo) quebrarLinha(2);
     else inserirSimbolo(SIMBOLOS[Number(b.dataset.ricoSimbolo)]);
     avisar(area);
   });
 
+  // O painel de fórmula: abas, símbolos, modelos, destino e confirmação.
+  document.addEventListener('click', e => {
+    const b = e.target.closest?.('.rico-mat button');
+    if (!b || !painel) return;
+    e.preventDefault();
+    const caixa = caixaDoPainel();
+    const d = b.dataset;
+    if (d.ricoMatFechar) return void fecharPainelFormula();
+    if (d.ricoMatOk) return void aplicarFormula(avisar);
+    if (d.ricoMatCat) { painel.cat = Number(d.ricoMatCat); return void desenharPainelFormula(); }
+    if (d.ricoMatBloco) { painel.bloco = d.ricoMatBloco === '1'; return void desenharPainelFormula(); }
+    if (d.ricoMatAdd) return void encaixarNoCodigo(caixa, PALETA_MAT[painel.cat].itens[Number(d.ricoMatAdd)][1]);
+    if (d.ricoMatModelo) {
+      // Modelo é a fórmula inteira: ele substitui o que está escrito em vez de
+      // se somar a ele — meio modelo colado no meio de outra conta não é nada.
+      painel.codigo = MODELOS_MAT[Number(d.ricoMatModelo)][1];
+      desenharPainelFormula();
+    }
+  });
+
+  // O código digitado no painel: a prévia acompanha tecla a tecla, e é ela que
+  // mostra o erro antes de a fórmula entrar no item. Só a prévia e o botão são
+  // redesenhados — refazer o painel inteiro a cada tecla tiraria o cursor do
+  // campo, que é o mesmo motivo pelo qual nada aqui remonta o diálogo.
+  document.addEventListener('input', e => {
+    if (!painel || !e.target.classList?.contains('rico-mat-fonte')) return;
+    painel.codigo = e.target.value;
+    atualizarSaidaDaFormula();
+  });
+  document.addEventListener('keydown', e => {
+    if (!painel || !e.target.classList?.contains('rico-mat-fonte')) return;
+    if (e.key === 'Escape') { e.preventDefault(); fecharPainelFormula(); }
+    if (e.key === 'Enter' && !erroDaFormula(painel.codigo)) { e.preventDefault(); aplicarFormula(avisar); }
+  });
+
   document.addEventListener('keydown', e => {
     const area = e.target.closest?.('[data-rico-campo]');
     if (!area) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      anotarSelecao();
+      fecharPainelFormula();
+      abrirPainelFormula(area);
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && 'biu'.includes(e.key.toLowerCase())) {
       desligarStyleWithCSS();   // o atalho do navegador também produziria <span style>
       return;
@@ -566,5 +937,7 @@ export {
   editorRico,          // o HTML de um campo rico
   ligarEditoresRicos,  // liga barra, prévia e aviso de mudança (uma vez)
   valorDoEditor,       // o que uma área editável vale agora, já podado
+  fecharPainelFormula, // fechado quando quem hospeda o editor é remontado
+  erroDaFormula,       // “o KaTeX aceita este código?” — null quando sim
   OPCOES_KATEX         // exportado para ficar auditável de fora
 };
