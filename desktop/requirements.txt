@@ -1,3 +1,7 @@
+# O leitor roda na máquina da secretaria, que é Windows — e lá `opencv-python`
+# é o pacote certo. Em servidor Linux sem ambiente gráfico ele não importa
+# (falta a libGL); nesse caso, troque por `opencv-python-headless`, que traz o
+# mesmo módulo `cv2` sem a parte de janela. O leitor não abre janela nenhuma.
 opencv-python>=4.10
 numpy>=1.26
 pypdfium2>=4.30

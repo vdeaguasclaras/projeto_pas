@@ -148,12 +148,16 @@ folha de cabeça para baixo. Um leitor testado contra imagem limpa e reta passar
 aqui e falharia na secretaria.
 
 ```bash
-npm install playwright                            # ou NODE_PATH para a global
+npm install playwright && npx playwright install chromium   # uma vez só
 node desktop/testes/gerar-amostras.mjs            # a prova de exemplo
 node desktop/testes/gerar-amostras.mjs --grande   # 42 itens, 32 estudantes
 python3 desktop/testes/testar-leitura.py
 python3 desktop/testes/testar-leitura.py amostras-grande
 ```
+
+Se o Chromium já estiver instalado em outro lugar, `CHROMIUM=/caminho/do/chrome`
+dispensa o download; e `PLAYWRIGHT_BROWSERS_PATH`, se estiver definido, é
+consultado sozinho.
 
 O teste falha se alguma marcação impressa não voltar, se voltar diferente, se o
 leitor devolver marcação que não foi impressa, ou se um dos casos difíceis
