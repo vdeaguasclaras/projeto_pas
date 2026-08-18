@@ -161,7 +161,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 // Uma célula. O nome longo (“praseodímio”, “darmstádtio”) encolhe sozinho em
 // vez de estourar a célula ou ser cortado: `tp-longo` baixa o corpo do nome.
 function celula(z, simbolo, nome, massa, estilo = '', fundo = '') {
-  const longo = nome.length > 10 ? ' tp-longo' : '';
+  const longo = nome.length > 11 ? ' tp-longo' : '';
   return `<div class="tp-el ${classeDoEstado(z)} ${fundo}"${estilo}>
     <span class="tp-cab"><b>${z}</b><i>${esc(massa)}</i></span>
     <span class="tp-s">${esc(simbolo)}</span>
