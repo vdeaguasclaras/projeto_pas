@@ -194,6 +194,15 @@ alternativas, quando o problema está no enunciado.
   ocupa o vão dos grupos 3–12 nos três primeiros períodos: amarrar altura de
   grade separada à mão dá certo hoje e desalinha na primeira mudança de medida.
   A tinta das séries pede `print-color-adjust`, como todo fundo neste projeto.
+  **A altura da linha é fixa de propósito.** Com `1fr` a grade esticava para
+  encher a folha e a célula saía 39pt de largura por 54 de altura — mais alta
+  que larga, o contrário da referência. Célula estreita e alta dá símbolo
+  pequeno (11pt onde cabiam 16) e número encostado na borda, que foi como
+  chegou o relato: “os símbolos ficam pequenos e alguns números ultrapassam a
+  margem do quadrado”. A largura não dá para aumentar — 18 colunas em 720pt são
+  40pt cada, e a referência tem a mesma medida; quem desce até a proporção certa
+  é a altura. E `line-height:1` no nome corta o acento: “silício” virava
+  “silicio”, erro de grafia impresso 118 vezes.
 
 ## Gravação: a tela não pode afirmar o que o banco negou
 
