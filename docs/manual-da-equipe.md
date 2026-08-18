@@ -359,6 +359,37 @@ dentro de cada texto, como no PAS.
 Ainda no cadastro do texto-base, os botões **Prosa / Verso / Linhas numeradas**
 definem como o texto é impresso (ver *Prosa, verso ou linhas numeradas*, acima).
 
+#### Como o caderno decide onde quebrar a folha
+
+Três regras de diagramação, e nenhuma delas pede trabalho de quem escreve — a
+montagem já sai assim:
+
+- **O bloco não se parte entre folhas.** Texto-base, figuras, crédito da fonte,
+  comando e itens de um mesmo texto ficam na mesma folha. Entre as **duas
+  colunas** da folha o bloco continua fluindo, que é a leitura normal do
+  caderno; o que ele não faz é começar no pé de uma folha e terminar na
+  seguinte, obrigando o estudante a virar a página a cada item.
+- **O que sobra vira rascunho.** Quando um bloco é empurrado inteiro para a
+  folha seguinte, o branco que fica não é desperdício: sai com um fio
+  horizontal e a palavra **Rascunho**.
+- **Prova de exatas ganha espaço de conta.** A cada **dois textos-base
+  seguidos** com item de Matemática, Física, Química ou Biologia entra um
+  espaço de rascunho, e o que sobra da última folha do miolo também. Prova sem
+  item dessas áreas não ganha nenhum — rascunho em prova de Linguagens é só
+  ruído.
+
+#### O que muda na prova adaptada
+
+A versão **adaptada** sai com o **verbo do comando em negrito** — *julgue*,
+*assinale*, *calcule*, *faça* —, no enunciado de cada item e na frase do bloco.
+Quem tem dificuldade de leitura perde o comando no meio de três linhas de
+contexto e acaba respondendo outra coisa; o negrito o traz para a frente. A
+prova regular não muda: ela segue a diagramação do caderno do PAS.
+
+O destaque é do **caderno**, não do item: um item marcado como *ambas* sai com
+o verbo em negrito na adaptada e sem negrito na regular, sendo o mesmo item.
+Nada a marcar — troque para **Adaptada** no alto do Caderno e confira.
+
 ### Revisar na página, na leitura final
 
 Muita coisa só aparece quando a prova é lida inteira, montada. Para isso existe

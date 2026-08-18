@@ -154,6 +154,38 @@ campo que causou a recusa, mostra o motivo ao pé dele e rola até lá. Um toast
 quatro segundos não alcança quem está três telas abaixo, mexendo nas
 alternativas, quando o problema está no enunciado.
 
+## O caderno: o que o Chrome não imprime, e o que não pode partir
+
+- **Fio desenhado com `background` não sai na impressora.** O Chrome só imprime
+  fundo se quem imprime marcar “Gráficos de plano de fundo”, que vem
+  **desmarcada** — e o fio central que separa as duas colunas, o do cabeçalho e
+  o do rodapé são `div` com cor de fundo. Sumiam todos no papel enquanto a tela
+  os mostrava. A capa já tinha aprendido isso (`print-color-adjust:exact`); os
+  fios do miolo não. Ao acrescentar qualquer traço ao caderno, prefira `border`
+  — que imprime sempre — ou repita o `print-color-adjust`, e confira gerando o
+  PDF **sem** os gráficos de plano de fundo, que é como a escola imprime.
+- **A paginação é por BLOCO, não por peça** (`distribuirBlocos`). Um texto-base
+  partido entre duas folhas é uma questão partida: o estudante vira a página a
+  cada item. O bloco inteiro cabe numa folha ou vai inteiro para a seguinte;
+  entre as duas colunas da mesma folha ele continua fluindo. Bloco maior que
+  uma folha inteira não tem para onde ir — aí flui como antes, e o que se
+  preserva é ao menos o texto-base junto (`textoBase` conta as peças que vêm
+  antes do primeiro item). Ao acrescentar peça ao bloco, lembre que
+  `pecasDoTextoBase()` a conta por subtração: peça nova depois dos itens
+  desalinha a conta.
+- **O branco que sobra vira `Rascunho`** — o da folha virada e o da cota de
+  exatas (dois textos-base seguidos com item de Matemática, Física, Química ou
+  Biologia). Não é enfeite: sem espaço no caderno o estudante faz conta na
+  margem, e quem corrige não tem de onde conferir a resposta.
+- **O negrito do comando é da VERSÃO, não do item.** Na adaptada o verbo que
+  abre o comando sai em negrito; item marcado como *ambas* é o mesmo item nas
+  duas provas, então ler `item.versao` deixaria de fora justamente os que mais
+  aparecem. Por isso `versao` desce até `htmlItem()`. A lista de verbos
+  (`VERBOS_COMANDO`) é fechada de propósito: grifar “todo verbo” exigiria
+  análise morfológica, erraria, e página cheia de negrito é o contrário de
+  destaque. E o negrito entra pela árvore (`negritarComandos`), nunca por troca
+  de string — o HTML que chega ali já leva o desenho do KaTeX dentro.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável

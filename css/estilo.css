@@ -596,6 +596,16 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .pas-pauta.sem-linhas{border:.7px solid #999}
 .pas-pauta.sem-linhas i{border:none}
 
+/* Espaço de rascunho — fio horizontal, o título e o branco. A altura vem do
+   `style` que js/app.js calcula: é o que sobrou da coluna, e por isso varia de
+   um para outro. O fio é `border`, e não `background`, para sair no papel sem
+   depender de “Gráficos de plano de fundo” na caixa de impressão. */
+.pas-rascunho{
+  border-top:.7pt solid #000; margin-top:6pt; padding-top:2.5pt;
+  text-indent:0; break-inside:avoid; overflow:hidden;
+}
+.pas-rascunho span{font-size:9pt;font-weight:700}
+
 /* capa: arte temática, instruções numeradas e as observações no pé.
    O que é comum aos dois arranjos está aqui; o que divide a folha —
    vertical (arte na faixa esquerda) ou horizontal (arte na metade de cima) —
@@ -750,6 +760,16 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
   @page cartao{size:A4;margin:0}
   #print-area .cr-folha{page:cartao;box-shadow:none;margin:0}
   #print-area .cr-previa{background:none;padding:0;overflow:visible}
+  /* O cartão-resposta é desenhado para ser lido por máquina, e três coisas
+     dele são cor de FUNDO: as quatro âncoras pretas dos cantos, que são a
+     referência de alinhamento do leitor óptico; a bolha cheia do exemplo de
+     preenchimento; e a faixa do título, que leva texto branco. O Chrome só
+     imprime fundo com “Gráficos de plano de fundo” marcado, e essa caixa vem
+     desmarcada — o cartão saía SEM âncora nenhuma, com o exemplo mostrando
+     bolha vazia onde deveria estar a cheia e com o título branco no branco.
+     Sem âncora, o leitor de cartões não tem por onde alinhar a folha. */
+  #print-area .cr-folha,
+  #print-area .cr-folha *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   #print-area .folha{width:100%;max-width:none;box-shadow:none;page-break-after:always;margin:0}
   #print-area .folha:last-child{page-break-after:auto}
 
@@ -771,6 +791,13 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
      branca — e a marca PAS, que é branca, desaparece junto. Medido: com esta
      regra o azul #0d2f8a vai para o PDF mesmo com a opção desmarcada. */
   #print-area .pas-capa-arte{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  /* Mesma história dos fios do miolo: o fio central que separa as duas colunas
+     e os fios do cabeçalho e do rodapé são caixas com cor de fundo, e sem isto
+     o Chrome imprime a folha sem nenhum deles — some justamente a linha que
+     divide as colunas e faz a leitura não pular de uma para a outra. */
+  #print-area .pas-fio-vert,
+  #print-area .pas-fio-topo,
+  #print-area .pas-fio-base{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 
 /* ===== arranjos de capa =====
