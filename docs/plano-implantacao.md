@@ -487,10 +487,19 @@ falha no CRC e vai para a conferência, em vez de lançar as marcações de um
 estudante na linha de outro. É ele também que resolve sozinho a folha que entrou
 de cabeça para baixo.
 
-Como a faixa é numérica, `2026-0142` volta do leitor como `20260142`: a
-importação passou a casar por algarismos quando o texto exato não bate, e a tela
-de Cartões-resposta **avisa antes de imprimir** quais matrículas do elenco a
-faixa não consegue carregar.
+Como a faixa é numérica, o que a planilha da secretaria traga pontuado
+(`225.100.142`) volta do leitor sem a pontuação: a importação passou a casar por
+algarismos quando o texto exato não bate, e a tela de Cartões-resposta **avisa
+antes de imprimir** quais matrículas do elenco a faixa não consegue carregar.
+
+A matrícula da escola tem **nove algarismos e começa em `225`**, que identifica a
+unidade — está em `FORMATO_DA_MATRICULA` (js/app.js) e desce ao leitor pelo
+gabarito, como a geometria. Não é validação de enfeite: é a única conferência
+que existe sobre a matrícula do **cartão extra**, a única do sistema que não
+viaja protegida por CRC. Nela o estudante preenche nove alvéolos, o que sai dali
+é leitura óptica pura, e um algarismo a mais atribuiria a prova a outra pessoa em
+silêncio. Fora do padrão, a folha vai para a conferência — com as marcações já
+lidas junto, para não se digitar duas vezes.
 
 ### O cartão-gabarito abre o lote
 

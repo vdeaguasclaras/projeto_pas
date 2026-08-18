@@ -110,8 +110,10 @@ def _conferir_extras() -> list[str]:
         return ["faltam as amostras de cartão extra — gere-as de novo"]
 
     verdade = json.loads(verdade_json.read_text(encoding="utf-8"))
+    validas = [v for v in verdade if v.get("valida")]
+    invalidas = [v for v in verdade if not v.get("valida")]
     esperado = {(v["matricula"], r["item"]): r["resposta"]
-                for v in verdade for r in v["respostas"]}
+                for v in validas for r in v["respostas"]}
     with tempfile.TemporaryDirectory() as temporario:
         base = Path(temporario)
         entrada, saida = base / "digitalizacoes", base / "resultado"
@@ -125,19 +127,27 @@ def _conferir_extras() -> list[str]:
                  for l in ler_csv(saida / "respostas.csv")}
 
     falhas = []
-    matriculas = {v["matricula"] for v in verdade}
+    boas = {v["matricula"] for v in validas}
     lidas_mat = {chave[0] for chave in lidas}
-    for matricula in sorted(matriculas - lidas_mat):
+    for matricula in sorted(boas - lidas_mat):
         falhas.append(f"cartão extra: a matrícula {matricula} foi preenchida nos alvéolos "
                       "e não voltou em resposta nenhuma")
     for chave, valor in sorted(esperado.items()):
         if chave in lidas and lidas[chave] != valor:
             falhas.append(f"cartão extra {chave[0]} item {chave[1]}: impresso “{valor}”, "
                           f"lido “{lidas[chave]}”")
+    # A matrícula fora do padrão da escola não pode virar resposta de ninguém:
+    # sem CRC por baixo, aceitá-la é lançar a prova na conta de outra pessoa.
+    for v in invalidas:
+        if v["matricula"] in lidas_mat:
+            falhas.append(f"cartão extra: a matrícula “{v['matricula']}” está fora do padrão "
+                          "da escola e o leitor a aceitou em vez de mandar conferir")
     for chave in sorted(lidas):
-        if chave[0] not in matriculas:
-            falhas.append(f"cartão extra: matrícula “{chave[0]}” lida, e nenhuma foi impressa assim")
-    print(f"cartão extra: {len(matriculas)} matrícula(s) em alvéolos · {len(lidas)} marcação(ões) lida(s)")
+        if chave[0] not in boas:
+            falhas.append(f"cartão extra: matrícula “{chave[0]}” lida, e nenhuma válida "
+                          "foi impressa assim")
+    print(f"cartão extra: {len(boas)} matrícula(s) válida(s) e {len(invalidas)} fora do padrão · "
+          f"{len(lidas)} marcação(ões) lida(s)")
     return falhas
 
 

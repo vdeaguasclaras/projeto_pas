@@ -79,11 +79,13 @@ Regras:
   `000`–`999`, sempre com três algarismos.
 - Item **em branco**: a linha não sai (ou sai com `resposta` vazia — o web apaga
   a marcação).
-- **A matrícula sai em ALGARISMOS.** A faixa de identificação do rodapé é
-  numérica, e `2026-0142` volta de lá como `20260142`. A importação do sistema
-  web casa primeiro pelo texto exato e depois pelos algarismos; matrículas do
-  elenco que só se distinguem pela pontuação são recusadas nas duas, porque
-  atribuir a prova ao estudante errado é pior do que não atribuir.
+- **A matrícula sai em ALGARISMOS.** A do Marista Águas Claras tem nove e começa
+  em `225`, que identifica a unidade. A faixa do rodapé é numérica, então
+  qualquer pontuação que a planilha da secretaria traga (`225.100.142`) volta de
+  lá sem ela. A importação do sistema web casa primeiro pelo texto exato e
+  depois pelos algarismos; matrículas do elenco que só se distinguem pela
+  pontuação são recusadas nas duas, porque atribuir a prova ao estudante errado
+  é pior do que não atribuir.
 - **Dupla marcação, leitura duvidosa ou tipo B pela metade**: NÃO vira valor. Vai
   para `respostas_conferir.csv` (mesmas colunas + `motivo` e `folha`), com uma
   miniatura em `conferencia/`, para lançamento manual.
@@ -129,14 +131,39 @@ para baixo — gira 180° e tenta de novo.
 O bloco de campos está descrito dentro do próprio JSON, em
 `identificacao.faixa`, para que o arquivo continue legível sem esta tabela.
 
-### 3.3 O cartão extra
+### 3.3 O formato da matrícula
+
+```json
+"identificacao": {
+  "matricula": { "digitos": 9, "prefixo": "225",
+                 "descricao": "nove algarismos, começando em 225 (código da unidade)" }
+}
+```
+
+É regra da escola, e por isso desce ao leitor pelo arquivo em vez de ficar
+escrita do lado dele — como a geometria. Serve para **duvidar de leitura**, e o
+lugar onde isso decide alguma coisa é o cartão extra (§3.4).
+
+### 3.4 O cartão extra
 
 O cartão de reserva sai sem identificação impressa: no momento de imprimi-lo não
 se sabe de quem ele vai ser. A faixa dele traz `tipo = extra` e nenhum algarismo
 de matrícula; quem a informa é o estudante, na **grade de alvéolos** do alto da
-folha (9 posições × 10 algarismos), e é o OMR que a lê. Posição em branco no
-meio da matrícula manda a folha para conferência: não dá para saber se o
-estudante pulou a casa ou deixou de preencher.
+folha (9 posições × 10 algarismos), e é o OMR que a lê.
+
+**Esta é a única matrícula do sistema que não tem CRC por baixo.** Nas folhas
+nominais ela viaja na faixa, e leitura torta falha em vez de mentir; aqui o que
+sai são nove alvéolos lidos opticamente, e um algarismo a mais ou a menos
+atribuiria a prova a outra pessoa em silêncio. Duas conferências fecham isso, e
+as duas mandam a folha para a fila em vez de corrigi-la:
+
+- **posição em branco no meio** da matrícula — não dá para saber se o estudante
+  pulou a casa ou deixou de preencher;
+- **matrícula fora do formato** de §3.3 — nove algarismos, começando em 225.
+
+Folha recusada assim não perde o que foi lido: as marcações vão inteiras para
+`respostas_conferir.csv` com motivo `folha_sem_matricula`, para o operador
+identificar o estudante uma vez e lançar o que já está lido.
 
 ## 4. O cartão-gabarito (`referencia`)
 

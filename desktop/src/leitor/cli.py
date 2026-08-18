@@ -96,9 +96,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
         sys.exit(2)
     click.echo(f"Digitalizações: {len(arquivos)} arquivo(s) em {entrada_dir}")
 
-    limiares, divergencias = _procurar_referencia(arquivos, molde, dpi)
+    limiares, avisos, divergencias = _procurar_referencia(arquivos, molde, dpi)
     click.echo(f"Limiar de tinta: {limiares}")
-    for aviso in divergencias:
+    for aviso in avisos + divergencias:
         click.echo(f"  ATENÇÃO — {aviso}", err=True)
 
     saida_dir.mkdir(parents=True, exist_ok=True)
@@ -152,8 +152,18 @@ def _ler_pagina(pagina: Pagina, molde: Molde, limiares: Limiares):
 
 
 def _procurar_referencia(arquivos: list[Path], molde: Molde, dpi: int):
-    """Varre o topo da pilha atrás do cartão-gabarito e calibra por ele."""
+    """Varre o topo da pilha atrás do cartão-gabarito e calibra por ele.
+
+    Devolve `(limiares, avisos, divergências)`, e a diferença entre os dois
+    últimos é o que separa um lote que segue de um lote que para. **Aviso** é
+    “não achei a folha de referência”: o lote é lido assim mesmo, com o limiar
+    padrão, e o que se perde é a conferência. **Divergência** é a folha de
+    referência ter aparecido e DISCORDADO do gabarito exportado — aí alguém
+    mexeu nos itens depois de imprimir os cartões, e seguir seria corrigir a
+    prova inteira com a chave errada.
+    """
     limiares, divergencias = Limiares(), []
+    achou_referencia = False
     for indice, pagina in enumerate(paginas(arquivos, dpi)):
         if indice >= TOPO_DA_PILHA:
             break
@@ -163,15 +173,15 @@ def _procurar_referencia(arquivos: list[Path], molde: Molde, dpi: int):
             continue
         if not ident.eh_referencia:
             continue
-        medido, avisos = calibrar(cinza, matriz, molde, ident)
-        divergencias.extend(avisos)
+        achou_referencia = True
+        medido, achados = calibrar(cinza, matriz, molde, ident)
+        divergencias.extend(achados)
         if medido.origem != "padrão":
             limiares = medido
-    if limiares.origem == "padrão" and not divergencias:
-        divergencias.append(
-            "não achei o cartão-gabarito no topo da pilha — o limiar de tinta fica no padrão, "
-            "e o lote segue sem a conferência entre o papel e o gabarito exportado")
-    return limiares, divergencias
+    avisos = [] if achou_referencia else [
+        "não achei o cartão-gabarito no topo da pilha — o limiar de tinta fica no padrão, "
+        "e o lote segue sem a conferência entre o papel e o gabarito exportado"]
+    return limiares, avisos, divergencias
 
 
 @cli.command(help="Descreve um gabarito exportado, sem ler digitalização nenhuma.")

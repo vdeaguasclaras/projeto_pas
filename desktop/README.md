@@ -49,6 +49,13 @@ CRC-8. Sem ela, identificar um lote de 100 folhas custaria 100 digitações — 
 erro de digitação lança a prova de um estudante na conta de outro. Com o CRC,
 folha torta ou dobrada **falha** em vez de mentir.
 
+No **cartão extra** a faixa sai sem matrícula — na hora de imprimi-lo não se sabe
+de quem ele vai ser —, e quem a informa é o estudante, em nove alvéolos. É a
+única matrícula do sistema sem CRC por baixo, e o que a confere é o formato da
+escola (nove algarismos começando em `225`), que vem no gabarito junto com a
+geometria. Fora do padrão, a folha vai para a fila de conferência, com as
+marcações já lidas junto.
+
 **3. Nada duvidoso vira resposta.** Dupla marcação, alvéolo a meio caminho, tipo
 B com uma coluna vazia, faixa que não fecha: tudo isso sai em
 `respostas_conferir.csv`, com o motivo e uma miniatura da folha para o operador

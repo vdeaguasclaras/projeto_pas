@@ -5032,9 +5032,10 @@ function cabecalhoCartao(provaId, est, faixa) {
    metade falha no CRC e vai para a conferência, em vez de lançar as marcações
    de um estudante na linha de outro.
 
-   A matrícula entra só com seus DÍGITOS (`2026-0142` → `20260142`): o código é
-   numérico, e a pontuação é enfeite de exibição. Quem casa isso de volta com o
-   elenco é a importação, que compara por dígitos quando o texto não bate. */
+   A matrícula entra só com seus ALGARISMOS: o código é numérico, e pontuação é
+   enfeite de exibição — uma planilha que traga `225.100.142` volta do leitor
+   como `225100142`. Quem casa isso de volta com o elenco é a importação, que
+   compara por algarismos quando o texto exato não bate. */
 const CODIGO_SINC = [1, 0, 1, 0];
 const CODIGO_DIGITOS = 12;          // teto de dígitos da matrícula no código
 const CARTAO_NOMINAL = 0, CARTAO_EXTRA = 1, CARTAO_GABARITO = 2;
@@ -5114,13 +5115,48 @@ function bolhasDe(tipo, numero) {
 // régua (`medirCartao`) tem de montar uma folha idêntica à impressa: ele ocupa
 // uns 60pt do corpo, e medir sem ele daria uma coluna 60pt mais alta do que a
 // real — capacidade a mais, e conteúdo por cima da âncora.
+/* ---------------- o formato da matrícula da escola ----------------
+   A matrícula do Marista Águas Claras tem NOVE algarismos e começa em `225`,
+   que identifica a unidade. Isso não é enfeite de validação: é a única
+   conferência que existe sobre a matrícula do CARTÃO EXTRA.
+
+   Nas folhas nominais a matrícula viaja na faixa do rodapé, protegida por CRC —
+   leitura torta falha em vez de mentir. No cartão extra não há faixa com
+   matrícula: quem a informa é o estudante, preenchendo nove alvéolos, e o que
+   sai dali é leitura óptica pura, sem soma de conferência nenhuma. Um algarismo
+   lido a mais ou a menos atribuiria a prova a outra pessoa, em silêncio.
+
+   Sabendo o formato, o leitor tem como duvidar: matrícula que não tenha nove
+   algarismos, ou que não comece em 225, é leitura suspeita e vai para a
+   conferência. E a tela avisa, ANTES de imprimir, sobre matrícula do elenco
+   fora do padrão — quase sempre erro de digitação na planilha da secretaria.
+
+   Se a escola mudar a numeração, muda-se aqui: o formato desce ao leitor pelo
+   gabarito exportado, como a geometria. Nada disso está escrito do lado de lá. */
+const FORMATO_DA_MATRICULA = {
+  digitos: 9,
+  prefixo: '225',
+  descricao: 'nove algarismos, começando em 225 (código da unidade)'
+};
+
+// O motivo pelo qual esta matrícula foge do padrão, ou null quando está certa.
+function matriculaForaDoPadrao(matricula) {
+  const d = String(matricula || '').replace(/\D/g, '');
+  if (!d) return 'não tem algarismo nenhum';
+  if (d.length !== FORMATO_DA_MATRICULA.digitos)
+    return `tem ${d.length} algarismo(s), e a matrícula da escola tem ${FORMATO_DA_MATRICULA.digitos}`;
+  if (!d.startsWith(FORMATO_DA_MATRICULA.prefixo))
+    return `começa em ${d.slice(0, 3)}, e a matrícula da escola começa em ${FORMATO_DA_MATRICULA.prefixo}`;
+  return null;
+}
+
 // A matrícula em alvéolos, para o cartão que sai sem identificação impressa.
-// Nove posições porque a matrícula da escola tem nove dígitos; dez linhas
-// porque cada posição vai de 0 a 9. O desenho é o mesmo do bloco do tipo B —
-// dígito à esquerda, alvéolos embaixo —, e o alvéolo tem o tamanho de todos os
-// outros da folha: quem preenche não deve encontrar dois tamanhos de círculo, e
-// o leitor óptico procura um alvo só.
-const DIGITOS_DA_MATRICULA = 9;
+// Uma posição por algarismo da matrícula; dez linhas porque cada posição vai de
+// 0 a 9. O desenho é o mesmo do bloco do tipo B — dígito à esquerda, alvéolos
+// embaixo —, e o alvéolo tem o tamanho de todos os outros da folha: quem
+// preenche não deve encontrar dois tamanhos de círculo, e o leitor óptico
+// procura um alvo só.
+const DIGITOS_DA_MATRICULA = FORMATO_DA_MATRICULA.digitos;
 
 function gradeDaMatricula() {
   const cabecalho = `<span></span>${Array.from({ length: DIGITOS_DA_MATRICULA },
@@ -5328,11 +5364,12 @@ function folhasDoCartao(provaId, est) {
    identificar sozinho. Três casos, e nenhum é hipotético — a matrícula vem da
    planilha da secretaria, que é texto livre. */
 function avisosDaFaixa(elenco) {
-  const semDigito = [], compridas = [], porDigitos = new Map();
+  const semDigito = [], compridas = [], foraDoPadrao = [], porDigitos = new Map();
   for (const e of elenco) {
     const d = digitosDaMatricula(e.matricula);
     if (!d) { semDigito.push(e); continue; }
     if (String(e.matricula).replace(/\D/g, '').length > CODIGO_DIGITOS) compridas.push(e);
+    else if (matriculaForaDoPadrao(e.matricula)) foraDoPadrao.push(e);
     porDigitos.set(d, [...(porDigitos.get(d) || []), e]);
   }
   const ambiguas = [...porDigitos.values()].filter(g => g.length > 1);
@@ -5342,6 +5379,12 @@ function avisosDaFaixa(elenco) {
     terá de ser identificada à mão na conferência: ${nomes(semDigito)}.`);
   if (compridas.length) avisos.push(`<b>Mais de ${CODIGO_DIGITOS} algarismos</b> — a faixa leva só os
     ${CODIGO_DIGITOS} primeiros: ${nomes(compridas)}.`);
+  // Fora do padrão é quase sempre erro de digitação na planilha da secretaria, e
+  // é aqui — antes de imprimir — que sai barato consertar.
+  if (foraDoPadrao.length) avisos.push(`<b>Fora do padrão da escola</b> (${
+    esc(FORMATO_DA_MATRICULA.descricao)}) — confira na lista de estudantes: ${
+    foraDoPadrao.map(e => `${esc(e.nome)} (${esc(e.matricula)}: ${
+      esc(matriculaForaDoPadrao(e.matricula))})`).join(', ')}.`);
   for (const g of ambiguas) avisos.push(`<b>Mesmos algarismos</b> — o leitor não distingue estas
     matrículas uma da outra, e vai mandar as duas para conferência: ${nomes(g)}.`);
   return avisos;
@@ -5719,6 +5762,10 @@ ACOES['cart-template'] = () => {
       // é por ela que o leitor descobre de quem é a folha. Some deles o
       // cabeçalho nominal, então a área de respostas começa mais abaixo: para o
       // leitor são dois moldes, e é isto que avisa.
+      // O formato da matrícula da escola. Vale para o leitor sobretudo no cartão
+      // extra, onde a matrícula vem dos alvéolos e não da faixa — ali não há
+      // CRC, e o formato é a única conferência possível.
+      matricula: { ...FORMATO_DA_MATRICULA },
       cartaoExtra: {
         descricao: 'cartão de reserva, sem identificação impressa',
         matriculaEmAlveolos: { posicoes: DIGITOS_DA_MATRICULA, digitos: 10, ordem: 'da esquerda para a direita' },
@@ -6151,8 +6198,8 @@ ACOES['resp-importar'] = () => {
     <div class="dlg-corpo">
       <p style="font-size:13px;color:var(--ink-2);margin-top:0">Cole o CSV gerado pelo aplicativo de leitura óptica (ou digitado), uma marcação por linha:<br>
         <code style="font-family:var(--mono)">matrícula;número do item;resposta</code><br>
-        Exemplos: <code style="font-family:var(--mono)">2026-0142;1;C</code> · <code style="font-family:var(--mono)">2026-0142;28;960</code></p>
-      <textarea class="caixa" id="imp-resp" rows="10" placeholder="2026-0142;1;C&#10;2026-0142;2;E&#10;2026-0142;28;960"></textarea>
+        Exemplos: <code style="font-family:var(--mono)">225100142;1;C</code> · <code style="font-family:var(--mono)">225100142;28;960</code></p>
+      <textarea class="caixa" id="imp-resp" rows="10" placeholder="225100142;1;C&#10;225100142;2;E&#10;225100142;28;960"></textarea>
     </div>
     <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="resp-importar-ok">Importar</button></div>`);
@@ -6162,11 +6209,12 @@ ACOES['resp-importar-ok'] = () => {
   const elenco = estudantesDaProva(provaId);
   const linhas = $('#imp-resp').value.split('\n').map(l => l.trim()).filter(Boolean);
   // A matrícula chega do leitor em ALGARISMOS: a faixa de identificação do
-  // rodapé é numérica, e `2026-0142` volta de lá como `20260142`. O texto exato
-  // continua valendo primeiro — quem digita o CSV à mão copia da tela —, e os
-  // dígitos são a segunda tentativa. Dois estudantes cujas matrículas só se
-  // distinguem pela pontuação ficam de fora das duas: `null` marca o empate, e
-  // recusar a linha é melhor do que lançar a prova de um na conta do outro.
+  // rodapé é numérica, e o que estiver pontuado na planilha da secretaria
+  // (`225.100.142`) volta de lá sem a pontuação. O texto exato continua valendo
+  // primeiro — quem digita o CSV à mão copia da tela —, e os algarismos são a
+  // segunda tentativa. Dois estudantes cujas matrículas só se distinguem pela
+  // pontuação ficam de fora das duas: `null` marca o empate, e recusar a linha
+  // é melhor do que lançar a prova de um na conta do outro.
   const porTexto = new Map(elenco.map(e => [e.matricula, e]));
   const porDigitos = new Map();
   for (const e of elenco) {
@@ -6414,7 +6462,7 @@ ACOES['est-importar'] = () => {
         <b>Versão</b> é <em>regular</em> ou <em>adaptada</em> (opcional, padrão regular) ·
         Uma primeira linha de cabeçalho é ignorada automaticamente ·
         Quem já existe é reconhecido pela matrícula e <b>atualizado</b>, não duplicado.</p>
-      <textarea class="caixa" id="imp-est" rows="9" placeholder="Antonia Silva de Oliveira;2026-0142;1ª B;1ª série EM;regular&#10;Elisa Fontes Marques;2026-0231;9º D;9º ano;adaptada"></textarea>
+      <textarea class="caixa" id="imp-est" rows="9" placeholder="Antonia Silva de Oliveira;225100142;1ª B;1ª série EM;regular&#10;Elisa Fontes Marques;225100231;9º D;9º ano;adaptada"></textarea>
       <div id="imp-previa"></div>
     </div>
     <div class="dlg-pe">

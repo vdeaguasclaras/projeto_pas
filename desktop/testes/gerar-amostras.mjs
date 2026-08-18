@@ -107,7 +107,8 @@ if (GRANDE) {
     const serie = s.provas.find(p => p.id === s.provaAtiva).serie;
     s.estudantes = Array.from({ length: 32 }, (_, n) => ({
       id: `eg${n + 1}`, nome: `Estudante de Teste ${String(n + 1).padStart(2, '0')}`,
-      matricula: `2026-${String(1001 + n)}`, turma: `1ª ${'ABCD'[n % 4]}`, serie,
+      // Matrícula no formato da escola: nove algarismos começando em 225.
+      matricula: String(225100001 + n), turma: `1ª ${'ABCD'[n % 4]}`, serie,
       versao: n % 11 === 5 ? 'adaptada' : 'regular'
     }));
     s.elencos = {};
@@ -156,7 +157,7 @@ fs.writeFileSync(path.join(SAIDA, 'verdade.json'), JSON.stringify(verdade, null,
 // 3. E os extras, que são o outro molde (grade da matrícula no alto).
 await pagina.getByRole('button', { name: /Cartões extras/ }).click();
 await pagina.waitForSelector('#dlg[open]');
-await pagina.fill('#ex-qtd', '2');
+await pagina.fill('#ex-qtd', '3');
 await pagina.click('[data-acao="cart-extras-imprimir"]');
 await pagina.waitForFunction(() => document.querySelectorAll('#print-area .cr-folha').length > 0);
 const nExtras = await pagina.locator('#print-area .cr-folha').count();
@@ -172,11 +173,21 @@ const verdadeExtras = await pagina.evaluate(() => {
   const folhas = [...document.querySelectorAll('#print-area .cr-folha')];
   const marca = (f, seletor) => { const el = f.querySelector(seletor); if (el) el.classList.add('m'); return !!el; };
   const verdade = [];
+  // Três cartões extras, e só o primeiro traz matrícula do padrão da escola. Os
+  // outros dois testam a única conferência que existe sobre esta matrícula: no
+  // extra ela sai de alvéolos lidos opticamente, sem CRC nenhum por baixo, e um
+  // algarismo lido a mais lançaria a prova na conta de outra pessoa. O leitor
+  // tem de RECUSAR os dois — não corrigi-los, não aceitá-los.
+  const matriculas = [
+    { matricula: '225200001', valida: true },
+    { matricula: '199200002', valida: false },   // prefixo que não é o da unidade
+    { matricula: '22520003',  valida: false }    // oito algarismos, não nove
+  ];
   let ordem = 0;
   for (const f of folhas) {
     const grade = f.querySelectorAll('.bolha[data-alv^="m:"]');
     if (!grade.length) continue;                       // folha sem grade: redação, discursiva
-    const matricula = `2026${String(3001 + ordem)}`;   // 8 algarismos, como os do elenco
+    const { matricula, valida } = matriculas[ordem % matriculas.length];
     ordem++;
     [...matricula].forEach((d, pos) => marca(f, `.bolha[data-alv="m:${pos}:${d}"]`));
 
@@ -187,7 +198,7 @@ const verdadeExtras = await pagina.evaluate(() => {
       alv.classList.add('m');                          // sempre a primeira opção do item
       respostas.push({ item: +item, resposta: valor });
     }
-    verdade.push({ matricula, respostas });
+    verdade.push({ matricula, valida, respostas });
   }
   return verdade;
 });

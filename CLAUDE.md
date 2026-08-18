@@ -328,10 +328,17 @@ prova já aplicada.**
   `bitsDaFolha()` (js/app.js) escreve e `desktop/src/leitor/codigo.py` lê. Se uma
   mudar sem a outra, o leitor passa a atribuir folha ao estudante errado — e sem
   reclamar, porque o CRC continuaria fechando dos dois lados da mudança. A faixa
-  carrega ALGARISMOS: `2026-0142` volta como `20260142`, e é por isso que a
-  importação do CSV casa por dígitos quando o texto exato não bate. Matrícula
-  sem algarismo, com mais de 12 ou que colida com outra depois de tirada a
-  pontuação não é identificável — a tela de Cartões avisa antes de imprimir.
+  carrega ALGARISMOS, e é por isso que a importação do CSV casa por dígitos
+  quando o texto exato não bate.
+- **A matrícula da escola tem NOVE algarismos e começa em `225`**
+  (`FORMATO_DA_MATRICULA`, js/app.js), e isso desce ao leitor pelo gabarito, como
+  a geometria — não é validação de enfeite. É a única conferência que existe
+  sobre a matrícula do CARTÃO EXTRA, a única do sistema que não viaja protegida
+  por CRC: ali o estudante preenche nove alvéolos, o que sai é leitura óptica
+  pura, e um algarismo a mais atribuiria a prova a outra pessoa em silêncio.
+  Matrícula sem algarismo, com mais de 12, fora do padrão ou que colida com
+  outra depois de tirada a pontuação não é identificável — a tela de Cartões
+  avisa antes de imprimir, que é quando sai barato consertar a planilha.
 - **O cartão-gabarito é a chave da prova em papel.** Sai automaticamente à frente
   do lote, um por versão, com os alvéolos do gabarito preenchidos. É dele que o
   leitor tira o limiar de tinta desta impressora, e é ele que denuncia — antes de

@@ -57,6 +57,37 @@ class Folha:
 
 
 @dataclass
+class FormatoDaMatricula:
+    """Como é a matrícula desta escola — nove algarismos começando em 225.
+
+    Vem do gabarito exportado, não escrito aqui: é regra da escola, e se ela
+    mudar a numeração o leitor não pode precisar de recompilação. Serve para
+    duvidar de leitura, e o lugar onde isso importa é o **cartão extra**: nas
+    folhas nominais a matrícula viaja na faixa do rodapé, com CRC, e leitura
+    torta falha em vez de mentir; no extra ela sai de nove alvéolos lidos
+    opticamente, sem soma de conferência nenhuma. Sem o formato, um algarismo a
+    mais ou a menos atribuiria a prova a outra pessoa, em silêncio.
+    """
+    digitos: int = 0
+    prefixo: str = ""
+    descricao: str = ""
+
+    @property
+    def confere(self) -> bool:
+        return bool(self.digitos or self.prefixo)
+
+    def recusa(self, matricula: str) -> str:
+        """O motivo pelo qual esta matrícula não parece da escola, ou ""."""
+        if not self.confere:
+            return ""
+        if self.digitos and len(matricula) != self.digitos:
+            return f"matricula_com_{len(matricula)}_algarismos"
+        if self.prefixo and not matricula.startswith(self.prefixo):
+            return f"matricula_nao_comeca_em_{self.prefixo}"
+        return ""
+
+
+@dataclass
 class Molde:
     """O cartão inteiro: as âncoras, a faixa do rodapé e as folhas de cada versão."""
     prova: dict
@@ -71,6 +102,7 @@ class Molde:
     familias: dict[tuple[str, str], list[Folha]]
     tipos_do_item: dict[tuple[str, int], str]
     gabarito: dict[tuple[str, int], str]
+    formato_matricula: FormatoDaMatricula
 
     def folhas(self, versao: str, familia: str) -> list[Folha]:
         chave = (versao, familia)
@@ -142,6 +174,7 @@ def carregar(caminho: Path) -> Molde:
 
     cod = layout.get("codigo") or {}
     folha_pt = layout.get("folhaPt") or {}
+    formato = (dados.get("identificacao") or {}).get("matricula") or {}
     return Molde(
         prova=dados.get("prova") or {},
         simulado=dados.get("simulado") or "",
@@ -155,4 +188,8 @@ def carregar(caminho: Path) -> Molde:
         familias=familias,
         tipos_do_item=tipos,
         gabarito=chave,
+        formato_matricula=FormatoDaMatricula(
+            digitos=int(formato.get("digitos") or 0),
+            prefixo=str(formato.get("prefixo") or ""),
+            descricao=str(formato.get("descricao") or "")),
     )

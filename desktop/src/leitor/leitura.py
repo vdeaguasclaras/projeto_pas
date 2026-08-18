@@ -180,7 +180,7 @@ def _ler_objetiva(cinza, matriz, folha: Folha, limiar: float,
 
 
 def _ler_matricula(cinza, matriz, folha: Folha, limiar: float,
-                   lim: Limiares) -> tuple[str, str]:
+                   lim: Limiares, formato) -> tuple[str, str]:
     """A matrícula em alvéolos do cartão extra. Devolve `(matrícula, motivo)`."""
     algarismos, duvida = [], ""
     for posicao in sorted(folha.matricula):
@@ -197,6 +197,12 @@ def _ler_matricula(cinza, matriz, folha: Folha, limiar: float,
             next((i for i, a in enumerate(algarismos) if a), 0):
             len(algarismos) - next((i for i, a in enumerate(reversed(algarismos)) if a), 0)]):
         duvida = "matricula_com_vao"
+    # E a última conferência possível: a matrícula lida parece da escola?
+    # Aqui não há CRC — o que sai destes alvéolos é leitura óptica pura —, e o
+    # formato (nove algarismos começando em 225) é o que separa “o estudante
+    # preencheu” de “o leitor entendeu um algarismo a mais”.
+    if not duvida and miolo:
+        duvida = formato.recusa(miolo)
     return miolo, duvida
 
 
@@ -215,7 +221,8 @@ def ler_folha(cinza: np.ndarray, matriz: np.ndarray, molde: Molde,
         return leitura                       # folha de redação: nada a ler
 
     if folha.matricula:
-        matricula, duvida = _ler_matricula(cinza, matriz, folha, limiar, lim)
+        matricula, duvida = _ler_matricula(cinza, matriz, folha, limiar, lim,
+                                           molde.formato_matricula)
         if duvida or not matricula:
             leitura.situacao = "conferir"
             leitura.motivo = duvida or "matricula_em_branco"
@@ -235,8 +242,22 @@ def ler_folha(cinza: np.ndarray, matriz: np.ndarray, molde: Molde,
             leitura.conferir.append(Marcacao(numero, str(resposta or ""), f"percentual_{motivo}"))
 
     if leitura.conferir and leitura.situacao == "lida":
+        # Sem motivo de folha: quem explica são as linhas de item, logo abaixo,
+        # cada uma com o seu. `motivo` fica reservado ao que impediu a FOLHA de
+        # ser lida — é ele que manda o operador procurar o papel na pilha.
         leitura.situacao = "conferir"
-        leitura.motivo = "há marcação duvidosa nesta folha"
+
+    # Folha lida e sem dono — o cartão extra cuja matrícula não fechou. As
+    # marcações não podem ir para `respostas.csv`, que é indexado por matrícula,
+    # e jogá-las fora seria pedir que alguém as digitasse de novo olhando o
+    # papel. Vão inteiras para a conferência: o operador identifica o estudante
+    # uma vez e lança o que já está lido.
+    # O cartão-gabarito fica de fora: ele também não tem matrícula, e o que está
+    # marcado nele é o gabarito, não a resposta de ninguém.
+    if not leitura.matricula and not ident.eh_referencia and leitura.respostas:
+        leitura.conferir.extend(
+            Marcacao(m.item, m.resposta, "folha_sem_matricula") for m in leitura.respostas)
+        leitura.respostas.clear()
     return leitura
 
 

@@ -44,7 +44,10 @@ semanas depois.
    - CRC recusado → gira a página 180° e tenta de novo (folha virada é o defeito
      mais comum do alimentador). Recusou nas duas → `faixa_ilegivel`.
    - No **cartão extra** a faixa vem sem matrícula, e quem a informa é a grade
-     de alvéolos do alto da folha, lida na etapa 6.
+     de alvéolos do alto da folha, lida na etapa 6. Ali não há CRC nenhum por
+     baixo, e a conferência possível é o formato: matrícula que não tenha nove
+     algarismos ou não comece em `225` (o código da unidade) é leitura suspeita
+     e vai para a fila. O formato vem no gabarito, não escrito aqui.
 
 5. **Grade de alvéolos** (`molde.py`) — a posição esperada de cada alvéolo vem
    do gabarito `v4`, medida pelo navegador no ato da exportação. **Não há
@@ -106,7 +109,10 @@ uma folha de cabeça para baixo. Ver `desktop/testes/`.
 - **Importação dos percentuais do discursivo** pelo sistema web. O leitor os lê e
   grava em `percentuais.csv`; o lançamento do discursivo continua por nota, na
   tela de Correção.
-- **Matrícula não numérica.** A faixa carrega algarismos. Matrícula sem algarismo
-  nenhum, com mais de 12, ou que coincida com a de outro estudante depois de
-  tirada a pontuação, cai na conferência — e a tela de Cartões-resposta avisa
-  disso **antes** de imprimir, para não se descobrir no dia de digitalizar.
+- **Matrícula fora do padrão da escola.** A faixa carrega algarismos, e a
+  matrícula do Marista Águas Claras tem nove começando em `225`. Matrícula sem
+  algarismo nenhum, com mais de 12, fora desse padrão, ou que coincida com a de
+  outro estudante depois de tirada a pontuação, cai na conferência — e a tela de
+  Cartões-resposta avisa disso **antes** de imprimir. Fora do padrão é quase
+  sempre erro de digitação na planilha da secretaria, e ali sai barato
+  consertar; no dia de digitalizar o lote, não.

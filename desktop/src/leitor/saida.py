@@ -42,12 +42,14 @@ def respostas(pasta: Path, leituras: list[Leitura]) -> int:
 def conferir(pasta: Path, leituras: list[Leitura]) -> int:
     linhas = []
     for l in leituras:
+        # A recusa da FOLHA vem primeiro, e vem mesmo quando há itens duvidosos
+        # abaixo dela. São coisas diferentes: “o item 7 está rasurado” não conta
+        # que a folha inteira ficou sem dono, e é essa a que manda o operador
+        # procurar o papel na pilha. Antes ela sumia quando havia item na lista.
+        if l.motivo and l.situacao not in ("lida", "referencia"):
+            linhas.append([l.matricula, "", "", l.motivo, l.onde])
         for m in l.conferir:
             linhas.append([l.matricula, m.item, m.resposta, m.motivo or "", l.onde])
-        # Página que nem chegou a ter item: a recusa é da folha inteira, e ela
-        # também precisa aparecer aqui — senão sai do relatório sem sair da pilha.
-        if not l.conferir and l.situacao not in ("lida", "referencia"):
-            linhas.append([l.matricula, "", "", l.motivo or l.situacao, l.onde])
     return _escrever(pasta / "respostas_conferir.csv",
                      ["matricula", "item", "resposta", "motivo", "folha"], linhas)
 
