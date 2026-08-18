@@ -510,6 +510,24 @@ Cada estudante recebe **mais de uma folha**, e a tabela mostra quantas:
   dela (é esta folha que a professora corrige). A coordenação decide se imprime,
   em “⚙ Configurar prova”, no Painel.
 
+#### Cartões extras, sem identificação
+
+O botão **🖨 Cartões extras** imprime cartões de reserva: mesma organização dos
+nominais — mesmas colunas, mesma ordem dos itens, mesmos alvéolos —, mas **sem
+nome impresso**. Quem usar escreve nome e turma nas linhas do alto e preenche a
+**matrícula nos alvéolos**: são nove posições, uma por dígito.
+
+Servem para o dia da aplicação (cartão rasgado, estudante que chegou fora da
+lista) e para **teste de impressão**: imprimir não grava nada no sistema, e o
+cartão extra não pertence a estudante nenhum.
+
+Escolha quantos e a versão (A1 ou A2). Vale lembrar que o cartão traz o número
+dos itens daquela versão — um extra de A1 não serve para quem faz a A2.
+
+**Todos os alvéolos da folha têm o mesmo tamanho**, inclusive os do tipo B e os
+da matrícula: quem preenche não deve encontrar dois tamanhos de círculo, e o
+leitor óptico procura um alvo só.
+
 Todas trazem cabeçalho com nome, matrícula e turma, âncoras pretas nos cantos e
 “folha N de M”, para a digitalização em lote saber a que estudante e a que parte
 da prova cada imagem pertence.
