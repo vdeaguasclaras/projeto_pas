@@ -378,6 +378,20 @@ montagem já sai assim:
   item dessas áreas não ganha nenhum — rascunho em prova de Linguagens é só
   ruído.
 
+#### A versão da prova, no papel do estudante
+
+No que o estudante recebe — caderno e cartão-resposta —, a versão aparece como
+**código**, não como palavra: **A1** é a prova regular e **A2**, a adaptada. Sai
+no cabeçalho de todas as folhas do caderno, na observação da capa e no campo
+**VERSÃO** do cartão.
+
+As duas levam código, inclusive a regular: se só uma trouxesse marca, a marca
+apontaria para quem a tem — que é justamente o que se quer evitar.
+
+**No sistema nada muda.** Nas telas, na lista de estudantes, na correção e no
+gabarito exportado para o leitor de cartões, a versão continua sendo *regular* e
+*adaptada*, como sempre foi. O código é só do papel.
+
 #### A tabela periódica, no fim de toda prova
 
 A **última folha de todo caderno** — regular e adaptada, de todas as séries — é

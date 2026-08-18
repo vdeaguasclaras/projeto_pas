@@ -204,6 +204,29 @@ alternativas, quando o problema está no enunciado.
   é a altura. E `line-height:1` no nome corta o acento: “silício” virava
   “silicio”, erro de grafia impresso 118 vezes.
 
+## O papel do estudante não diz "adaptada", e o cartão se mede
+
+- **No impresso, a versão é código: `A1` (regular) e `A2` (adaptada)**
+  (`codigoDaVersao`). "Adaptada" é palavra de bastidor — impressa, conta ao
+  estudante e ao colega ao lado que aquele caderno é o da prova de inclusão. Os
+  DOIS levam código, inclusive a regular: se só um trouxesse marca, a marca
+  voltaria a apontar para quem a tem. São três lugares — cabeçalho de toda folha
+  do caderno, observação da capa e campo VERSÃO do cartão. **No sistema, no
+  banco, no elenco, na correção e no gabarito do leitor óptico nada muda**:
+  trocar o dado quebraria o contrato do leitor e o histórico gravado.
+- **A capacidade da folha do cartão é MEDIDA, não escrita à mão**
+  (`medirCartao`). Era: 42 linhas por coluna e 5 blocos do tipo B. A coluna
+  comporta 4, e com o quinto o bloco descia por cima da ÂNCORA do canto
+  inferior — o quadrado preto que alinha o leitor óptico. Cartão com âncora
+  encoberta é cartão que a máquina não lê, e o defeito só aparece ao digitalizar
+  o lote, com a prova já aplicada. Pegou a 2ª e a 3ª série, que têm 5 itens
+  tipo B. Duas armadilhas ao mexer nessa régua: o molde tem de ser **idêntico**
+  ao impresso (sem o bloco de orientações, ou com o cabeçalho vazio, o corpo
+  mede mais do que tem — por isso `orientacoesDoCartao()` e
+  `orientacoesDiscursivas()` são funções, e a régua recebe o `provaId`); e o
+  bloco tem de ser medido **solto**, porque dentro da coluna, que é um flex de
+  altura limitada, ele encolhe e mede menos do que ocupa de verdade.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável

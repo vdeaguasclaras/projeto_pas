@@ -3338,6 +3338,22 @@ function arranjoCapa(provaId = idProvaAtual()) {
   return ARRANJOS_CAPA[a] ? a : ARRANJO_CAPA_PADRAO;
 }
 
+/* ---------------- como a versão se chama no papel ----------------
+   “Adaptada” é palavra de bastidor. Impressa na folha, ela conta ao estudante
+   — e a quem estiver sentado ao lado — que aquele caderno é o da prova de
+   inclusão, e nenhum dos dois tem o que fazer com essa informação. No papel a
+   versão vira código, e o código é neutro: A1 e A2 não dizem qual é qual.
+
+   Os DOIS levam código, inclusive a regular. Se só um trouxesse marca, a marca
+   voltaria a apontar para quem a tem — que é exatamente o que se quer evitar.
+
+   Vale só para o impresso. No sistema, no banco, no elenco, na correção e no
+   gabarito que vai para o leitor óptico, a versão continua sendo `regular` e
+   `adaptada`: quem coordena precisa da palavra, e trocar o dado quebraria o
+   contrato do leitor de cartões e o histórico já gravado. */
+const CODIGO_DA_VERSAO = { regular: 'A1', adaptada: 'A2' };
+const codigoDaVersao = v => CODIGO_DA_VERSAO[v] || CODIGO_DA_VERSAO.regular;
+
 function htmlCapa(provaId, versao, totalItens) {
   const c = provaPorId(provaId);
   if (!c) return '';
@@ -3360,7 +3376,7 @@ function htmlCapa(provaId, versao, totalItens) {
       <ol>${instrucoes(provaId).map(i => `<li>${limpar(i)}</li>`).join('')}</ol>
       <div class="pas-capa-obs">
         <span class="rot">OBSERVAÇÕES</span>
-        • Este caderno contém <b>${totalItens} ${totalItens === 1 ? 'item' : 'itens'}</b>${versao === 'adaptada' ? ' (versão adaptada)' : ''}.<br>
+        • Este caderno contém <b>${totalItens} ${totalItens === 1 ? 'item' : 'itens'}</b> · versão <b>${codigoDaVersao(versao)}</b>.<br>
         • ${esc(c.nome)} · ${esc(c.etapa)} · ${esc(c.serie)}.<br>
         • Aplicação: ${dataBR(c.dataAplicacao)} · Duração: ${esc(c.duracao)}.<br>
         • Colégio Marista Águas Claras.
@@ -3889,7 +3905,7 @@ function htmlCaderno(provaId, versao, comCapa = true, extras = []) {
   const paginasRed = pecasRed.length
     ? distribuirEmUmaColuna(pecasRed, medirPecas(pecasRed, true)) : [];
   const p = provaPorId(provaId);
-  const ident = `${esc(p?.nome || '')} — ${esc(p?.serie || '')} · ${esc(p?.etapa || '')}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
+  const ident = `${esc(p?.nome || '')} — ${esc(p?.serie || '')} · ${esc(p?.etapa || '')} · versão ${codigoDaVersao(versao)}`;
   const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(provaId, versao, pv.length)}</div>` : '';
   const total = paginas.length + paginasRed.length + 1 + (comCapa ? 1 : 0);
   let n = comCapa ? 1 : 0;
@@ -4614,12 +4630,118 @@ ACOES['rd-apagar'] = d => {
 const PERCENTUAIS_D = [0, 25, 50, 75, 100];
 const COLUNAS_CARTAO = 4;
 const LINHAS_REDACAO = 30;
-// Capacidade de uma folha A4 neste desenho — o que não couber vai para uma
-// folha de continuação, em vez de ser cortado em silêncio.
-const LINHAS_POR_COLUNA = 42;
-const BLOCOS_B_POR_COLUNA = 5;
-const BLOCOS_B_POR_FOLHA = 10;   // a coluna se desdobra em duas antes de virar folha nova
-const ALTURA_UTIL_D = 650;
+
+/* ---------------- a régua do cartão ----------------
+   Quantas linhas cabem numa coluna, e quantos blocos do tipo B cabem na coluna
+   ao lado, não são números que se possam chutar. Foram: `42` linhas e `5`
+   blocos. A coluna do tipo B comporta QUATRO, e com cinco o último bloco descia
+   por cima da ÂNCORA do canto inferior — o quadrado preto que é a referência de
+   alinhamento do leitor óptico. Cartão com âncora encoberta é cartão que a
+   máquina não alinha, e o defeito só aparece na hora de digitalizar o lote, com
+   a prova já aplicada. Apareceu nas provas regulares da 2ª e da 3ª série, que
+   são as que têm mais itens.
+
+   Agora a folha se mede, como o caderno já faz com as peças (`medirPecas`):
+   monta-se uma folha de mentira fora da tela, medem-se a coluna, a linha e o
+   bloco do tipo B nos dois formatos, e a capacidade sai da medida. Mexer no
+   desenho pelo CSS passa a reajustar a paginação sozinho, em vez de exigir que
+   alguém lembre de reajustar um número aqui. */
+const reguasDoCartao = new Map();
+
+function medirCartao(provaId) {
+  if (reguasDoCartao.has(provaId)) return reguasDoCartao.get(provaId);
+  // O molde leva o cabeçalho DESTA prova, e campos preenchidos. Com a prova
+  // nula os campos saíam vazios, o bloco vazio não ocupa linha nenhuma, e a
+  // folha de mentira ficava com o corpo mais alto que a real — capacidade a
+  // mais, de novo. O nome do estudante não importa; que exista, importa.
+  const est = { nome: 'ESTUDANTE', matricula: '0000-0000', turma: '0ª A', versao: 'regular' };
+  const molde = document.createElement('div');
+  molde.style.cssText = 'position:absolute;left:-10000pt;top:0;visibility:hidden';
+
+  // A folha de mentira precisa ser IDÊNTICA à impressa: mesmo cabeçalho, mesmas
+  // orientações, mesmo rodapé. Ela serve para uma coisa só — dizer a altura que
+  // sobra para a coluna, que é o que a capacidade depende.
+  const linhaFalsa = n => `<div class="cr-linha"><span class="no">${n}</span>${bolhasDe('A')}</div>`;
+  const folha = `
+    <div class="cr-folha">
+      ${cabecalhoCartao(provaId, est, 'régua')}
+      ${orientacoesDoCartao()}
+      <div class="cr-corpo">
+        <div class="cr-ac"><div class="cr-ac-col"><div class="cr-tit">RÉGUA</div>
+          ${linhaFalsa(1)}${linhaFalsa(2)}</div></div>
+        <div class="cr-bcol"><div class="cr-tit">RÉGUA</div></div>
+      </div>
+      ${rodapeCartao(est, 1, 1)}
+    </div>`;
+
+  // E as peças precisam ser medidas SOLTAS. Dentro da coluna, que é um flex de
+  // altura limitada, o bloco do tipo B encolhe para caber — e medi-lo encolhido
+  // devolve uma capacidade maior do que a real, que foi como o quinto bloco
+  // acabou por cima da âncora. Fora do fluxo, com a largura da coluna e a
+  // altura livre, ele mede o que mede de verdade.
+  const solta = (classe, largura, blocos) => `
+    <div class="cr-bcol${classe}" style="position:absolute;top:0;left:0;height:auto;width:${largura}">
+      <div class="cr-tit">RÉGUA</div>${[...Array(blocos).keys()].map(n => blocoTipoB(n + 1)).join('')}</div>`;
+  // A folha do tipo D tem orientações mais curtas — e portanto outra altura
+  // útil. Duas pautas de tamanhos diferentes dão, por subtração, a altura fixa
+  // do bloco (cabeçalho e quadro do corretor) e a altura de uma linha de pauta.
+  const folhaD = `
+    <div class="cr-folha">
+      ${cabecalhoCartao(provaId, est, 'régua')}
+      ${orientacoesDiscursivas()}
+      <div class="cr-d-util" style="flex:1;overflow:hidden">
+        ${blocoDiscursivo(1, 'régua', 10)}${blocoDiscursivo(2, 'régua', 20)}
+      </div>
+      ${rodapeCartao(est, 1, 1)}
+    </div>`;
+  molde.innerHTML = `<div class="cr-previa" style="padding:0;background:none;overflow:visible;position:relative">
+    ${folha}${folhaD}${solta('', '118pt', 3)}${solta(' duplo', '126pt', 4)}</div>`;
+  document.body.appendChild(molde);
+
+  const ret = el => el.getBoundingClientRect();
+  // Quantas peças de passo `passo` cabem na caixa, descontado o que vem antes da
+  // primeira (o padding da caixa e o título) e o padding de baixo.
+  const cabem = (alturaUtil, inicio, passo, altura) =>
+    Math.max(1, Math.floor((alturaUtil - inicio - altura) / passo) + 1);
+
+  const alturaDaCaixa = cx => {
+    const r = ret(cx), e = getComputedStyle(cx);
+    return r.height - (parseFloat(e.paddingBottom) || 0) - (parseFloat(e.borderBottomWidth) || 0);
+  };
+  // `inicio` e `passo` da série solta, transpostos para a caixa de verdade.
+  const medidas = (cx, primeiro, seguinte) => ({
+    inicio: ret(primeiro).top - ret(cx).top,
+    passo: ret(seguinte).top - ret(primeiro).top,
+    altura: ret(primeiro).height
+  });
+
+  const [caixaB, soltaSimples, soltaDupla] = [...molde.querySelectorAll('.cr-bcol')];
+  const linhas = [...molde.querySelectorAll('.cr-ac-col .cr-linha')];
+  const colA = molde.querySelector('.cr-ac-col');
+  const bsS = [...soltaSimples.querySelectorAll('.cr-bloco-b')];
+  const bsD = [...soltaDupla.querySelectorAll('.cr-bloco-b')];
+
+  const mA = medidas(colA, linhas[0], linhas[1]);
+  const mS = medidas(soltaSimples, bsS[0], bsS[1]);
+  // No formato duplo os blocos vão dois a dois: o passo de LINHA é do 1º ao 3º.
+  const mD = medidas(soltaDupla, bsD[0], bsD[2]);
+
+  // Folha do tipo D: `d10` e `d20` são o mesmo bloco com 10 e com 20 linhas de
+  // pauta; a diferença entre eles é 10 linhas, e o que sobra é a parte fixa.
+  const [d10, d20] = [...molde.querySelectorAll('.cr-d')];
+  const linhaDaPauta = (ret(d20).height - ret(d10).height) / 10;
+  const regua = {
+    alturaUtilD: ret(molde.querySelector('.cr-d-util')).height,
+    linhaDaPauta,
+    baseD: ret(d10).height - 10 * linhaDaPauta,
+    linhasPorColuna: cabem(alturaDaCaixa(colA), mA.inicio, mA.passo, mA.altura),
+    blocosBPorColuna: cabem(alturaDaCaixa(caixaB), mS.inicio, mS.passo, mS.altura),
+    blocosBPorFolha: 2 * cabem(alturaDaCaixa(caixaB), mD.inicio, mD.passo, mD.altura)
+  };
+  molde.remove();
+  reguasDoCartao.set(provaId, regua);
+  return regua;
+}
 
 function cabecalhoCartao(provaId, est, faixa) {
   const c = provaPorId(provaId) || {};
@@ -4636,7 +4758,7 @@ function cabecalhoCartao(provaId, est, faixa) {
       <div><span>MATRÍCULA</span><b>${esc(est.matricula)}</b></div>
       <div><span>TURMA</span><b>${esc(est.turma)}</b></div>
       <div><span>PROVA</span><b>${esc((c.serie || '').toUpperCase())}</b></div>
-      <div><span>VERSÃO</span><b>${est.versao === 'adaptada' ? 'ADAPTADA' : 'REGULAR'}</b></div>
+      <div><span>VERSÃO</span><b>${codigoDaVersao(est.versao)}</b></div>
     </div>
     <div class="cr-sala"><small>SALA</small><i></i></div>
   </div>
@@ -4658,17 +4780,60 @@ function bolhasDe(tipo) {
     `<span class="bolha"></span><span>${r}</span>`).join('');
 }
 
+// A grade de um item do tipo B: centena, dezena e unidade, dez algarismos cada.
+// Uma função só porque a régua (`medirCartao`) precisa medir EXATAMENTE o mesmo
+// desenho que vai impresso — bloco de mentira com outra altura daria capacidade
+// errada, que é o defeito que a régua existe para não repetir.
+// O bloco de orientações do alto da folha objetiva. Vale uma função porque a
+// régua (`medirCartao`) tem de montar uma folha idêntica à impressa: ele ocupa
+// uns 60pt do corpo, e medir sem ele daria uma coluna 60pt mais alta do que a
+// real — capacidade a mais, e conteúdo por cima da âncora.
+function orientacoesDoCartao() {
+  return `
+        <div class="cr-orient">
+          <div class="txt">
+            Marque com caneta esferográfica de tinta <b>preta</b>, preenchendo o círculo por inteiro.
+            Itens do <b>tipo A</b>: marque <b>C</b> se julgar o item certo ou <b>E</b> se julgar errado.
+            Itens do <b>tipo C</b>: marque uma única opção. Itens do <b>tipo B</b>: marque os três
+            algarismos na coluna à direita, inclusive os zeros. Itens do <b>tipo D</b> são respondidos
+            na folha indicada. Não rasure: marcação dupla é anulada.
+          </div>
+          <div class="cr-exemplo">
+            <h6>EXEMPLO DE PREENCHIMENTO</h6>
+            <div class="ex"><i>tipo A</i><span class="bolha m"></span><span>C</span><span class="bolha"></span><span>E</span></div>
+            <div class="ex"><i>tipo C</i><span class="bolha"></span><span>A</span><span class="bolha m"></span><span>B</span><span class="bolha"></span><span>C</span><span class="bolha"></span><span>D</span></div>
+            <div class="ex"><i>tipo B</i><span>resposta 025 → C=0, D=2, U=5</span></div>
+          </div>
+        </div>`;
+}
+
+function blocoTipoB(numero) {
+  return `
+      <div class="cr-bloco-b">
+        <h6>ITEM ${numero}</h6>
+        <div class="cr-bgrade">
+          <span></span><span class="cab">C</span><span class="cab">D</span><span class="cab">U</span>
+          ${Array.from({ length: 10 }, (_, d) => `
+            <span class="dig">${d}</span>
+            <span class="cel"><span class="bolha"></span></span>
+            <span class="cel"><span class="bolha"></span></span>
+            <span class="cel"><span class="bolha"></span></span>`).join('')}
+        </div>
+      </div>`;
+}
+
 // Folhas objetivas — todos os itens em ordem numérica; só A e C recebem
 // bolhas aqui. Quando não cabem numa folha, seguem em folhas de continuação.
-function corposObjetivos(pv) {
+function corposObjetivos(pv, provaId) {
   const bs = pv.filter(e => e.item.tipo === 'B');
-  const porFolha = COLUNAS_CARTAO * LINHAS_POR_COLUNA;
+  const { linhasPorColuna, blocosBPorColuna, blocosBPorFolha } = medirCartao(provaId);
+  const porFolha = COLUNAS_CARTAO * linhasPorColuna;
   const quantas = Math.max(Math.ceil(pv.length / porFolha),
-                           Math.ceil(bs.length / BLOCOS_B_POR_FOLHA), 1);
+                           Math.ceil(bs.length / blocosBPorFolha), 1);
   const corpos = [];
   for (let f = 0; f < quantas; f++) {
     const daFolha = pv.slice(f * porFolha, (f + 1) * porFolha);
-    const bsDaFolha = bs.slice(f * BLOCOS_B_POR_FOLHA, (f + 1) * BLOCOS_B_POR_FOLHA);
+    const bsDaFolha = bs.slice(f * blocosBPorFolha, (f + 1) * blocosBPorFolha);
     const porColuna = Math.ceil(daFolha.length / COLUNAS_CARTAO) || 1;
     const colunas = [];
     for (let i = 0; i < daFolha.length; i += porColuna) colunas.push(daFolha.slice(i, i + porColuna));
@@ -4685,18 +4850,7 @@ function corposObjetivos(pv) {
         }).join('')}
       </div>`).join('');
 
-    const bHtml = bsDaFolha.length ? bsDaFolha.map(({ numero }) => `
-      <div class="cr-bloco-b">
-        <h6>ITEM ${numero}</h6>
-        <div class="cr-bgrade">
-          <span></span><span class="cab">C</span><span class="cab">D</span><span class="cab">U</span>
-          ${Array.from({ length: 10 }, (_, d) => `
-            <span class="dig">${d}</span>
-            <span class="cel"><span class="bolha"></span></span>
-            <span class="cel"><span class="bolha"></span></span>
-            <span class="cel"><span class="bolha"></span></span>`).join('')}
-        </div>
-      </div>`).join('')
+    const bHtml = bsDaFolha.length ? bsDaFolha.map(({ numero }) => blocoTipoB(numero)).join('')
       : `<div style="font-size:6.5pt;color:#777;text-align:center;padding:8pt 4pt">${
           bs.length ? 'Os itens do tipo B estão nas outras folhas.' : 'Esta prova não tem itens do tipo B.'}</div>`;
 
@@ -4705,24 +4859,10 @@ function corposObjetivos(pv) {
       faixa: soB ? 'Caderno de respostas — itens do tipo B (continuação)'
         : `Caderno de respostas — itens dos tipos A, B e C${quantas > 1 ? ` (${f + 1}ª parte)` : ''}`,
       html: `
-        <div class="cr-orient">
-          <div class="txt">
-            Marque com caneta esferográfica de tinta <b>preta</b>, preenchendo o círculo por inteiro.
-            Itens do <b>tipo A</b>: marque <b>C</b> se julgar o item certo ou <b>E</b> se julgar errado.
-            Itens do <b>tipo C</b>: marque uma única opção. Itens do <b>tipo B</b>: marque os três
-            algarismos na coluna à direita, inclusive os zeros. Itens do <b>tipo D</b> são respondidos
-            na folha indicada. Não rasure: marcação dupla é anulada.
-          </div>
-          <div class="cr-exemplo">
-            <h6>EXEMPLO DE PREENCHIMENTO</h6>
-            <div class="ex"><i>tipo A</i><span class="bolha m"></span><span>C</span><span class="bolha"></span><span>E</span></div>
-            <div class="ex"><i>tipo C</i><span class="bolha"></span><span>A</span><span class="bolha m"></span><span>B</span><span class="bolha"></span><span>C</span><span class="bolha"></span><span>D</span></div>
-            <div class="ex"><i>tipo B</i><span>resposta 025 → C=0, D=2, U=5</span></div>
-          </div>
-        </div>
+        ${orientacoesDoCartao()}
         <div class="cr-corpo">
           ${soB ? '' : `<div class="cr-ac">${acHtml}</div>`}
-          <div class="cr-bcol${bsDaFolha.length > BLOCOS_B_POR_COLUNA ? ' duplo' : ''}" ${soB ? 'style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:6pt;align-content:start"' : ''}>
+          <div class="cr-bcol${bsDaFolha.length > blocosBPorColuna ? ' duplo' : ''}" ${soB ? 'style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:6pt;align-content:start"' : ''}>
             ${soB ? '' : '<div class="cr-tit">ITENS DO TIPO B</div>'}${bHtml}</div>
         </div>`
     });
@@ -4732,15 +4872,45 @@ function corposObjetivos(pv) {
 
 // Folhas dos discursivos (tipo D): uma pauta por item e as bolhas de
 // percentual de acerto. Quebra em mais folhas quando a altura não dá.
-function corposDiscursivos(pv) {
+// As orientações da folha do tipo D — texto mais curto que o da folha
+// objetiva, e por isso altura própria. Função pelo mesmo motivo da outra: a
+// régua monta a folha inteira para saber quanto sobra para as pautas.
+function orientacoesDiscursivas() {
+  return `
+      <div class="cr-orient">
+        <div class="txt">
+          Responda com caneta esferográfica de tinta <b>preta</b>, dentro do espaço reservado a cada item.
+          Em caso de erro, risque a palavra com um traço simples e escreva o substitutivo — não use parênteses.
+          O quadro de <b>percentual de acerto</b> é de uso exclusivo de quem corrige.
+        </div>
+      </div>`;
+}
+
+function blocoDiscursivo(numero, componente, linhas) {
+  return `
+          <div class="cr-d">
+            <div class="cr-d-cab">
+              <b>ITEM ${numero}</b>
+              <span>${esc(componente)} · resposta construída</span>
+            </div>
+            <div class="cr-pauta">${Array.from({ length: linhas }, () => '<i></i>').join('')}</div>
+            <div class="cr-nota">
+              <b>PERCENTUAL DE ACERTO (uso do corretor)</b>
+              ${PERCENTUAIS_D.map(p => `<span class="op"><span class="bolha"></span>${p}%</span>`).join('')}
+            </div>
+          </div>`;
+}
+
+function corposDiscursivos(pv, provaId) {
   const ds = pv.filter(e => e.item.tipo === 'D');
   if (!ds.length) return [];
-  const altura = e => 40 + (e.item.dLinhas || 10) * 17;
+  const { alturaUtilD, baseD, linhaDaPauta } = medirCartao(provaId);
+  const altura = e => baseD + (e.item.dLinhas || 10) * linhaDaPauta;
   const grupos = [];
   let grupo = [], soma = 0;
   for (const e of ds) {
     const a = altura(e);
-    if (grupo.length && soma + a > ALTURA_UTIL_D) { grupos.push(grupo); grupo = []; soma = 0; }
+    if (grupo.length && soma + a > alturaUtilD) { grupos.push(grupo); grupo = []; soma = 0; }
     grupo.push(e); soma += a;
   }
   if (grupo.length) grupos.push(grupo);
@@ -4748,26 +4918,10 @@ function corposDiscursivos(pv) {
   return grupos.map((g, i) => ({
     faixa: `Caderno de respostas — itens do tipo D (resposta construída)${grupos.length > 1 ? ` (${i + 1}ª parte)` : ''}`,
     html: `
-      <div class="cr-orient">
-        <div class="txt">
-          Responda com caneta esferográfica de tinta <b>preta</b>, dentro do espaço reservado a cada item.
-          Em caso de erro, risque a palavra com um traço simples e escreva o substitutivo — não use parênteses.
-          O quadro de <b>percentual de acerto</b> é de uso exclusivo de quem corrige.
-        </div>
-      </div>
+      ${orientacoesDiscursivas()}
       <div style="flex:1;overflow:hidden">
-        ${g.map(({ item, numero }) => `
-          <div class="cr-d">
-            <div class="cr-d-cab">
-              <b>ITEM ${numero}</b>
-              <span>${esc(item.componente)} · resposta construída</span>
-            </div>
-            <div class="cr-pauta">${Array.from({ length: item.dLinhas || 10 }, () => '<i></i>').join('')}</div>
-            <div class="cr-nota">
-              <b>PERCENTUAL DE ACERTO (uso do corretor)</b>
-              ${PERCENTUAIS_D.map(p => `<span class="op"><span class="bolha"></span>${p}%</span>`).join('')}
-            </div>
-          </div>`).join('')}
+        ${g.map(({ item, numero }) =>
+          blocoDiscursivo(numero, item.componente, item.dLinhas || 10)).join('')}
       </div>`
   }));
 }
@@ -4797,7 +4951,7 @@ function corpoRedacao(provaId = idProvaAtual()) {
 function corposDoCartao(provaId, est) {
   const p = provaPorId(provaId);
   const pv = prova(provaId, est.versao);
-  const corpos = [...corposObjetivos(pv), ...corposDiscursivos(pv)];
+  const corpos = [...corposObjetivos(pv, provaId), ...corposDiscursivos(pv, provaId)];
   // A folha de redação só sai se a prova tiver redação e a coordenação optar
   // por imprimi-la.
   if (p?.temRedacao !== false && p?.imprimirRedacao !== false) corpos.push(corpoRedacao(provaId));
