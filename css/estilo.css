@@ -1241,6 +1241,44 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
 .painel-area td:nth-child(n+3){font-variant-numeric:tabular-nums}
 .fila-n{color:#8a6d00;font-size:14px}
 
+/* ===== montar a prova adaptada =====
+   Lista longa (são 120 itens numa 3ª série), então a linha é baixa e o que
+   distingue “dentro” de “fora” é a cor de fundo, não um ícone: o olho corre a
+   coluna e vê o bloco inteiro de uma vez. */
+.adap-resumo{display:flex;gap:14px;align-items:center;border:1px solid var(--borda);
+  border-radius:10px;padding:10px 14px;background:var(--fundo)}
+.adap-resumo.certo{border-color:var(--verde)}
+.adap-numero{display:flex;flex-direction:column;align-items:center;line-height:1;min-width:64px}
+.adap-numero b{font-size:26px;font-variant-numeric:tabular-nums}
+.adap-numero span{font-size:10px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.4px}
+.adap-detalhe p{margin:0;font-size:12.5px;line-height:1.6}
+.adap-detalhe .ok{color:var(--verde)}
+.adap-detalhe .excede{color:#b45309}
+.adap-detalhe .falta{color:var(--ink-2)}
+.adap-linha{color:var(--ink-2)}
+.adap-barra{display:flex;gap:6px;margin:10px 0 4px}
+.adap-nota{font-size:12px;color:var(--ink-2);line-height:1.5;margin:6px 0 0;
+  border-left:3px solid var(--borda);padding-left:8px}
+.adap-nota.aviso{border-left-color:var(--amarelo)}
+
+.adap-lista{margin-top:12px;max-height:52vh;overflow:auto;border:1px solid var(--borda);border-radius:10px}
+.adap-bloco{border-bottom:1px solid var(--borda)}
+.adap-bloco:last-child{border-bottom:none}
+.adap-bloco-cab{display:flex;align-items:center;gap:8px;padding:7px 10px;
+  background:var(--fundo);position:sticky;top:0;z-index:1;font-size:12.5px}
+.adap-bloco-cab b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adap-conta{font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.adap-bloco-acoes{display:flex;gap:4px}
+
+.adap-item{display:flex;align-items:center;gap:7px;padding:4px 10px;font-size:12.5px;
+  cursor:pointer;border-top:1px solid var(--borda)}
+.adap-item:hover{background:var(--fundo)}
+.adap-item.dentro{background:color-mix(in srgb,var(--verde) 9%,transparent)}
+.adap-item.travado{cursor:default;color:var(--ink-2)}
+.adap-n{font-family:var(--mono);font-size:11.5px;min-width:26px;text-align:right;color:var(--ink-2)}
+.adap-enun{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+.adap-marca{font-size:10.5px;font-weight:700;color:var(--roxo);white-space:nowrap}
+
 /* Vínculo entre o item regular e a versão adaptada dele. */
 .vinculo-versao{border-left:4px solid var(--roxo);margin-bottom:12px}
 .vinculo-versao.neutro{border-left-color:var(--borda)}

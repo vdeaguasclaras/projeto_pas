@@ -230,6 +230,36 @@ escolha · **D** discursivo (respondido no caderno, com nota lançada depois).
 
 ### A prova adaptada, e como ajustar um item nela
 
+#### Escolher quais itens ficam nela
+
+A prova de inclusão é **menor** que a regular, e quem decide o tamanho é a
+coordenação pedagógica, no botão **⚖ Montar a prova adaptada**, no alto do
+Caderno.
+
+Ele abre a lista inteira da prova regular, na ordem em que ela é lida e
+agrupada pelo texto-base. Marque os itens que **também saem na adaptada** e
+desmarque o resto. Cada bloco tem **todos / nenhum** ao lado do título — tirar
+um texto-base inteiro costuma ser o corte que melhor preserva o sentido da
+prova, melhor do que remover itens soltos no meio de um texto que continua.
+
+O quadro do alto acompanha a escolha ao vivo: quantos itens estão na adaptada,
+quanto falta para a **meta** (definida em “⚙ Configurar prova”, no Painel) e
+como eles se distribuem **por tipo** e **por área** — é o que mostra se a prova
+encolheu tirando tudo de um lugar só.
+
+O que você desmarcar **continua na prova regular**, com o mesmo número. Só a
+numeração da adaptada é refeita, em sequência.
+
+Dois itens aparecem travados e não entram na escolha:
+
+- o que **tem adaptação própria** — quem sai na adaptada é a cópia, e é ela que
+  carrega o ajuste feito para a prova de inclusão;
+- a própria cópia, que só existe para a adaptada. Para tirá-la, exclua o item.
+
+Item que ainda está **na revisão** não aparece na lista: ao ser aprovado ele
+entra nas duas provas, então vale voltar aqui depois da última aprovação. O
+diálogo avisa quando há itens nessa situação.
+
 **O sistema não gera a prova adaptada sozinho.** Quem decide onde cada item
 entra é o campo **Versão**, dentro do item:
 

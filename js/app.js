@@ -178,6 +178,16 @@ const PERS = {
     try { await nuvem.gravarLinha('textos', t); return null; }
     catch (e) { return e?.message || String(e); }
   },
+  // A mesma gravação em lote, esperada. Um `upsert` só com a lista inteira: se
+  // o banco recusar, recusa tudo, e quem chamou desfaz tudo — nada de meia
+  // prova adaptada gravada. Ver `ACOES['adap-salvar']`.
+  async itensAgora(lista) {
+    if (!modoNuvem || !lista.length) return null;
+    try {
+      await nuvem.gravarLinhas('itens', lista.map(i => ({ ...i, ordem: PERS.ordemNaProva(i) })));
+      return null;
+    } catch (e) { return e?.message || String(e); }
+  },
   itens(ids) {
     if (!modoNuvem) return;
     const lista = ids.map(id => S.itens.find(x => x.id === id)).filter(Boolean)
@@ -4197,6 +4207,7 @@ function telaCaderno() {
           <button class="btn ${cadRevisando ? 'roxo' : 'fantasma'}" data-acao="cad-revisar"
             title="Corrigir enunciados, alternativas e textos-base clicando neles na própria página">
             ${cadRevisando ? '✓ Revisando na página' : '✎ Revisar na página'}</button>
+          ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-adaptada">⚖ Montar a prova adaptada</button>' : ''}
           ${ehCoord() ? '<button class="btn fantasma" data-acao="cad-capa">⚙ Capa e instruções</button>' : ''}
           ${cuidaDaRedacao() && provaTemRedacao(pAtiva.id) ? '<button class="btn fantasma" data-acao="cad-redacao">✍ Proposta de redação</button>' : ''}
           <button class="btn rosa" data-acao="cad-imprimir" ${temConteudo ? '' : 'disabled'}>🖨 Imprimir / salvar em PDF</button>
@@ -4232,6 +4243,243 @@ MUDS['cad-revisao'] = (d, el) => { cadComRevisao = el.checked; render(); };
 ACOES['cad-imprimir'] = () => {
   $('#print-area').innerHTML = htmlCaderno(idProvaAtual(), cadVersao);
   window.print();
+};
+
+/* ================= montar a prova adaptada =================
+   A prova de inclusão é MENOR que a regular, e até aqui o tamanho dela era um
+   acidente: todo item nascia valendo para as duas (`versao: 'ambas'`), e a
+   adaptada só ficava menor pelos poucos itens que alguém marcou como regular.
+   Nas quatro provas isso dava três ou quatro itens a menos — não é prova
+   adaptada, é a mesma prova.
+
+   Escolher item a item no cadastro de cada um seria abrir 120 diálogos. Aqui a
+   escolha é de uma vez, sobre a lista inteira, na ordem da prova e agrupada
+   pelo texto-base — que é como a coordenação pensa a prova: tira-se um bloco,
+   não um item solto no meio de um texto que continua.
+
+   O QUE ESTA TELA MEXE, E O QUE NÃO MEXE
+
+   Ela decide, para cada item DA REGULAR, se ele também sai na adaptada —
+   `ambas` quando sim, `regular` quando não. A prova regular não muda: o item
+   desmarcado continua nela, com o mesmo número.
+
+   Dois casos ficam de fora da escolha, e aparecem travados:
+   · o item que tem adaptação própria — quem entra na adaptada é a cópia, e é
+     ela que carrega o ajuste feito para a prova de inclusão;
+   · a própria cópia (`derivadoDe`), que só existe para a adaptada.
+
+   Desmarcar uma cópia dessas a deixaria sem prova nenhuma, então ela não é
+   desmarcável: para tirá-la, exclui-se o item. */
+
+// Cópia de trabalho do diálogo: os ids que ficam na adaptada. Fora dela nada
+// muda — a gravação é no “Salvar”, de uma vez.
+let selAdaptada = null;
+
+// Os itens adaptados que não vêm da regular: as adaptações próprias. Entram na
+// conta da adaptada, mas não na escolha.
+const adaptadosProprios = provaId => S.itens.filter(i =>
+  i.provaId === provaId && i.status === 'aprovado' && i.versao === 'adaptada');
+
+function contasDaAdaptada(provaId) {
+  const naRegular = prova(provaId, 'regular');
+  const escolhidos = naRegular.filter(e => selAdaptada.has(e.item.id)).map(e => e.item);
+  const itens = [...escolhidos, ...adaptadosProprios(provaId)];
+  const porTipo = {};
+  for (const i of itens) porTipo[i.tipo] = (porTipo[i.tipo] || 0) + 1;
+  const porArea = {};
+  for (const i of itens) {
+    const a = areaDoComponente(i.componente) || 'sem área';
+    porArea[a] = (porArea[a] || 0) + 1;
+  }
+  return { naRegular, itens, porTipo, porArea, total: itens.length };
+}
+
+function htmlResumoDaAdaptada(provaId) {
+  const p = provaPorId(provaId);
+  const { naRegular, porTipo, porArea, total } = contasDaAdaptada(provaId);
+  const meta = totalDeQuestoes(p, 'adaptada');
+  const falta = meta == null ? null : total - meta;
+  const tipos = Object.keys(TIPOS).filter(t => porTipo[t])
+    .map(t => `<span class="t t${t}">${t}</span> ${porTipo[t]}`).join(' · ');
+  const areas = Object.entries(porArea).sort((a, b) => b[1] - a[1])
+    .map(([a, n]) => `${esc(a)} <b>${n}</b>`).join(' · ');
+  return `
+    <div class="adap-resumo${falta === 0 ? ' certo' : ''}">
+      <div class="adap-numero"><b>${total}</b><span>na adaptada</span></div>
+      <div class="adap-detalhe">
+        <p><b>${naRegular.length}</b> itens na regular · meta da adaptada:
+          ${meta == null ? '<em>a definir em “⚙ Configurar prova”</em>' : `<b>${meta}</b>`}${
+          falta === null ? '' : falta === 0 ? ' · <b class="ok">bate com a meta</b>'
+            : falta > 0 ? ` · <b class="excede">${falta} acima</b>` : ` <b class="falta">${-falta} abaixo</b>`}</p>
+        ${tipos ? `<p class="adap-linha">Por tipo: ${tipos}</p>` : ''}
+        ${areas ? `<p class="adap-linha">Por área: ${areas}</p>` : ''}
+      </div>
+    </div>`;
+}
+
+function dlgAdaptada() {
+  const p = provaAtual();
+  if (!p) return;
+  const { naRegular } = contasDaAdaptada(p.id);
+  const proprias = adaptadosProprios(p.id);
+  const emRevisao = S.itens.filter(i => i.provaId === p.id && i.status !== 'aprovado'
+    && i.status !== 'rascunho').length;
+
+  // Agrupado pelo texto-base, na ordem da prova: é assim que a prova é lida, e
+  // tirar o bloco inteiro é o corte que mais preserva o sentido do texto.
+  const blocos = [];
+  for (const e of naRegular) {
+    if (!blocos.length || blocos.at(-1).texto.id !== e.texto.id)
+      blocos.push({ texto: e.texto, entradas: [] });
+    blocos.at(-1).entradas.push(e);
+  }
+
+  const linhaItem = ({ item, numero }) => {
+    const par = itemAdaptadoDe(item.id);
+    const travado = !!par;
+    const marcado = selAdaptada.has(item.id);
+    return `
+      <label class="adap-item${travado ? ' travado' : ''}${marcado && !travado ? ' dentro' : ''}" id="adap-i-${esc(item.id)}">
+        <input type="checkbox" data-mud="adap-item" data-id="${esc(item.id)}"
+          ${marcado && !travado ? 'checked' : ''} ${travado ? 'disabled' : ''}>
+        <span class="adap-n">${numero}</span>
+        <span class="t t${item.tipo}">${item.tipo}</span>
+        ${discChip(item.componente)}
+        <span class="adap-enun">${esc(simples(item.enunciado).slice(0, 90))}</span>
+        ${travado ? '<span class="adap-marca">tem adaptação própria</span>' : ''}
+      </label>`;
+  };
+
+  const htmlBlocos = blocos.map(b => {
+    const ids = b.entradas.filter(e => !itemAdaptadoDe(e.item.id)).map(e => e.item.id);
+    const dentro = ids.filter(id => selAdaptada.has(id)).length;
+    return `
+      <div class="adap-bloco">
+        <div class="adap-bloco-cab">
+          <b>Texto ${b.texto.numero} — ${esc((b.texto.titulo || '').slice(0, 56))}</b>
+          <span class="adap-conta" id="adap-c-${esc(b.texto.id)}">${dentro} de ${ids.length}</span>
+          <span class="adap-bloco-acoes">
+            <button class="btn mini fantasma" data-acao="adap-bloco" data-id="${esc(b.texto.id)}" data-v="1">todos</button>
+            <button class="btn mini fantasma" data-acao="adap-bloco" data-id="${esc(b.texto.id)}" data-v="0">nenhum</button>
+          </span>
+        </div>
+        ${b.entradas.map(linhaItem).join('')}
+      </div>`;
+  }).join('');
+
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Montar a prova adaptada — ${esc(p.serie)}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 12px">Marque os itens da prova regular que
+        <b>também saem na adaptada</b>. O que você desmarcar continua na regular, com o mesmo número — só sai
+        da prova de inclusão. A numeração da adaptada é refeita sozinha, em sequência.</p>
+      <div id="adap-resumo">${htmlResumoDaAdaptada(p.id)}</div>
+      <div class="adap-barra">
+        <button class="btn mini fantasma" data-acao="adap-todos" data-v="1">Marcar todos</button>
+        <button class="btn mini fantasma" data-acao="adap-todos" data-v="0">Desmarcar todos</button>
+      </div>
+      ${proprias.length ? `<p class="adap-nota"><b>${proprias.length}
+        ${proprias.length === 1 ? 'item entra' : 'itens entram'} por adaptação própria</b> e já
+        ${proprias.length === 1 ? 'está contado' : 'estão contados'} acima. ${proprias.length === 1 ? 'Ele existe' : 'Eles existem'}
+        só para a adaptada; para tirá-${proprias.length === 1 ? 'lo' : 'los'}, exclua o item.</p>` : ''}
+      ${emRevisao ? `<p class="adap-nota aviso"><b>${emRevisao}
+        ${emRevisao === 1 ? 'item ainda está na revisão' : 'itens ainda estão na revisão'}</b> e não
+        ${emRevisao === 1 ? 'aparece' : 'aparecem'} aqui. Ao ${emRevisao === 1 ? 'ser aprovado, ele entra' : 'serem aprovados, eles entram'}
+        nas duas provas — volte aqui depois da última aprovação.</p>` : ''}
+      <div class="adap-lista">${htmlBlocos}</div>
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="adap-salvar" data-id="${esc(p.id)}">Salvar</button></div>`);
+}
+
+// Redesenha só o que a marcação muda — o resumo e as contas dos blocos. Uma
+// remontagem do diálogo inteiro perderia a rolagem, e são 120 linhas: quem está
+// no meio da lista voltaria ao topo a cada clique.
+function repintarAdaptada() {
+  const provaId = idProvaAtual();
+  const resumo = $('#adap-resumo');
+  if (resumo) resumo.innerHTML = htmlResumoDaAdaptada(provaId);
+  for (const t of textosAprovados(provaId)) {
+    const conta = document.getElementById(`adap-c-${t.id}`);
+    if (!conta) continue;
+    const ids = prova(provaId, 'regular')
+      .filter(e => e.texto.id === t.id && !itemAdaptadoDe(e.item.id)).map(e => e.item.id);
+    conta.textContent = `${ids.filter(id => selAdaptada.has(id)).length} de ${ids.length}`;
+  }
+}
+
+const marcarNaTela = (id, dentro) => {
+  const linha = document.getElementById(`adap-i-${id}`);
+  if (!linha) return;
+  linha.classList.toggle('dentro', dentro);
+  const cx = linha.querySelector('input');
+  if (cx) cx.checked = dentro;
+};
+
+MUDS['adap-item'] = (d, el) => {
+  if (el.checked) selAdaptada.add(d.id); else selAdaptada.delete(d.id);
+  marcarNaTela(d.id, el.checked);
+  repintarAdaptada();
+};
+
+ACOES['adap-bloco'] = d => {
+  const dentro = d.v === '1';
+  for (const e of prova(idProvaAtual(), 'regular')) {
+    if (e.texto.id !== d.id || itemAdaptadoDe(e.item.id)) continue;
+    if (dentro) selAdaptada.add(e.item.id); else selAdaptada.delete(e.item.id);
+    marcarNaTela(e.item.id, dentro);
+  }
+  repintarAdaptada();
+};
+
+ACOES['adap-todos'] = d => {
+  const dentro = d.v === '1';
+  for (const e of prova(idProvaAtual(), 'regular')) {
+    if (itemAdaptadoDe(e.item.id)) continue;
+    if (dentro) selAdaptada.add(e.item.id); else selAdaptada.delete(e.item.id);
+    marcarNaTela(e.item.id, dentro);
+  }
+  repintarAdaptada();
+};
+
+ACOES['cad-adaptada'] = () => {
+  const p = provaAtual();
+  if (!p) return;
+  selAdaptada = new Set(prova(p.id, 'regular')
+    .filter(e => e.item.versao === 'ambas').map(e => e.item.id));
+  dlgAdaptada();
+};
+
+// Grava de uma vez, e espera a resposta. Conteúdo de item que a pessoa acabou
+// de decidir não se grava solto: se o banco recusar, o estado local volta ao
+// que era e o diálogo continua aberto, com a escolha na tela.
+ACOES['adap-salvar'] = async d => {
+  const alterados = [];
+  const antes = new Map();
+  for (const e of prova(d.id, 'regular')) {
+    if (itemAdaptadoDe(e.item.id)) continue;
+    const querida = selAdaptada.has(e.item.id) ? 'ambas' : 'regular';
+    if (e.item.versao === querida) continue;
+    antes.set(e.item.id, e.item.versao);
+    e.item.versao = querida;
+    alterados.push(e.item);
+  }
+  if (!alterados.length) { $('#dlg').close(); toast('Nada mudou na prova adaptada.'); return; }
+
+  const erro = await PERS.itensAgora(alterados);
+  if (erro) {
+    for (const i of alterados) i.versao = antes.get(i.id);
+    save(S);
+    toast('⚠ O banco recusou a gravação: ' + erro);
+    return;
+  }
+  $('#dlg').close();
+  commit();
+  const total = prova(d.id, 'adaptada').length;
+  toast(`Prova adaptada com ${total} ${total === 1 ? 'item' : 'itens'} · ${alterados.length} ${
+    alterados.length === 1 ? 'item alterado' : 'itens alterados'}.`);
 };
 
 ACOES['cad-capa'] = () => {
