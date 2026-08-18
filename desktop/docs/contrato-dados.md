@@ -92,8 +92,9 @@ Regras:
 - Codificação UTF-8; a importação aceita `;`, `,` ou tabulação.
 
 Saem junto, na mesma pasta: `percentuais.csv` (os percentuais do discursivo — o
-sistema web **ainda não os importa**) e `folhas.csv`, uma linha por página
-digitalizada, que é o rastro do lote.
+sistema web **ainda não os importa**), `folhas.csv`, uma linha por página
+digitalizada, que é o rastro do lote, e `conferencia.html`, a fila de dúvidas com
+a imagem recortada de cada marcação e um botão que monta o CSV corrigido.
 
 ## 3. Identificação da folha
 

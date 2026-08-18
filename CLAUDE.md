@@ -339,6 +339,16 @@ prova já aplicada.**
   Matrícula sem algarismo, com mais de 12, fora do padrão ou que colida com
   outra depois de tirada a pontuação não é identificável — a tela de Cartões
   avisa antes de imprimir, que é quando sai barato consertar a planilha.
+- **Caneta não é toner, e a régua é de cada folha.** O cartão-gabarito parecia
+  o lugar óbvio de onde tirar o limiar de “alvéolo preenchido” — uma folha onde
+  se sabe o que devia estar marcado. Mas as marcas dele saem da impressora e
+  passam de 80% sempre, enquanto a caneta enche de 30% a 100% conforme a pressão
+  da mão: no primeiro lote real, duas folhas preenchidas por pessoas diferentes
+  ficaram em faixas completamente distintas, e a régua vinda do impresso mandou
+  24 marcações legítimas de uma delas para a conferência. Hoje a folha inteira é
+  medida ANTES de qualquer decisão, e a régua vai no vão entre os dois grupos
+  daquela folha (`limiares_da_folha`). Do cartão-gabarito sai o nível do PAPEL,
+  que se transfere, e a conferência entre a chave e o impresso.
 - **O cartão-gabarito é a chave da prova em papel.** Sai automaticamente à frente
   do lote, um por versão, com os alvéolos do gabarito preenchidos. É dele que o
   leitor tira o limiar de tinta desta impressora, e é ele que denuncia — antes de

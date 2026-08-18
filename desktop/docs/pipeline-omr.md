@@ -78,6 +78,18 @@ semanas depois.
    “há tinta aqui” é medido contra o papel desta folha, não contra um valor
    absoluto — scanner escuro e papel amarelado mudam a escala inteira.
 
+   **A folha inteira é medida antes de qualquer decisão**, e é dela que sai a
+   régua que a decide. Numa folha preenchida os alvéolos formam dois grupos bem
+   separados — os vazios juntos lá embaixo, os marcados espalhados mais acima —
+   e entre eles há um vão sem ninguém. A régua vai nesse vão.
+
+   Isso não é refinamento: é o que separa ler a folha de reprovar a folha. Na
+   primeira digitalização de verdade, duas folhas do mesmo lote preenchidas por
+   pessoas diferentes deram marcas em faixas completamente distintas — numa
+   passando de 80%, na outra a maioria entre 45% e 60%. Uma régua só para as
+   duas mandou 24 marcações legítimas de uma única folha para a conferência.
+   Sem vão claro (folha em branco, ou quase) vale a régua herdada.
+
    Por grupo de alvéolos (as opções de um item, os 10 algarismos de uma coluna):
    - exatamente 1 marcado, e nenhum a meio caminho → resposta;
    - 0 marcados → item em branco, e não sai linha nenhuma;
@@ -87,24 +99,43 @@ semanas depois.
    - tipo B com 1 ou 2 colunas resolvidas → `tipo_b_incompleto`. Número pela
      metade não é resposta: `9__` tanto pode ser 900 quanto 960.
 
-7. **Calibração e conferência pelo cartão-gabarito** (`leitura.py`) — o lote sai
-   da impressora com um cartão de referência na frente, um por versão, com os
-   alvéolos do gabarito preenchidos. O leitor varre o topo da pilha atrás dele
-   antes de começar, e dele tira:
-   - **o limiar desta impressora e deste scanner**, do vão entre os alvéolos que
-     deviam estar marcados e os que não deviam. Por percentis, e não pelo mínimo
-     e pelo máximo: basta um item divergente para o pior caso de um grupo
-     encostar no do outro e o limiar do lote inteiro ir junto;
+7. **O que o cartão-gabarito dá** (`leitura.py`) — o lote sai da impressora com
+   um cartão de referência na frente, um por versão, com os alvéolos do gabarito
+   preenchidos. O leitor varre o topo da pilha atrás dele antes de começar.
+
+   Ele dá **menos do que parecia**, e saber o quê importa. A ideia original era
+   tirar dele o limiar do lote inteiro — uma folha onde se sabe, alvéolo por
+   alvéolo, o que devia estar marcado. Só que as marcas dele são de **toner**, e
+   passam de 80% sempre; o estudante escreve a **caneta**, e a marca vai de 30%
+   a 100% conforme a pressão da mão. Régua tirada da folha impressa fica alta
+   demais para gente. Então dele saem só:
+
+   - **o nível do PAPEL** — quanto escurece um alvéolo vazio nesta impressora e
+     neste scanner. Isso se transfere, e vira a régua de reserva para a folha
+     que não tiver o que dizer sobre si;
    - **a conferência entre o papel e a chave**. Divergiu? Alguém mexeu nos itens
      depois de imprimir os cartões — o leitor avisa e sai com código 1, porque
      corrigir o lote com a chave errada é o pior desfecho possível.
 
-   Sem cartão de referência o lote é lido assim mesmo, com o limiar padrão e um
-   aviso dizendo o que se perdeu.
+   Sem cartão de referência o lote é lido assim mesmo, com a régua padrão e um
+   aviso dizendo o que se perdeu. Isso é **aviso**, não divergência: o lote
+   segue, e o código de saída continua 0.
 
 8. **Exportação** (`saida.py`) — os CSVs do contrato
-   (`docs/contrato-dados.md`), mais `folhas.csv` com uma linha por página e uma
-   miniatura do cabeçalho de cada folha que precisa de olho humano.
+   (`docs/contrato-dados.md`), mais `folhas.csv` com uma linha por página.
+
+   E a **fila de conferência com imagem**: para cada marcação duvidosa, um PNG
+   do pedaço da folha onde ela está — endireitado pela mesma homografia, e com
+   folga bastante para trazer junto o número do item, a letra da opção ou o
+   cabeçalho do bloco do tipo B. “O item 47 ficou duvidoso” não resolve nada
+   sozinho: para decidir, alguém teria de achar o papel na pilha, achar a linha
+   e olhar. Com o recorte, a decisão é de dois segundos.
+
+   Tudo isso é reunido em `conferencia.html`, uma página que abre com dois
+   cliques, sem internet e sem programa instalado: cada linha traz o recorte, o
+   que o leitor achou que era, e um campo para corrigir; um botão monta o CSV do
+   que foi decidido, pronto para colar em “Importar respostas”. A interface
+   gráfica do leitor, quando vier, faz isto dentro do próprio aplicativo.
 
 ## Critérios de aceite da v1 — e onde estamos
 
@@ -112,7 +143,7 @@ semanas depois.
 |---|---|
 | Lote de 30 folhas lido em < 1 min em máquina comum | **atendido** — ~0,9 s/folha em mesa A3 deitada, ~0,2 s/folha em A4 em pé |
 | Zero resposta inventada | **atendido** — cobrado pelo teste ponta a ponta |
-| Conferência manual < 5% em digitalização de boa qualidade | **atendido** — 0% fora dos casos difíceis plantados de propósito |
+| Conferência manual < 5% em digitalização de boa qualidade | **atendido** — 0% fora dos casos difíceis plantados de propósito; e 0% no lote real da escola, 330 marcações a caneta em quatro folhas |
 | Rodar offline, sem depender de internet | **atendido** — nenhuma chamada de rede |
 
 Medido sobre um lote de 98 folhas de uma prova de 42 itens, digitalizado como a

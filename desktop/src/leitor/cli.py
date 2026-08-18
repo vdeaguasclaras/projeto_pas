@@ -106,8 +106,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
         click.echo(f"  ATENÇÃO — {aviso}", err=True)
 
     saida_dir.mkdir(parents=True, exist_ok=True)
-    pasta_miniaturas = saida_dir / "conferencia"
+    pasta_conferencia = saida_dir / "conferencia"
     leituras: list[Leitura] = []
+    achados: list[dict] = []
 
     with click.progressbar(paginas(arquivos, dpi), label="Lendo") as fila:
         for pagina in fila:
@@ -115,16 +116,20 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
             if leitura.identificacao and leitura.identificacao.eh_referencia:
                 # A folha de referência não é de estudante: ela não gera resposta.
                 leitura.respostas.clear()
+                leitura.conferir.clear()
                 leitura.situacao = "referencia"
             leituras.append(leitura)
+            if matriz is not None:
+                achados.extend(saida.recortes(pasta_conferencia, cinza, matriz, leitura))
             if leitura.situacao not in ("lida", "referencia"):
-                saida.miniatura(pasta_miniaturas, cinza, matriz, molde.campo_matricula,
+                saida.miniatura(pasta_conferencia, cinza, matriz, molde.campo_matricula,
                                 pagina.onde.replace(":", "-p"))
 
     n_resp = saida.respostas(saida_dir, leituras)
     n_conf = saida.conferir(saida_dir, leituras)
     n_perc = saida.percentuais(saida_dir, leituras)
     saida.folhas(saida_dir, leituras)
+    pagina_conferencia = saida.conferencia(saida_dir, molde.prova, achados)
 
     lidas = sum(1 for l in leituras if l.situacao == "lida")
     referencia = sum(1 for l in leituras if l.situacao == "referencia")
@@ -138,6 +143,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
     if n_perc:
         click.echo(f"{n_perc} percentual(is) de acerto em percentuais.csv")
     click.echo(f"Rastro folha a folha em {saida_dir / 'folhas.csv'}")
+    if pagina_conferencia:
+        click.echo(f"\nPara conferir o que ficou em dúvida, com a imagem de cada marcação:\n"
+                   f"  {pagina_conferencia}")
     if deitadas:
         click.echo(f"{deitadas} folha(s) entraram deitadas na mesa e foram endireitadas aqui — "
                    "digitalizar em pé é mais rápido.")

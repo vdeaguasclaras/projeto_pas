@@ -58,18 +58,25 @@ marcações já lidas junto.
 
 **3. Nada duvidoso vira resposta.** Dupla marcação, alvéolo a meio caminho, tipo
 B com uma coluna vazia, faixa que não fecha: tudo isso sai em
-`respostas_conferir.csv`, com o motivo e uma miniatura da folha para o operador
-achar o papel na pilha. Resposta inventada é o único defeito que ninguém
-descobre a tempo.
+`respostas_conferir.csv`, com o motivo. Resposta inventada é o único defeito que
+ninguém descobre a tempo.
+
+O preço disso é uma fila para alguém olhar, e ela vem com **a imagem de cada
+marcação**: um recorte da folha, endireitado, com o número do item e a letra da
+opção dentro. Tudo reunido em `conferencia.html`, que abre com dois cliques, sem
+internet e sem programa instalado — confere-se no recorte, corrige-se no campo
+ao lado, e um botão monta o CSV pronto para colar em “Importar respostas”.
 
 ## O cartão-gabarito
 
 O sistema web imprime, **à frente do lote**, um cartão por versão com os alvéolos
 do gabarito já preenchidos. Ele não é de estudante nenhum, e faz três coisas:
 
-- **calibra a tinta** desta impressora e deste scanner — o limiar de “alvéolo
-  preenchido” sai de uma folha onde se sabe, alvéolo por alvéolo, o que devia
-  estar marcado, em vez de ser um número escolhido no escuro;
+- **mede o papel** desta impressora e deste scanner — o quanto escurece um
+  alvéolo vazio —, e isso vira a régua de reserva. O nível da MARCA não sai
+  daqui: as dele são de toner e passam de 80% sempre, e o estudante escreve a
+  caneta, que enche de 30% a 100%. A régua de cada folha preenchida sai da
+  própria folha, do vão entre os alvéolos cheios e os vazios;
 - **confere a geometria** — se o molde exportado não corresponder ao papel, isso
   aparece na primeira folha, não depois do lote lançado;
 - **confere o próprio gabarito** — se a chave exportada discordar do que está
@@ -134,7 +141,8 @@ Sai em `./resultado`:
 | `respostas_conferir.csv` | o que precisa de olho humano, com o motivo |
 | `percentuais.csv` | os percentuais de acerto do discursivo, quando marcados |
 | `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
-| `conferencia/*.png` | miniatura de cada folha que caiu na fila |
+| `conferencia.html` | a fila de conferência com a imagem de cada marcação duvidosa |
+| `conferencia/*.png` | os recortes e as miniaturas das folhas que caíram na fila |
 
 Código de saída: `0` tudo certo · `1` o cartão-gabarito divergiu do gabarito
 exportado · `2` erro de uso (gabarito velho, pasta vazia).
