@@ -10,6 +10,7 @@ import {
 } from './dados.js';
 import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
+import { htmlTabelaPeriodica } from './tabela-periodica.js';
 import {
   guardarImagem, descartarImagem, prepararImagens, todasAsImagens,
   htmlImagens, pecasDeImagens, htmlEditorImagens
@@ -3836,6 +3837,25 @@ function htmlPagina(colunas, ident, numero, total, parte = '-- PARTE 2 --', umaC
   </div>`;
 }
 
+// A folha de consulta. Vem por último no caderno, em toda prova — regular e
+// adaptada, de todas as séries: é material de consulta, e a prova de exatas se
+// responde com ela ao lado. Sai deitada porque em pé as massas atômicas ficam
+// pequenas demais (ver o bloco “tabela periódica” em css/estilo.css); a moldura
+// da página fica em pé, como em todas as outras.
+const PARTE_TABELA = '-- MATERIAL DE CONSULTA --';
+
+function htmlFolhaTabela(ident, numero, total) {
+  return `
+  <div class="pas-pagina">
+    <div class="pas-ident">${ident}</div>
+    <div class="pas-fio-topo"></div>
+    <div class="pas-parte">${esc(PARTE_TABELA)}</div>
+    <div class="tp-giro">${htmlTabelaPeriodica()}</div>
+    <div class="pas-fio-base"></div>
+    <div class="pas-fol">${numero} / ${total}</div>
+  </div>`;
+}
+
 // Monta o caderno inteiro já paginado. Precisa do DOM para medir as peças.
 //
 // A redação entra aqui como parte do caderno, e não como anexo: quando a prova
@@ -3871,11 +3891,12 @@ function htmlCaderno(provaId, versao, comCapa = true, extras = []) {
   const p = provaPorId(provaId);
   const ident = `${esc(p?.nome || '')} — ${esc(p?.serie || '')} · ${esc(p?.etapa || '')}${versao === 'adaptada' ? ' — versão adaptada' : ''}`;
   const capa = comCapa ? `<div class="pas-pagina">${htmlCapa(provaId, versao, pv.length)}</div>` : '';
-  const total = paginas.length + paginasRed.length + (comCapa ? 1 : 0);
+  const total = paginas.length + paginasRed.length + 1 + (comCapa ? 1 : 0);
   let n = comCapa ? 1 : 0;
   const folhas = [
     ...paginas.map(c => htmlPagina(c, ident, ++n, total)),
-    ...paginasRed.map(c => htmlPagina(c, ident, ++n, total, PARTE_REDACAO, true))
+    ...paginasRed.map(c => htmlPagina(c, ident, ++n, total, PARTE_REDACAO, true)),
+    htmlFolhaTabela(ident, ++n, total)
   ].join('');
   return `<div class="pas">${capa}${folhas}</div>`;
 }

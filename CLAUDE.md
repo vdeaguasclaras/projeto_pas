@@ -186,6 +186,15 @@ alternativas, quando o problema está no enunciado.
   destaque. E o negrito entra pela árvore (`negritarComandos`), nunca por troca
   de string — o HTML que chega ali já leva o desenho do KaTeX dentro.
 
+- **A tabela periódica é desenhada, não é imagem** (`js/tabela-periodica.js`).
+  Imagem de 2048px na largura da folha deitada sai a ~180 dpi, e a massa
+  atômica, que é a menor letra da folha, borra. Desenhada, imprime vetorial. A
+  folha vai girada porque em pé sobram 30pt por elemento e deitada 40pt. As
+  duas séries f estão na MESMA grade das outras (linhas 10 e 11), e a legenda
+  ocupa o vão dos grupos 3–12 nos três primeiros períodos: amarrar altura de
+  grade separada à mão dá certo hoje e desalinha na primeira mudança de medida.
+  A tinta das séries pede `print-color-adjust`, como todo fundo neste projeto.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável

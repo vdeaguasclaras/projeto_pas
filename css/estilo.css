@@ -602,7 +602,7 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
    depender de “Gráficos de plano de fundo” na caixa de impressão. */
 .pas-rascunho{
   border-top:.7pt solid #000; margin-top:6pt; padding-top:2.5pt;
-  text-indent:0; break-inside:avoid; overflow:hidden;
+  text-indent:0; text-align:center; break-inside:avoid; overflow:hidden;
 }
 .pas-rascunho span{font-size:9pt;font-weight:700}
 
@@ -799,6 +799,84 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
   #print-area .pas-fio-topo,
   #print-area .pas-fio-base{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
+
+/* ===== tabela periódica: a folha de consulta =====
+   A moldura da página (identificação, fios, “folha N / M”) fica EM PÉ, como em
+   todas as outras — o número da folha se procura sempre no mesmo lugar. O que
+   gira é o miolo: em pé a tabela teria 541pt de largura útil (30pt por
+   elemento), deitada tem 730pt (40,5pt) — um terço maior, que numa grade de 118
+   células cheias de número pequeno é a diferença entre ler e adivinhar.
+
+   O giro é anti-horário: o topo da tabela encosta na margem esquerda da folha,
+   e se lê virando o caderno no sentido horário. */
+.tp-giro{
+  position:absolute; left:50%; top:433pt;  /* centro da faixa livre: 66pt a 800pt */
+  width:720pt; height:535pt;               /* a caixa deitada, antes de girar */
+  transform:translate(-50%,-50%) rotate(-90deg); transform-origin:center center;
+}
+.tp{width:100%;height:100%;display:flex;flex-direction:column;font-size:7pt;line-height:1.15}
+.tp *{box-sizing:border-box}
+.tp-titulo{font-size:13pt;font-weight:700;text-align:center;margin:0 0 4pt}
+
+/* legenda: a chave de leitura da célula à esquerda, os estados à direita.
+   Ela ocupa o vão dos grupos 3 a 12 nos três primeiros períodos — ver
+   js/tabela-periodica.js. */
+.tp-legenda{
+  display:flex;align-items:center;justify-content:center;gap:34pt;
+  font-size:6.5pt;padding:0 6pt;
+}
+.tp-chave{display:flex;align-items:center;gap:6pt}
+.tp-chave .tp-el{width:46pt;height:38pt;flex:none}
+.tp-chave-txt{line-height:1.6;color:#333}
+.tp-estados{display:grid;grid-template-columns:auto auto;gap:4pt 14pt;align-items:center}
+.tp-estados>span{display:flex;align-items:center;gap:4pt;line-height:1.25}
+.tp-am{font-size:10pt;font-weight:700}
+
+/* a grade: 18 colunas de grupo, uma linha de rótulo e sete de período */
+/* Uma linha de rótulo de grupo, os sete períodos, um respiro e as duas séries
+   f — tudo na mesma grade, para que a célula seja a mesma em toda a folha. */
+.tp-grade{
+  display:grid; grid-template-columns:repeat(18,1fr);
+  grid-template-rows:8pt repeat(7,1fr) 5pt repeat(2,1fr);
+  gap:1pt; flex:1; min-height:0;
+}
+.tp-grupo{font-size:6pt;font-weight:700;text-align:center;line-height:1}
+
+.tp-el{
+  border:.5pt solid #444; border-radius:1pt; padding:.5pt;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  overflow:hidden; text-align:center; background:#fff;
+}
+.tp-cab{display:flex;justify-content:space-between;width:100%;font-size:4.6pt;line-height:1;color:#333}
+.tp-cab b{font-weight:700}
+.tp-cab i{font-style:normal;font-variant-numeric:tabular-nums}
+.tp-s{font-size:11pt;font-weight:700;line-height:1.05}
+.tp-n{font-size:4.6pt;line-height:1;width:100%;white-space:nowrap;overflow:hidden}
+.tp-n.tp-longo{font-size:3.9pt}
+
+/* cor do símbolo por estado — as mesmas da referência */
+.tp-liquido .tp-s,.tp-am.tp-liquido{color:#00a3e0}
+.tp-gas .tp-s,.tp-am.tp-gas{color:#e30613}
+/* “sem isótopo característico”: símbolo vazado, como na referência. Vazar é
+   contorno, não fundo: sai no papel sem depender de “Gráficos de plano de
+   fundo”, que vem desmarcada na caixa de impressão do Chrome. */
+.tp-sintetico .tp-s,.tp-am.tp-sintetico{
+  color:transparent;-webkit-text-stroke:.35pt #111;paint-order:stroke fill;
+}
+
+/* as duas remissões no lugar do grupo 3, e as faixas das séries embaixo */
+.tp-serie{
+  border:.5pt solid #444;border-radius:1pt;display:flex;align-items:center;justify-content:center;
+  text-align:center;font-size:5pt;font-weight:700;line-height:1.25;
+  print-color-adjust:exact;-webkit-print-color-adjust:exact;
+}
+.tp-lant{background:#fdf3c0}
+.tp-act{background:#d9ecc0}
+/* A tinta das duas séries, na célula — a faixa da referência sem uma caixa a
+   mais. Fundo pede `print-color-adjust`: a caixa “Gráficos de plano de fundo”
+   do Chrome vem desmarcada, e sem isto as duas séries sairiam brancas. */
+.tp-el.tp-lant,.tp-el.tp-act{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.tp-nota{font-size:5pt;line-height:1.3;margin:3pt 0 0;text-align:justify;color:#333}
 
 /* ===== arranjos de capa =====
    A capa é sempre uma folha A4 de 595×842pt; o arranjo decide como a arte e as

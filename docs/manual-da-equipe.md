@@ -378,6 +378,19 @@ montagem já sai assim:
   item dessas áreas não ganha nenhum — rascunho em prova de Linguagens é só
   ruído.
 
+#### A tabela periódica, no fim de toda prova
+
+A **última folha de todo caderno** — regular e adaptada, de todas as séries — é
+a tabela periódica dos elementos, como material de consulta. Sai **deitada na
+folha**: em pé, as massas atômicas ficariam pequenas demais para ler. A moldura
+da página (identificação, fios, “folha N / M”) continua em pé, para o número da
+folha se procurar sempre no mesmo lugar.
+
+Ela é **desenhada pelo sistema**, não é uma imagem: sai nítida em qualquer
+tamanho de impressão. Os dados são os pesos atômicos padrão abreviados da IUPAC
+(2024), com os nomes em português, e não há nada a preencher — a folha aparece
+sozinha ao imprimir.
+
 #### O que muda na prova adaptada
 
 A versão **adaptada** sai com o **verbo do comando em negrito** — *julgue*,
