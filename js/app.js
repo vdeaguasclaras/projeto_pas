@@ -3414,8 +3414,76 @@ function comandoDoBloco(itens, texto) {
 // veio. Sem elas não há como voltar do papel para o registro — e voltar é
 // justamente o que a revisão final da prova precisa fazer. Não mudam nada do
 // que se vê nem do que a régua mede; na impressão são ignoradas.
-function htmlItem({ item, numero }) {
-  const enun = `<span class="pas-enun" data-rev="enunciado">${rico(item.enunciado)}</span>`;
+/* ---------------- o verbo do comando, na prova adaptada ----------------
+   Na prova de inclusão o comando precisa saltar aos olhos: quem tem
+   dificuldade de leitura perde o "julgue" no meio de três linhas de contexto e
+   responde outra coisa. Então, SÓ na versão adaptada, o verbo que abre o
+   comando sai em negrito — no enunciado de cada item e na frase do bloco.
+   A prova regular não muda: ela segue a diagramação do caderno do PAS.
+
+   A lista é fechada de propósito. Grifar "todo verbo" exigiria análise
+   morfológica, erraria e encheria a página de negrito — que é o contrário de
+   destacar. São os verbos de comando que a equipe de fato usa, e o casamento
+   só vale onde comando começa: no início do trecho, depois de ponto, de
+   ponto e vírgula, de dois-pontos, de vírgula ou de travessão. "A análise
+   pede que se calcule a área" não é comando e não leva negrito; "…, calcule
+   a área" leva. */
+const VERBOS_COMANDO = [
+  'julgue', 'assinale', 'marque', 'faça', 'responda', 'resolva', 'calcule',
+  'determine', 'obtenha', 'encontre', 'estime', 'some', 'subtraia',
+  'multiplique', 'divida', 'converta', 'demonstre', 'prove', 'verifique',
+  'escreva', 'redija', 'reescreva', 'transcreva', 'complete', 'preencha',
+  'explique', 'justifique', 'descreva', 'discuta', 'analise', 'avalie',
+  'interprete', 'compare', 'relacione', 'associe', 'classifique', 'ordene',
+  'organize', 'identifique', 'indique', 'aponte', 'cite', 'nomeie', 'defina',
+  'apresente', 'elabore', 'construa', 'represente', 'esboce', 'trace',
+  'desenhe', 'selecione', 'escolha', 'considere', 'observe', 'leia', 'use',
+  'utilize', 'conclua', 'estabeleça'
+];
+
+// Grupo 1: onde o comando pode começar. Grupo 2: o verbo.
+const RE_VERBO_COMANDO = () =>
+  new RegExp(`(^\\s*|[.;:,—–]\\s+|\\(\\s*)(${VERBOS_COMANDO.join('|')})\\b`, 'gi');
+
+// Trabalha sobre a árvore, não sobre a string: o HTML que chega aqui já passou
+// por `rico()` e leva dentro o desenho do KaTeX, onde uma troca cega de texto
+// desmancharia a fórmula. Nós de texto só, e nenhum que já esteja dentro de
+// negrito ou de fórmula.
+function negritarComandos(html) {
+  const cx = document.createElement('div');
+  cx.innerHTML = html;
+  const passeio = document.createTreeWalker(cx, NodeFilter.SHOW_TEXT);
+  const alvos = [];
+  while (passeio.nextNode()) {
+    const no = passeio.currentNode;
+    if (no.parentElement?.closest('b, strong, .katex')) continue;
+    if (RE_VERBO_COMANDO().test(no.data)) alvos.push(no);
+  }
+  for (const no of alvos) {
+    const re = RE_VERBO_COMANDO();
+    const pedaco = document.createDocumentFragment();
+    let lido = 0, achado;
+    while ((achado = re.exec(no.data))) {
+      const inicio = achado.index + achado[1].length;
+      pedaco.append(no.data.slice(lido, inicio));
+      const negrito = document.createElement('b');
+      negrito.textContent = achado[2];
+      pedaco.append(negrito);
+      lido = inicio + achado[2].length;
+    }
+    pedaco.append(no.data.slice(lido));
+    no.replaceWith(pedaco);
+  }
+  return cx.innerHTML;
+}
+
+// `versao` chega até aqui porque o negrito é da FOLHA, não do item: um item
+// marcado como “ambas” sai igual nas duas provas, e é o caderno adaptado que
+// pede o destaque. Ler `item.versao` deixaria de fora justamente esses.
+function htmlItem({ item, numero }, versao) {
+  const enunciado = versao === 'adaptada'
+    ? negritarComandos(rico(item.enunciado)) : rico(item.enunciado);
+  const enun = `<span class="pas-enun" data-rev="enunciado">${enunciado}</span>`;
   const marca = item.id ? ` data-rev-item="${esc(item.id)}"` : '';
   // Item que entrou na montagem sem estar aprovado (prévia) sai marcado. A
   // classe só existe nessas montagens: o caderno impresso nunca a recebe,
@@ -3504,7 +3572,7 @@ function htmlPreviaDoBloco(provaId, versao, textoId, extras = []) {
   const montada = prova(provaId, versao, extras).filter(e => e.texto.id === textoId);
   const texto = S.textos.find(t => t.id === textoId);
   if (!texto) return '<div class="vazio">Este item ainda não está ligado a um texto-base.</div>';
-  const pecas = pecasDoBloco(texto, montada).filter(p => !ehRespiro(p));
+  const pecas = pecasDoBloco(texto, montada, versao).filter(p => !ehRespiro(p));
   return `<div class="pas"><div class="pas-previa-col">${pecas.join('')}</div></div>`;
 }
 
@@ -3541,7 +3609,7 @@ ACOES['previa-texto'] = () => {
   const linhas = linhasDoCorpoRico(r.corpo, r.formato);
   const simulado = { ...r, linhas, imagens: todasAsImagens(r.imagens) };
   const itens = r.id ? prova(r.provaId, cadVersao).filter(e => e.texto.id === r.id) : [];
-  const pecas = pecasDoBloco(simulado, itens).filter(p => !ehRespiro(p));
+  const pecas = pecasDoBloco(simulado, itens, cadVersao).filter(p => !ehRespiro(p));
   dlgPrevia(`Como sai na prova — ${r.titulo || 'texto sem título'}`,
     `<div class="pas"><div class="pas-previa-col">${pecas.join('')}</div></div>`,
     `<p class="previa-nota">É a coluna do caderno, na largura e no corpo reais. ${itens.length
@@ -3562,7 +3630,7 @@ ACOES['previa-item'] = () => {
     avisoDaPrevia(rasc.provaId, versao, rasc.textoId, [rasc]));
 };
 
-function pecasDoBloco(texto, itens) {
+function pecasDoBloco(texto, itens, versao) {
   // Texto-base que é só figura (obra de arte, charge, infográfico) não tem
   // corpo escrito: sem esta guarda entraria uma peça vazia na paginação, que a
   // régua mede e transforma em respiro no meio da coluna.
@@ -3571,11 +3639,22 @@ function pecasDoBloco(texto, itens) {
   // texto inteiro, e a régua mede a altura de cada uma isolada.
   pecas.push(...pecasDeImagens(texto.imagens, LARGURA_COLUNA));
   pecas.push(`<p class="pas-fonte">${esc(texto.fonte)}</p>`);
-  pecas.push(`<p class="pas-comando">${comandoDoBloco(itens, texto)}</p>`);
-  itens.forEach(e => pecas.push(htmlItem(e)));
+  const comando = comandoDoBloco(itens, texto);
+  pecas.push(`<p class="pas-comando">${versao === 'adaptada' ? negritarComandos(comando) : comando}</p>`);
+  itens.forEach(e => pecas.push(htmlItem(e, versao)));
   pecas.push('<div class="pas-respiro" style="height:13.3pt"></div>');   // respiro entre blocos
   return pecas;
 }
+
+// Quantas peças vêm ANTES do primeiro item — corpo, figuras, crédito da fonte e
+// comando. É o texto-base propriamente dito, e é o que não pode partir-se entre
+// duas folhas (ver `distribuirBlocos`).
+const pecasDoTextoBase = (pecas, itens) => pecas.length - itens.length - 1;
+
+// Exatas, para o espaço de rascunho: são os componentes em que o estudante
+// precisa de papel para chegar à resposta.
+const COMPONENTES_EXATAS = new Set(['Matemática', 'Física', 'Química', 'Biologia']);
+const ehExatas = item => COMPONENTES_EXATAS.has(item?.componente);
 
 const ALTURA_COLUNA = 730;     // pt — de y 72,3 a 802,3, como no PAS
 const LARGURA_COLUNA = 266.05; // pt — a mesma de `--col` no CSS
@@ -3604,24 +3683,110 @@ function medirPecas(pecas, larga = false) {
 // que ficou comum com alternativas ilustradas.
 const ehRespiro = html => html.includes('class="pas-respiro"');
 
-// Distribui as peças em colunas de altura fixa, duas por página.
-function distribuir(pecas, alturas) {
+/* ---------------- o espaço de rascunho ----------------
+   Item de exatas se responde com conta feita, e conta feita precisa de papel.
+   Sem espaço no caderno, o estudante calcula na margem, no verso da capa ou na
+   carteira — e quem corrige não tem como conferir de onde saiu a resposta.
+
+   O espaço nasce de dois lugares, e é o mesmo desenho nos dois: a folha que
+   sobra quando um bloco é empurrado inteiro para a página seguinte (ver
+   `distribuirBlocos`) e a cota fixa de um rascunho a cada dois blocos seguidos
+   com item de exatas. Fio horizontal em cima, a palavra “Rascunho” e o branco. */
+const ALTURA_MIN_RASCUNHO = 96;   // pt — menos que isto não cabe conta nenhuma
+const MARGEM_RASCUNHO = 6;        // pt — o ar entre o fim do item e o fio
+
+const pecaRascunho = altura =>
+  `<div class="pas-rascunho" style="height:${altura.toFixed(1)}pt"><span>Rascunho</span></div>`;
+
+/* Distribui as peças em colunas de altura fixa, duas por página — agora
+   BLOCO a bloco, e não peça a peça.
+
+   O que mudou e por quê: a régua media cada peça e ia enchendo coluna, de modo
+   que um texto-base podia começar no pé da folha 3 e terminar na folha 4. Para
+   quem responde, isso é virar a página no meio do texto e voltar a cada item —
+   e um texto-base partido é uma questão partida. Então o bloco inteiro (texto,
+   figuras, fonte, comando e itens) cabe numa folha ou vai inteiro para a
+   seguinte; entre as DUAS COLUNAS da mesma folha ele continua fluindo, que é a
+   leitura normal do caderno e não custa virada de página.
+
+   O branco que sobra não é desperdício: vira rascunho.
+
+   Bloco maior que uma folha inteira não tem para onde ir — aí ele flui como
+   antes, e o que se preserva é ao menos o texto-base junto. */
+function distribuirBlocos(blocos, comExatas = false) {
   const paginas = [];
   let colunas = [[], []], ci = 0, altura = 0;
-  const proximaColuna = () => {
-    ci++; altura = 0;
-    if (ci > 1) { paginas.push(colunas); colunas = [[], []]; ci = 0; }
+
+  const sobraNaColuna = () => ALTURA_COLUNA - altura;
+  const sobraNaPagina = () => sobraNaColuna() + (ci === 0 ? ALTURA_COLUNA : 0);
+  const paginaVazia = () => ci === 0 && altura === 0;
+  const fecharPagina = () => { paginas.push(colunas); colunas = [[], []]; ci = 0; altura = 0; };
+  const proximaColuna = () => { if (ci === 1) fecharPagina(); else { ci = 1; altura = 0; } };
+
+  // Enche de rascunho o que sobrou da coluna corrente e a dá por cheia.
+  // Devolve se coube: espaço de três linhas não é espaço de conta.
+  const rascunhoNaColuna = () => {
+    const sobra = sobraNaColuna() - MARGEM_RASCUNHO;
+    if (sobra < ALTURA_MIN_RASCUNHO) return false;
+    colunas[ci].push(pecaRascunho(sobra));
+    altura = ALTURA_COLUNA;
+    return true;
   };
-  pecas.forEach((html, i) => {
-    const alt = alturas[i];
-    if (altura > 0 && altura + alt > ALTURA_COLUNA) {
-      // A quebra de coluna já é a separação que o respiro daria.
-      if (ehRespiro(html)) return;
-      proximaColuna();
+  // O bloco não cabe no que resta da folha: o que sobra dela — a coluna
+  // corrente e, se for o caso, a segunda inteira — vira rascunho, e o bloco
+  // começa na folha seguinte.
+  const virarFolha = () => {
+    rascunhoNaColuna();
+    if (ci === 0) { ci = 1; altura = 0; rascunhoNaColuna(); }
+    fecharPagina();
+  };
+
+  let seguidosDeExatas = 0, rascunhoDevido = false;
+
+  for (const bloco of blocos) {
+    // Dentro de um bloco de exatas, todo pé de coluna que sobra vira rascunho:
+    // o branco já estava ali — o que se acrescenta é o fio e a palavra, e o
+    // espaço fica ao lado dos itens que pedem conta. Bloco sem exatas não
+    // ganha nada: rascunho em prova de Linguagens é ruído.
+    const aoVirarColuna = () => { if (bloco.exatas && rascunhoNaColuna()) rascunhoDevido = false; };
+    const soma = (de, ate) => bloco.alturas.slice(de, ate).reduce((t, a) => t + a, 0);
+    const altBloco = soma(0, bloco.alturas.length);
+    // O que se tenta manter inteiro numa folha: o bloco, quando ele cabe numa;
+    // quando não cabe (texto longo com muitos itens), ao menos o texto-base.
+    const altAtomica = altBloco <= 2 * ALTURA_COLUNA ? altBloco : soma(0, bloco.textoBase);
+    if (!paginaVazia() && altAtomica <= 2 * ALTURA_COLUNA && altAtomica > sobraNaPagina()) {
+      virarFolha();
+      rascunhoDevido = false;   // acabou de sair um, e um por folha basta
     }
-    colunas[ci].push(html);
-    altura += alt;
-  });
+
+    bloco.pecas.forEach((html, i) => {
+      const alt = bloco.alturas[i];
+      if (altura > 0 && altura + alt > ALTURA_COLUNA) {
+        // A quebra de coluna já é a separação que o respiro daria.
+        if (ehRespiro(html)) return;
+        aoVirarColuna();
+        proximaColuna();
+      }
+      colunas[ci].push(html);
+      altura += alt;
+    });
+
+    // A cota: dois blocos seguidos com item de exatas pedem um rascunho. Se o
+    // pé da coluna não comporta, a dívida fica de pé e se paga no próximo fim
+    // de bloco — em vez de abrir um rascunho de duas linhas ou de perdê-lo.
+    if (bloco.exatas) {
+      if (++seguidosDeExatas >= 2) { rascunhoDevido = true; seguidosDeExatas = 0; }
+    } else seguidosDeExatas = 0;
+    if (rascunhoDevido && rascunhoNaColuna()) rascunhoDevido = false;
+  }
+
+  // O fim do caderno: numa prova com exatas, o que sobrou da última folha —
+  // o pé da coluna e, se for o caso, a segunda coluna inteira — é papel em
+  // branco que o estudante vai usar de todo jeito. Melhor com o fio e o nome.
+  if (comExatas && !paginaVazia()) {
+    rascunhoNaColuna();
+    if (ci === 0) { ci = 1; altura = 0; rascunhoNaColuna(); }
+  }
   if (colunas[0].length || colunas[1].length) paginas.push(colunas);
   return paginas;
 }
@@ -3687,8 +3852,17 @@ function htmlCaderno(provaId, versao, comCapa = true, extras = []) {
     if (!porTexto.has(e.texto.id)) porTexto.set(e.texto.id, { texto: e.texto, itens: [] });
     porTexto.get(e.texto.id).itens.push(e);
   }
-  const pecas = [...porTexto.values()].flatMap(({ texto, itens }) => pecasDoBloco(texto, itens));
-  const paginas = pecas.length ? distribuir(pecas, medirPecas(pecas)) : [];
+  // Um bloco por texto-base, medido isolado: é a unidade que a paginação tenta
+  // não partir entre folhas, e é nele que se pergunta se há item de exatas.
+  const blocos = [...porTexto.values()].map(({ texto, itens }) => {
+    const pecas = pecasDoBloco(texto, itens, versao);
+    return {
+      pecas, alturas: medirPecas(pecas),
+      textoBase: pecasDoTextoBase(pecas, itens),
+      exatas: itens.some(e => ehExatas(e.item))
+    };
+  });
+  const paginas = blocos.length ? distribuirBlocos(blocos, blocos.some(b => b.exatas)) : [];
   // A proposta vai em coluna única, como no caderno do PAS: medida e paginada
   // na largura cheia, não na coluna do miolo.
   const pecasRed = comRedacao ? pecasDaProposta(provaId) : [];
