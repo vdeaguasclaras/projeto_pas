@@ -59,6 +59,7 @@ class Leitura:
     conferir: list[Marcacao] = field(default_factory=list)
     percentuais: list[Marcacao] = field(default_factory=list)
     motivo: str = ""
+    voltas: int = 0            # quartos de volta que foi preciso dar na página
 
     @property
     def matricula(self) -> str:

@@ -142,10 +142,12 @@ exportado · `2` erro de uso (gabarito velho, pasta vazia).
 ## Teste
 
 O teste não desenha cartão nenhum: ele **imprime os cartões pelo sistema web de
-verdade**, num Chromium, e depois sujeita esses PDFs ao que um scanner de mesa
-faz com o papel — gira, desloca, borra, chuvisca, recomprime em JPEG e vira uma
-folha de cabeça para baixo. Um leitor testado contra imagem limpa e reta passaria
-aqui e falharia na secretaria.
+verdade**, num Chromium, e depois sujeita esses PDFs ao que o scanner da escola
+faz com o papel — **mesa A3 com o cartão A4 deitado e solto no meio**, torto,
+deslocado, borrado, chuviscado, recomprimido em JPEG, e uma folha ainda por cima
+de cabeça para baixo. Um leitor testado contra imagem limpa e reta passaria aqui
+e falharia na secretaria: foi assim que a primeira digitalização de verdade
+recusou o lote inteiro, com as âncoras perfeitas e o cartão de lado.
 
 ```bash
 npm install playwright && npx playwright install chromium   # uma vez só

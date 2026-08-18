@@ -19,6 +19,14 @@ semanas depois.
 
 2. **Localização das âncoras** (`ancoras.py`) — binarização de Otsu e componentes
    conexos; sobram as manchas do tamanho da âncora (9pt), quadradas e sólidas.
+
+   De que tamanho procurar sai da **mancha impressa** — o retângulo que contém
+   toda a tinta da folha —, e não da largura da página. **A página não é o
+   cartão**: a primeira digitalização de verdade veio de uma mesa A3, com o A4
+   solto no meio de uma página quase duas vezes maior, e a conta antiga saiu
+   1,4× errada. A largura da página fica como segunda tentativa, para o caso de
+   uma sombra de borda engordar a mancha.
+
    Dois filtros importam:
    - **a proporção mancha/caixa** (~1 no quadrado, ~0,79 no círculo) é o que
      separa a âncora do **alvéolo preenchido**, que tem quase o mesmo tamanho.
@@ -31,18 +39,27 @@ semanas depois.
    Falhou? → a página vai para `folhas.csv` com `sem_ancoras` e uma miniatura.
 
 3. **Homografia** (`ancoras.py`) — os quatro cantos achados são levados às
-   coordenadas de referência do cartão. Corrige rotação, escala e a perspectiva
-   de um papel mal encostado no vidro, tudo de uma vez.
+   coordenadas de referência do cartão. Corrige rotação fina, escala e a
+   perspectiva de um papel mal encostado no vidro, tudo de uma vez.
 
    As âncoras estão **sempre na mesma posição**, em toda folha de todo cartão —
    a exportação do gabarito confere e se recusa a exportar se deixarem de estar.
    É isso que permite alinhar a folha **antes** de saber que folha é.
 
+   **Antes disso, a folha pode estar deitada.** O scanner da escola alimenta o
+   papel de lado, e a primeira digitalização real chegou com o cartão a 90°:
+   âncoras perfeitas, e o retângulo delas com a proporção invertida (1,299 em
+   vez de 0,772). Quem responde “em pé ou deitada” são as próprias âncoras, pela
+   proporção — isso reduz quatro posições possíveis a duas. Quem responde “de
+   cabeça para baixo ou não” é o CRC da faixa, na etapa seguinte.
+
 4. **Identificação** (`codigo.py`) — só agora, com a folha alinhada, o leitor
    lê a faixa de blocos do rodapé: versão, tipo de cartão, número da folha, total
    e os algarismos da matrícula, fechados por CRC-8.
-   - CRC recusado → gira a página 180° e tenta de novo (folha virada é o defeito
-     mais comum do alimentador). Recusou nas duas → `faixa_ilegivel`.
+   - CRC recusado → tenta a outra posição da mesma família (a folha estava de
+     cabeça para baixo, que é o defeito mais comum do alimentador). Recusou nas
+     duas → `faixa_ilegivel`. Ler ao contrário devolveria lixo com cara de
+     matrícula, e é o CRC que recusa — sem ele, nada disso seria seguro.
    - No **cartão extra** a faixa vem sem matrícula, e quem a informa é a grade
      de alvéolos do alto da folha, lida na etapa 6. Ali não há CRC nenhum por
      baixo, e a conferência possível é o formato: matrícula que não tenha nove
@@ -93,14 +110,19 @@ semanas depois.
 
 | Critério | Situação |
 |---|---|
-| Lote de 30 folhas lido em < 1 min em máquina comum | **atendido** — 98 folhas em ~21 s (~0,21 s/folha) |
+| Lote de 30 folhas lido em < 1 min em máquina comum | **atendido** — ~0,9 s/folha em mesa A3 deitada, ~0,2 s/folha em A4 em pé |
 | Zero resposta inventada | **atendido** — cobrado pelo teste ponta a ponta |
 | Conferência manual < 5% em digitalização de boa qualidade | **atendido** — 0% fora dos casos difíceis plantados de propósito |
 | Rodar offline, sem depender de internet | **atendido** — nenhuma chamada de rede |
 
-Medido sobre um lote de 98 folhas de uma prova de 42 itens, digitalizado com
-inclinação de até 0,9°, deslocamento, borrão, chuvisco, JPEG de qualidade 82 e
-uma folha de cabeça para baixo. Ver `desktop/testes/`.
+Medido sobre um lote de 98 folhas de uma prova de 42 itens, digitalizado como a
+escola digitaliza: **mesa A3, cartão deitado**, com inclinação de até 0,9°,
+deslocamento, borrão, chuvisco, JPEG de qualidade 82 e uma folha ainda por cima
+de cabeça para baixo. Foram 85 s no total.
+
+**Digitalizar em pé, e em A4, é quatro vezes mais rápido** — a página tem metade
+dos pixels e o leitor não precisa procurar a posição. O leitor resolve os dois
+casos sozinho e avisa, ao fim do lote, quantas folhas vieram deitadas.
 
 ## O que ainda não está aqui
 

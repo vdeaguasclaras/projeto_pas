@@ -86,21 +86,83 @@ def _plausivel(cantos: np.ndarray, referencia: np.ndarray) -> bool:
     return abs((largura / altura) / esperada - 1) <= 0.12
 
 
-def homografia(cinza: np.ndarray, referencia: list[tuple[float, float]]) -> np.ndarray:
-    """A matriz que leva PONTOS da folha a PIXELS desta digitalização.
+def _escalas_a_tentar(cinza: np.ndarray, vao_das_ancoras: float) -> list[float]:
+    """Quantos pixels tem um ponto do cartão, nesta digitalização.
 
-    A escala é estimada pela largura da página em pixels contra os 595pt da
-    folha: serve só para saber de que tamanho procurar a âncora, e uma
-    digitalização com margem sobrando ainda cai dentro da tolerância.
+    **A página não é o cartão.** Esta função existia como uma divisão pela
+    largura da página, supondo que a folha digitalizada fosse a folha impressa.
+    A primeira digitalização de verdade desmentiu isso: a secretaria passou os
+    cartões numa mesa A3, e o A4 ficou solto no meio de uma página quase duas
+    vezes maior. A escala saiu 1,4× errada — desta vez a tolerância absorveu,
+    mas numa mesa A3 deitada o erro dobra e nenhuma âncora seria encontrada.
+
+    O que se mede aqui é a MANCHA IMPRESSA: o retângulo que contém toda a tinta
+    da folha. Ela acompanha o cartão esteja ele onde estiver na mesa, e o lado
+    menor dela é a largura do cartão — em pé ou deitado, tanto faz.
+
+    A largura da página fica como segunda tentativa: uma digitalização com
+    sombra de borda, ou com a tampa aberta, engorda a mancha, e aí a conta
+    antiga é a que acerta.
+    """
+    escalas = [cinza.shape[1] / 595.0]
+    borrado = cv2.GaussianBlur(cinza, (3, 3), 0)
+    _, tinta = cv2.threshold(borrado, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    tinta = cv2.morphologyEx(tinta, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    ys, xs = np.nonzero(tinta)
+    if len(xs) > 200:
+        lado = min(xs.max() - xs.min(), ys.max() - ys.min())
+        if lado > 10:
+            escalas.insert(0, lado / vao_das_ancoras)
+    return escalas
+
+
+def _cantos(cinza: np.ndarray, ref: np.ndarray) -> np.ndarray | None:
+    """As quatro âncoras desta imagem, ou None se não formarem o cartão."""
+    vao = float(np.linalg.norm(ref[1] - ref[0]) + LADO_PT)
+    for escala in _escalas_a_tentar(cinza, vao):
+        pontos = _candidatos(cinza, escala)
+        if len(pontos) < 4:
+            continue
+        cantos = _quatro_cantos(pontos)
+        if _plausivel(cantos, ref):
+            return cantos
+    return None
+
+
+def voltas_para_endireitar(cinza: np.ndarray,
+                           referencia: list[tuple[float, float]]) -> list[int]:
+    """Quantos quartos de volta põem o cartão em pé, a julgar pelas âncoras.
+
+    O scanner da escola alimenta a folha deitada, e a primeira digitalização de
+    verdade veio assim: âncoras perfeitas, e o retângulo delas com a proporção
+    INVERTIDA (1,299 em vez de 0,772). O leitor recusava a página inteira
+    dizendo que as manchas não formavam o retângulo do cartão — e formavam,
+    de lado.
+
+    As âncoras dizem se a folha está em pé ou deitada; quem diz se ela está de
+    cabeça para baixo é o CRC da faixa, depois. Por isso aqui saem SEMPRE duas
+    hipóteses, e quem escolhe entre elas é a leitura.
     """
     ref = np.array(referencia, dtype=np.float32)
-    escala = cinza.shape[1] / 595.0
-    pontos = _candidatos(cinza, escala)
-    if len(pontos) < 4:
-        raise SemAncoras(f"achei {len(pontos)} âncora(s) candidata(s), e são precisas 4")
-    cantos = _quatro_cantos(pontos)
-    if not _plausivel(cantos, ref):
-        raise SemAncoras("as quatro manchas achadas não formam o retângulo do cartão")
+    if _cantos(cinza, ref) is not None:
+        return [0, 2]
+    deitada = np.ascontiguousarray(np.rot90(cinza))
+    if _cantos(deitada, ref) is not None:
+        return [1, 3]
+    return []
+
+
+def girar(cinza: np.ndarray, voltas: int) -> np.ndarray:
+    """A imagem em quartos de volta no sentido anti-horário."""
+    return cinza if voltas % 4 == 0 else np.ascontiguousarray(np.rot90(cinza, voltas))
+
+
+def homografia(cinza: np.ndarray, referencia: list[tuple[float, float]]) -> np.ndarray:
+    """A matriz que leva PONTOS da folha a PIXELS desta digitalização."""
+    ref = np.array(referencia, dtype=np.float32)
+    cantos = _cantos(cinza, ref)
+    if cantos is None:
+        raise SemAncoras("não achei as quatro âncoras do cartão nesta página")
     return cv2.getPerspectiveTransform(ref, cantos)
 
 

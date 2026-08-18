@@ -24,7 +24,7 @@ from pathlib import Path
 import click
 
 from . import __version__
-from .ancoras import SemAncoras, homografia
+from .ancoras import SemAncoras, girar, homografia, voltas_para_endireitar
 from .codigo import FaixaIlegivel
 from .imagem import DPI_PADRAO, Pagina, digitalizacoes, paginas
 from .leitura import Leitura, Limiares, calibrar, ler_faixa, ler_folha, limiar_de_tinta
@@ -52,24 +52,28 @@ def _molde(caminho: Path) -> Molde:
 
 
 def _alinhar(pagina: Pagina, molde: Molde):
-    """Alinha e identifica a página, tentando também de cabeça para baixo.
+    """Alinha e identifica a página, em qualquer das quatro posições.
 
-    Folha virada é o defeito mais comum do alimentador, e é barato de resolver:
-    se a faixa não fecha o CRC como está, gira 180° e tenta de novo. O CRC é o
-    que torna isso seguro — sem ele, “ler ao contrário” devolveria lixo com cara
-    de matrícula.
+    A folha chega da mesa do scanner como der: em pé, deitada, de cabeça para
+    baixo. As duas coisas se resolvem em ordem, e cada uma tem quem a responda:
+
+    - **em pé ou deitada** quem diz são as ÂNCORAS, pela proporção do retângulo
+      que elas formam. Isso reduz quatro posições possíveis a duas;
+    - **de cabeça para baixo ou não** quem diz é o CRC da faixa do rodapé. Ler
+      ao contrário devolveria lixo com cara de matrícula, e é o CRC que recusa.
+
+    Sem o CRC nada disso seria seguro; com ele, tentar é barato.
     """
+    voltas = voltas_para_endireitar(pagina.cinza, molde.ancoras)
+    if not voltas:
+        raise SemAncoras("não achei as quatro âncoras do cartão nesta página")
     ultimo = None
-    for girada in (False, True):
-        cinza = pagina.cinza[::-1, ::-1] if girada else pagina.cinza
+    for n in voltas:
+        cinza = girar(pagina.cinza, n)
         try:
             matriz = homografia(cinza, molde.ancoras)
-        except SemAncoras as erro:
-            ultimo = erro
-            continue
-        try:
-            return cinza, matriz, ler_faixa(cinza, matriz, molde, limiar_de_tinta(cinza)), girada
-        except FaixaIlegivel as erro:
+            return cinza, matriz, ler_faixa(cinza, matriz, molde, limiar_de_tinta(cinza)), n
+        except (SemAncoras, FaixaIlegivel) as erro:
             ultimo = erro
     raise ultimo if ultimo else SemAncoras("página sem âncoras")
 
@@ -124,6 +128,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
 
     lidas = sum(1 for l in leituras if l.situacao == "lida")
     referencia = sum(1 for l in leituras if l.situacao == "referencia")
+    # Lote inteiro deitado é o scanner configurado de lado. O leitor resolve
+    # sozinho, mas quem opera merece saber — na próxima vez sai mais rápido.
+    deitadas = sum(1 for l in leituras if l.voltas % 2)
     click.echo(f"\n{len(leituras)} página(s) · {lidas} lida(s) · {referencia} de referência · "
                f"{len(leituras) - lidas - referencia} para conferência")
     click.echo(f"{n_resp} marcação(ões) em respostas.csv")
@@ -131,6 +138,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
     if n_perc:
         click.echo(f"{n_perc} percentual(is) de acerto em percentuais.csv")
     click.echo(f"Rastro folha a folha em {saida_dir / 'folhas.csv'}")
+    if deitadas:
+        click.echo(f"{deitadas} folha(s) entraram deitadas na mesa e foram endireitadas aqui — "
+                   "digitalizar em pé é mais rápido.")
     if divergencias:
         click.echo("\nO cartão-gabarito impresso divergiu do gabarito exportado. Confira antes de "
                    "importar: alguém pode ter mexido nos itens depois de imprimir os cartões.",
@@ -141,14 +151,16 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
 def _ler_pagina(pagina: Pagina, molde: Molde, limiares: Limiares):
     """Uma página, do começo ao fim. Nunca levanta: recusa é resultado."""
     try:
-        cinza, matriz, ident, _ = _alinhar(pagina, molde)
+        cinza, matriz, ident, voltas = _alinhar(pagina, molde)
     except SemAncoras as erro:
         return (Leitura(onde=pagina.onde, situacao="descartada", motivo=f"sem_ancoras: {erro}"),
                 pagina.cinza, None)
     except FaixaIlegivel as erro:
         return (Leitura(onde=pagina.onde, situacao="conferir", motivo=f"faixa_ilegivel: {erro}"),
                 pagina.cinza, None)
-    return ler_folha(cinza, matriz, molde, ident, limiares, pagina.onde), cinza, matriz
+    leitura = ler_folha(cinza, matriz, molde, ident, limiares, pagina.onde)
+    leitura.voltas = voltas
+    return leitura, cinza, matriz
 
 
 def _procurar_referencia(arquivos: list[Path], molde: Molde, dpi: int):

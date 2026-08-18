@@ -346,10 +346,20 @@ prova já aplicada.**
   ele circula junto com os cartões em branco até a aplicação: é papel sigiloso, e
   a tela diz isso.
 
+- **A página digitalizada não é o cartão, e pode estar deitada.** As duas coisas
+  vieram juntas na primeira digitalização de verdade, e derrubaram o lote
+  inteiro: mesa A3 com o A4 solto no meio (a escala estimada pela largura da
+  página saiu 1,4× errada) e o cartão a 90° (o retângulo das âncoras com a
+  proporção invertida). Hoje a escala sai da MANCHA IMPRESSA, e a posição sai
+  das próprias âncoras — elas dizem se a folha está em pé ou deitada, e o CRC
+  diz se está de cabeça para baixo. Ao mexer na detecção, não volte a supor que
+  a folha digitalizada tem o tamanho da folha impressa.
+
 E o teste (`desktop/testes/`) **imprime cartões de verdade** pelo sistema web num
-Chromium, depois os digitaliza torto, borrado, em JPEG e com uma folha virada.
-Não escreva teste de leitor contra cartão desenhado à mão: ele passa e o leitor
-falha na secretaria.
+Chromium, depois os digitaliza como a escola digitaliza: mesa A3, cartão
+deitado, torto, borrado, em JPEG e com uma folha virada. Não escreva teste de
+leitor contra cartão desenhado à mão nem contra digitalização limpa e reta: ele
+passa e o leitor falha na secretaria.
 
 ## A frente que continua aberta
 

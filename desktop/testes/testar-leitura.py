@@ -35,13 +35,23 @@ DPI = 300
 
 
 def digitalizar(pdf: Path, destino: Path, semente: int = 7) -> int:
-    """Simula a passagem do lote pelo scanner de mesa.
+    """Simula a passagem do lote pelo scanner de mesa da escola.
 
     Cada folha entra torta de um jeito diferente — é assim que o alimentador
     trabalha —, então a distorção é sorteada por página, mas com semente fixa
-    para o teste ser reprodutível. Uma folha sai de cabeça para baixo de
-    propósito: é o defeito mais comum da pilha, e o leitor tem de resolvê-lo
-    sozinho pelo CRC da faixa.
+    para o teste ser reprodutível.
+
+    **O que esta função faz com a página é o que o scanner da escola fez de
+    verdade**, e não uma ideia do que ele faria. A primeira digitalização real
+    chegou assim: mesa A3, o cartão A4 solto no meio de uma página quase duas
+    vezes maior, e DEITADO. O leitor recusou o lote inteiro com “as quatro
+    manchas achadas não formam o retângulo do cartão” — as âncoras estavam
+    perfeitas, o retângulo delas é que vinha com a proporção invertida. Até
+    então o teste digitalizava em A4, em pé, porque foi assim que alguém
+    imaginou que seria.
+
+    Uma folha sai ainda por cima de cabeça para baixo, que é o defeito mais
+    comum da pilha, e o leitor tem de resolver as duas coisas sozinho.
     """
     import pypdfium2 as pdfium
 
@@ -72,9 +82,14 @@ def digitalizar(pdf: Path, destino: Path, semente: int = 7) -> int:
             imagem += aleatorio.normal(0, 4.5, imagem.shape)
             imagem = np.clip(imagem, 0, 255).astype(np.uint8)
 
-            # 3. uma folha por lote entra virada
-            if i == 3:
-                imagem = imagem[::-1, ::-1]
+            # 3. a folha vai deitada para a mesa, e a mesa é A3: o cartão fica
+            #    solto no meio de uma página bem maior que ele. Uma folha entra
+            #    ainda de cabeça para baixo.
+            imagem = np.rot90(imagem, 3 if i != 3 else 1)
+            mesa = np.full((int(imagem.shape[0] * 2), imagem.shape[1]), 255, dtype=np.uint8)
+            topo = int(aleatorio.integers(0, mesa.shape[0] - imagem.shape[0]))
+            mesa[topo:topo + imagem.shape[0], :] = imagem
+            imagem = mesa
 
             # 4. e o scanner salva em JPEG, com o que isso custa
             cv2.imwrite(str(destino / f"folha-{i + 1:03d}.jpg"), imagem,
