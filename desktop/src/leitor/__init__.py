@@ -4,4 +4,4 @@ Pipeline planejado em desktop/docs/pipeline-omr.md.
 Contrato de dados com o sistema web em desktop/docs/contrato-dados.md.
 """
 
-__version__ = "0.1.0-esqueleto"
+__version__ = "1.0.0"

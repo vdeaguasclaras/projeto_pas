@@ -3,59 +3,61 @@
 Dois arquivos ligam o sistema on-line ao leitor de cartões. Nenhum dos dois
 carrega dado sensível além de matrícula e marcações.
 
-## 1. Gabarito para o leitor (`pas-gabarito-leitor.json`)
+## 1. Gabarito para o leitor (`pas-gabarito-<prova>.json`)
 
 Exportado no sistema web em **Cartões-resposta → “Exportar gabarito p/ leitor
 local (JSON)”**. Diz ao leitor de que prova é o arquivo, quantas folhas cada
-estudante recebe e o que procurar em cada uma.
+estudante recebe, o que procurar em cada uma — e **onde**.
 
-> **Formato `v3`.** Este documento nasceu descrevendo a `v1`, quando cada versão
-> da prova era uma lista simples de itens. Desde então o sistema passou a
-> imprimir **mais de uma folha por estudante** (objetiva, discursiva e redação) e
-> a atender **quatro provas** — e o gabarito precisou dizer de qual delas é, ou o
-> leitor não distinguiria a folha do 9º ano da folha da 3ª série. O que está
-> abaixo é o que o sistema exporta hoje, conferido contra um arquivo real.
+> **Formato `v4`.** A `v1` descrevia cada versão da prova como uma lista simples
+> de itens. A `v3` acrescentou a identificação da prova e a divisão em folhas
+> (objetiva, discursiva, redação), porque o sistema passou a imprimir mais de uma
+> folha por estudante e a atender quatro provas. A `v4` acrescenta a **geometria
+> medida do cartão** e a descrição da **faixa de identificação** do rodapé —
+> sem elas o leitor teria de guardar o desenho da folha do lado dele, e erraria
+> em silêncio na primeira mudança de medida do cartão.
+>
+> Formato antigo é **recusado**, com mensagem dizendo para exportar de novo.
+> Adivinhar a geometria seria pior do que recusar.
 
 ```json
 {
-  "formato": "pas-marista/gabarito-v3",
+  "formato": "pas-marista/gabarito-v4",
   "prova": { "id": "pr-2em", "serie": "2ª série EM", "etapa": "1ª Etapa", "nome": "Simulado PAS 2026" },
   "simulado": "Simulado PAS 2026",
   "etapa": "1ª Etapa",
-  "geradoEm": "2026-08-03T17:15:56.702Z",
-  "identificacao": {
-    "chave": "matricula",
-    "ancoras": "quatro quadrados pretos, dois no topo e dois no rodapé de cada folha"
-  },
+  "geradoEm": "2026-08-18T17:15:56.702Z",
+  "identificacao": { "…": "ver §3" },
+  "referencia": { "…": "ver §4" },
+  "layout":     { "…": "ver §5" },
   "versoes": {
     "regular": {
-      "totalItens": 4,
+      "totalItens": 42,
       "folhas": [
         { "folha": 1, "tipo": "objetiva", "itens": [
             { "numero": 1, "tipo": "A", "gabarito": "C" },
-            { "numero": 2, "tipo": "B", "gabarito": "960" },
-            { "numero": 3, "tipo": "C", "gabarito": "B" } ] },
+            { "numero": 29, "tipo": "B", "gabarito": "960" },
+            { "numero": 34, "tipo": "C", "gabarito": "B" } ] },
         { "folha": 2, "tipo": "discursiva", "percentuais": [0, 25, 50, 75, 100],
-          "itens": [ { "numero": 4, "tipo": "D", "linhas": 8 } ] },
+          "itens": [ { "numero": 42, "tipo": "D", "linhas": 8 } ] },
         { "folha": 3, "tipo": "redacao", "linhas": 30 }
       ]
     },
-    "adaptada": { "totalItens": 4, "folhas": [ "…" ] }
+    "adaptada": { "totalItens": 28, "folhas": [ "…" ] }
   }
 }
 ```
 
-- **`folha 1 · objetiva`** é a única que o OMR lê: `tipo A` → 2 bolhas (C/E) ·
-  `tipo C` → 4 bolhas (A–D) · `tipo B` → 3 colunas de 10 dígitos (centena,
-  dezena, unidade).
-- **`folha · discursiva`** traz as bolhas de percentual (0, 25, 50, 75, 100%)
-  marcadas por **quem corrige**, não pelo estudante. Podem ser lidas na mesma
-  passagem, mas não são resposta de estudante.
-- **`folha · redacao`** é pauta de linhas: não tem bolha e não interessa ao OMR.
-- A folha discursiva e a de redação só existem quando a prova as tem — o
-  arquivo traz apenas as folhas que foram impressas.
-- O campo `gabarito` é opcional para o leitor (a correção acontece no web), mas
-  permite conferência local quando conveniente.
+- **`folha 1 · objetiva`** é a que o OMR lê: `tipo A` → 2 alvéolos (C/E) ·
+  `tipo C` → 4 alvéolos (A–D) · `tipo B` → 3 colunas de 10 algarismos (centena,
+  dezena, unidade). Quando os itens não cabem numa folha, seguem em folhas de
+  continuação, e o `layout` traz uma entrada por folha.
+- **`folha · discursiva`** traz os alvéolos de percentual (0, 25, 50, 75, 100%)
+  marcados por **quem corrige**, não pelo estudante. São lidos na mesma passagem
+  e saem em `percentuais.csv`, à parte.
+- **`folha · redacao`** é pauta de linhas: não tem alvéolo e o leitor a ignora.
+- O campo `gabarito` é o que permite a conferência local contra o cartão-gabarito
+  (§4). A correção continua acontecendo no sistema web.
 - **`prova.id`** identifica a prova. O sistema recusa, na importação, marcação de
   estudante que não está no elenco daquela prova.
 
@@ -66,25 +68,123 @@ Saída do leitor, importada no sistema web em **Correção e boletins →
 
 ```
 matricula;item;resposta
-2026-0142;1;C
-2026-0142;2;E
-2026-0142;28;960
+20260142;1;C
+20260142;2;E
+20260142;29;960
 ```
 
 Regras:
 
-- `resposta` para tipo A: `C` ou `E` · tipos C/D: `A`–`D` · tipo B: número `0`–`999`.
-- Item **em branco**: omitir a linha (ou enviar `resposta` vazia — o web apaga a marcação).
-- **Dupla marcação ou leitura duvidosa**: NÃO inventar valor. O leitor deve
-  gravar essas ocorrências em um segundo arquivo (`*_conferir.csv`, mesmas
-  colunas + coluna `motivo`) para lançamento manual na tela de correção.
-- Codificação UTF-8; aceita também `,` ou tabulação como separador.
+- `resposta` para tipo A: `C` ou `E` · tipos C/D: `A`–`D` · tipo B: número
+  `000`–`999`, sempre com três algarismos.
+- Item **em branco**: a linha não sai (ou sai com `resposta` vazia — o web apaga
+  a marcação).
+- **A matrícula sai em ALGARISMOS.** A faixa de identificação do rodapé é
+  numérica, e `2026-0142` volta de lá como `20260142`. A importação do sistema
+  web casa primeiro pelo texto exato e depois pelos algarismos; matrículas do
+  elenco que só se distinguem pela pontuação são recusadas nas duas, porque
+  atribuir a prova ao estudante errado é pior do que não atribuir.
+- **Dupla marcação, leitura duvidosa ou tipo B pela metade**: NÃO vira valor. Vai
+  para `respostas_conferir.csv` (mesmas colunas + `motivo` e `folha`), com uma
+  miniatura em `conferencia/`, para lançamento manual.
+- Codificação UTF-8; a importação aceita `;`, `,` ou tabulação.
+
+Saem junto, na mesma pasta: `percentuais.csv` (os percentuais do discursivo — o
+sistema web **ainda não os importa**) e `folhas.csv`, uma linha por página
+digitalizada, que é o rastro do lote.
 
 ## 3. Identificação da folha
 
 O cartão impresso traz, para o leitor:
 
-- **4 âncoras pretas** (quadrados) nos cantos da área útil — alinhamento por homografia;
-- **matrícula impressa** em texto e em faixa de blocos no rodapé — a v1 do
-  leitor pode pedir confirmação/entrada da matrícula por folha; a leitura
-  automática da faixa entra na fase seguinte.
+### 3.1 As quatro âncoras
+
+Quadrados pretos de 9pt, dois no topo e dois no rodapé da área útil. Estão
+**sempre na mesma posição**, em toda folha de todo cartão — a exportação confere
+isso e se recusa a exportar se algum dia deixarem de estar. É essa invariância
+que permite alinhar a folha por homografia **antes** de saber que folha é.
+
+### 3.2 A faixa de identificação
+
+Uma linha de blocos no rodapé — em `v3` ainda era um enfeite de largura fixa
+(`▮▯▮▮▯▮▮▯`), igual em toda folha. Hoje carrega, na ordem em que os blocos são
+impressos:
+
+| campo | bits | conteúdo |
+|---|---|---|
+| `sinc` | 4 | `1010`, sempre |
+| `versao` | 1 | 0 regular · 1 adaptada |
+| `tipo` | 2 | 0 nominal · 1 extra · 2 gabarito |
+| `folha` | 4 | número desta folha |
+| `total` | 4 | quantas folhas o estudante recebeu |
+| `nDigitos` | 4 | quantos algarismos tem a matrícula |
+| `matricula` | 48 | 12 algarismos BCD |
+| `crc8` | 8 | CRC-8/ATM (0x07) sobre `versao`…`matricula`, completado com zeros até fechar bytes |
+
+São 75 células. O CRC é o que separa “não consegui ler” de “li errado”: folha
+torta, dobrada ou digitalizada pela metade falha no CRC e vai para a conferência.
+É ele também que permite ao leitor resolver sozinho a folha que entrou de cabeça
+para baixo — gira 180° e tenta de novo.
+
+O bloco de campos está descrito dentro do próprio JSON, em
+`identificacao.faixa`, para que o arquivo continue legível sem esta tabela.
+
+### 3.3 O cartão extra
+
+O cartão de reserva sai sem identificação impressa: no momento de imprimi-lo não
+se sabe de quem ele vai ser. A faixa dele traz `tipo = extra` e nenhum algarismo
+de matrícula; quem a informa é o estudante, na **grade de alvéolos** do alto da
+folha (9 posições × 10 algarismos), e é o OMR que a lê. Posição em branco no
+meio da matrícula manda a folha para conferência: não dá para saber se o
+estudante pulou a casa ou deixou de preencher.
+
+## 4. O cartão-gabarito (`referencia`)
+
+O sistema web imprime, à frente do lote, um cartão por versão com os alvéolos do
+gabarito preenchidos, marcado na faixa com `tipo = gabarito`. Ele calibra o
+limiar de tinta desta impressora e deste scanner, confere que o molde exportado
+corresponde ao papel, e confere que a chave exportada é a mesma que foi impressa.
+Divergência aí interrompe o lote com código de saída 1.
+
+Ele nunca gera resposta: a faixa o identifica, e a matrícula dele é vazia.
+
+## 5. A geometria (`layout`)
+
+Medida pelo navegador no ato da exportação, em **pontos**, na folha de 595×842pt,
+com origem no canto superior esquerdo.
+
+```json
+"layout": {
+  "unidade": "pt",
+  "folhaPt": { "largura": 595, "altura": 842 },
+  "ancoras": [ {"x":29.89,"y":107.79}, {"x":565.11,"y":107.79},
+               {"x":29.89,"y":801.06}, {"x":565.11,"y":801.06} ],
+  "codigo":  { "celulas": [ {"x":27.49,"y":815.77}, "…" ],
+               "largura": 4.2, "altura": 4.99, "sinc": "1010", "digitos": 12 },
+  "campos":  { "matricula": {"x":355.5,"y":31.09,"largura":145.37,"altura":11.79} },
+  "cartoes": {
+    "regular": {
+      "nominal": { "folhas": [ { "tipo": "objetiva", "alveolos": [
+        {"x":51.89,"y":203.04,"r":4.25,"item":1,"valor":"C"},
+        {"x":70.07,"y":203.04,"r":4.25,"item":1,"valor":"E"},
+        {"x":"…","y":"…","r":4.25,"item":29,"coluna":"C","digito":7},
+        {"x":"…","y":"…","r":4.25,"campo":"matricula","posicao":0,"digito":3},
+        {"x":"…","y":"…","r":4.25,"item":42,"percentual":50}
+      ] } ] },
+      "extra": { "folhas": [ "…" ] }
+    },
+    "adaptada": { "…": "…" }
+  }
+}
+```
+
+- As âncoras e a faixa são **uma só** para o cartão inteiro: valem em toda folha.
+- Há duas famílias de molde por versão. `extra` traz a grade da matrícula no alto
+  e por isso empurra o corpo para baixo; `nominal` serve também ao
+  cartão-gabarito, que tem a mesma geometria.
+- A ordem de `cartoes.<versao>.<familia>.folhas` é a ordem impressa, e casa com o
+  campo `folha` da faixa.
+- Cada alvéolo diz o que decide: `valor` (tipos A e C), `coluna`+`digito`
+  (tipo B), `campo`+`posicao`+`digito` (matrícula do extra) ou `percentual`
+  (folha discursiva). `r` é o raio externo; o leitor amostra só o miolo, porque o
+  anel impresso é rosa — que em tons de cinza é escuro.

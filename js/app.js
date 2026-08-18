@@ -4914,7 +4914,7 @@ function medirCartao(provaId, extra = false) {
   // A folha de mentira precisa ser IDÊNTICA à impressa: mesmo cabeçalho, mesmas
   // orientações, mesmo rodapé. Ela serve para uma coisa só — dizer a altura que
   // sobra para a coluna, que é o que a capacidade depende.
-  const linhaFalsa = n => `<div class="cr-linha"><span class="no">${n}</span>${bolhasDe('A')}</div>`;
+  const linhaFalsa = n => `<div class="cr-linha"><span class="no">${n}</span>${bolhasDe('A', n)}</div>`;
   const folha = `
     <div class="cr-folha">
       ${cabecalhoCartao(provaId, est, 'régua')}
@@ -5008,7 +5008,7 @@ function cabecalhoCartao(provaId, est, faixa) {
     </div>
     <div class="cr-cab-est">
       <div><span>ESTUDANTE</span><b>${esc(est.nome).toUpperCase()}</b></div>
-      <div><span>MATRÍCULA</span><b>${esc(est.matricula)}</b></div>
+      <div data-campo="matricula"><span>MATRÍCULA</span><b>${esc(est.matricula)}</b></div>
       <div><span>TURMA</span><b>${esc(est.turma)}</b></div>
       <div><span>PROVA</span><b>${esc((c.serie || '').toUpperCase())}</b></div>
       <div><span>VERSÃO</span><b>${codigoDaVersao(est.versao)}</b></div>
@@ -5019,19 +5019,91 @@ function cabecalhoCartao(provaId, est, faixa) {
   <div class="cr-ancoras"><i></i><i></i></div>`;
 }
 
+/* ---------------- a faixa de identificação ----------------
+   O rodapé imprimia `▮▯▮▮▯▮▮▯` — oito blocos iguais em toda folha de toda
+   prova, decoração com cara de código de barras. O contrato de dados do leitor
+   (desktop/docs/contrato-dados.md) já a chamava de “faixa de blocos” e previa
+   lê-la; não havia o que ler. Sem ela, a folha NOMINAL não se identifica
+   sozinha, e cada lote custaria ao operador digitar uma matrícula por folha.
+
+   Agora os blocos carregam: versão, tipo de cartão, número da folha, total de
+   folhas e os dígitos da matrícula — com CRC-8 no fim. O CRC é o que separa
+   “não consegui ler” de “li errado”: folha torta, dobrada ou digitalizada pela
+   metade falha no CRC e vai para a conferência, em vez de lançar as marcações
+   de um estudante na linha de outro.
+
+   A matrícula entra só com seus DÍGITOS (`2026-0142` → `20260142`): o código é
+   numérico, e a pontuação é enfeite de exibição. Quem casa isso de volta com o
+   elenco é a importação, que compara por dígitos quando o texto não bate. */
+const CODIGO_SINC = [1, 0, 1, 0];
+const CODIGO_DIGITOS = 12;          // teto de dígitos da matrícula no código
+const CARTAO_NOMINAL = 0, CARTAO_EXTRA = 1, CARTAO_GABARITO = 2;
+
+const digitosDaMatricula = m => String(m || '').replace(/\D/g, '').slice(0, CODIGO_DIGITOS);
+
+const tipoDoCartao = est =>
+  est.gabarito ? CARTAO_GABARITO : est.extra ? CARTAO_EXTRA : CARTAO_NOMINAL;
+
+// CRC-8/ATM (polinômio 0x07, sem reflexão) sobre os bits do corpo, completados
+// com zeros até fechar bytes. A mesma conta existe em desktop/src/leitor/codigo.py
+// — se uma das duas mudar, a outra tem de mudar junto.
+function crc8DosBits(bits) {
+  let crc = 0;
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j++) byte = (byte << 1) | (bits[i + j] || 0);
+    crc ^= byte;
+    for (let v = 0; v < 8; v++) crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) & 0xff : (crc << 1) & 0xff;
+  }
+  return crc;
+}
+
+// Os bits da folha, na ordem em que os blocos são impressos.
+function bitsDaFolha(est, folha, total) {
+  const dig = digitosDaMatricula(est.matricula);
+  const campos = [
+    [est.versao === 'adaptada' ? 1 : 0, 1],
+    [tipoDoCartao(est), 2],
+    [Math.min(15, folha), 4],
+    [Math.min(15, total), 4],
+    [dig.length, 4]
+  ];
+  for (let i = 0; i < CODIGO_DIGITOS; i++) campos.push([i < dig.length ? +dig[i] : 0, 4]);
+  const corpo = [];
+  for (const [valor, largura] of campos)
+    for (let b = largura - 1; b >= 0; b--) corpo.push((valor >> b) & 1);
+  const crc = crc8DosBits(corpo);
+  return [...CODIGO_SINC, ...corpo, ...Array.from({ length: 8 }, (_, i) => (crc >> (7 - i)) & 1)];
+}
+
+const CELULAS_DO_CODIGO = CODIGO_SINC.length + 15 + 4 * CODIGO_DIGITOS + 8;
+
+function faixaDeIdentificacao(est, folha, total) {
+  return `<span class="cr-codigo">${bitsDaFolha(est, folha, total)
+    .map((b, i) => `<i class="${b ? 'c' : ''}" data-cel="${i}"></i>`).join('')}</span>`;
+}
+
 function rodapeCartao(est, folha, total) {
   return `
   <div class="cr-ancoras"><i></i><i></i></div>
   <div class="cr-rodape">
-    <span>${est.extra ? 'CARTÃO EXTRA — identifique nos alvéolos'
-      : `▮▯▮▮▯▮▮▯ ${esc(est.matricula)}`}</span>
+    ${faixaDeIdentificacao(est, folha, total)}
     <span>folha ${folha} de ${total}</span>
   </div>`;
 }
 
-function bolhasDe(tipo) {
+/* Todo alvéolo diz o que é em `data-alv`, e é por aí que a exportação do
+   gabarito descobre a geometria (`mapaDoCartao`) e que o cartão-gabarito sabe
+   qual preencher. Quatro formas, uma linha cada:
+     i:<item>:<resposta>            tipos A e C
+     b:<item>:<C|D|U>:<algarismo>   tipo B, na coluna da direita
+     m:<posição>:<algarismo>        matrícula do cartão extra
+     d:<item>:<percentual>          percentual de acerto, folha discursiva
+   Os alvéolos do quadro “exemplo de preenchimento” NÃO levam atributo: são
+   desenho, e medi-los poria dois alvos falsos no molde do leitor. */
+function bolhasDe(tipo, numero) {
   return TIPOS[tipo].respostas.map(r =>
-    `<span class="bolha"></span><span>${r}</span>`).join('');
+    `<span class="bolha" data-alv="i:${numero}:${r}"></span><span>${r}</span>`).join('');
 }
 
 // A grade de um item do tipo B: centena, dezena e unidade, dez algarismos cada.
@@ -5055,7 +5127,7 @@ function gradeDaMatricula() {
     () => '<span class="cr-mat-caixa"></span>').join('')}`;
   const linhas = Array.from({ length: 10 }, (_, d) => `
       <span class="dig">${d}</span>${Array.from({ length: DIGITOS_DA_MATRICULA },
-        () => '<span class="cel"><span class="bolha"></span></span>').join('')}`).join('');
+        (_, pos) => `<span class="cel"><span class="bolha" data-alv="m:${pos}:${d}"></span></span>`).join('')}`).join('');
   return `
           <div class="cr-mat">
             <h6>MATRÍCULA <small>escreva o número e preencha os alvéolos</small></h6>
@@ -5094,9 +5166,8 @@ function blocoTipoB(numero) {
           <span></span><span class="cab">C</span><span class="cab">D</span><span class="cab">U</span>
           ${Array.from({ length: 10 }, (_, d) => `
             <span class="dig">${d}</span>
-            <span class="cel"><span class="bolha"></span></span>
-            <span class="cel"><span class="bolha"></span></span>
-            <span class="cel"><span class="bolha"></span></span>`).join('')}
+            ${['C', 'D', 'U'].map(c =>
+              `<span class="cel"><span class="bolha" data-alv="b:${numero}:${c}:${d}"></span></span>`).join('')}`).join('')}
         </div>
       </div>`;
 }
@@ -5125,7 +5196,7 @@ function corposObjetivos(pv, provaId, extra) {
             return `<div class="cr-linha outro"><span class="no">${numero}</span><span class="rot">TIPO B →</span></div>`;
           if (item.tipo === 'D')
             return `<div class="cr-linha outro"><span class="no">${numero}</span><span class="rot">TIPO D ↗</span></div>`;
-          return `<div class="cr-linha"><span class="no">${numero}</span>${bolhasDe(item.tipo)}</div>`;
+          return `<div class="cr-linha"><span class="no">${numero}</span>${bolhasDe(item.tipo, numero)}</div>`;
         }).join('')}
       </div>`).join('');
 
@@ -5175,7 +5246,8 @@ function blocoDiscursivo(numero, componente, linhas) {
             <div class="cr-pauta">${Array.from({ length: linhas }, () => '<i></i>').join('')}</div>
             <div class="cr-nota">
               <b>PERCENTUAL DE ACERTO (uso do corretor)</b>
-              ${PERCENTUAIS_D.map(p => `<span class="op"><span class="bolha"></span>${p}%</span>`).join('')}
+              ${PERCENTUAIS_D.map(p =>
+                `<span class="op"><span class="bolha" data-alv="d:${numero}:${p}"></span>${p}%</span>`).join('')}
             </div>
           </div>`;
 }
@@ -5241,12 +5313,38 @@ const totalFolhas = (provaId, est) => corposDoCartao(provaId, est).length;
 
 function folhasDoCartao(provaId, est) {
   const corpos = corposDoCartao(provaId, est);
-  return corpos.map((c, i) => `
+  const html = corpos.map((c, i) => `
     <div class="cr-folha">
-      ${cabecalhoCartao(provaId, est, c.faixa)}
+      ${cabecalhoCartao(provaId, est, est.gabarito ? `GABARITO — NÃO DISTRIBUIR — ${c.faixa}` : c.faixa)}
       ${c.html}
       ${rodapeCartao(est, i + 1, corpos.length)}
     </div>`).join('');
+  return est.gabarito ? marcarGabarito(html, provaId, est.versao) : html;
+}
+
+/* A faixa de identificação carrega ALGARISMOS, e nem toda matrícula cabe nela.
+   Isso não pode aparecer só no dia de digitalizar o lote: quem imprime tem de
+   saber, antes de gastar o papel, quais folhas o leitor não vai conseguir
+   identificar sozinho. Três casos, e nenhum é hipotético — a matrícula vem da
+   planilha da secretaria, que é texto livre. */
+function avisosDaFaixa(elenco) {
+  const semDigito = [], compridas = [], porDigitos = new Map();
+  for (const e of elenco) {
+    const d = digitosDaMatricula(e.matricula);
+    if (!d) { semDigito.push(e); continue; }
+    if (String(e.matricula).replace(/\D/g, '').length > CODIGO_DIGITOS) compridas.push(e);
+    porDigitos.set(d, [...(porDigitos.get(d) || []), e]);
+  }
+  const ambiguas = [...porDigitos.values()].filter(g => g.length > 1);
+  const avisos = [];
+  const nomes = g => g.map(e => `${esc(e.nome)} (${esc(e.matricula)})`).join(', ');
+  if (semDigito.length) avisos.push(`<b>Sem algarismo nenhum</b> — a faixa fica vazia e a folha
+    terá de ser identificada à mão na conferência: ${nomes(semDigito)}.`);
+  if (compridas.length) avisos.push(`<b>Mais de ${CODIGO_DIGITOS} algarismos</b> — a faixa leva só os
+    ${CODIGO_DIGITOS} primeiros: ${nomes(compridas)}.`);
+  for (const g of ambiguas) avisos.push(`<b>Mesmos algarismos</b> — o leitor não distingue estas
+    matrículas uma da outra, e vai mandar as duas para conferência: ${nomes(g)}.`);
+  return avisos;
 }
 
 let cartTurma = 'todas';
@@ -5289,6 +5387,11 @@ function telaCartoes() {
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
     </div>
+    ${(() => { const av = avisosDaFaixa(elenco); return av.length ? `<div class="cartao aviso" style="margin-bottom:16px">
+      <h3>Matrículas que a leitura óptica não identifica sozinha</h3>
+      ${av.map(a => `<p style="font-size:12.5px;margin:0 0 6px">${a}</p>`).join('')}
+      <p style="font-size:12px;color:var(--ink-2);margin:8px 0 0">A prova sai normalmente — o que muda é que
+        estas folhas caem na fila de conferência do leitor, para lançamento à mão.</p></div>` : ''; })()}
     ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th>Folhas</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table>`
       : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
@@ -5298,6 +5401,12 @@ function telaCartoes() {
   </div>
   ${previa && (nRegItens + nAdaItens) ? `<div class="cr-previa"><div style="width:100%;text-align:center;font-size:12px;color:#6b5f52;margin-bottom:10px">Prévia — folhas do 1º estudante do filtro</div>${previa}</div>` : ''}
   </div>
+  <p class="nota-tela"><strong>A impressão abre com o cartão-gabarito</strong> — uma folha por versão, com os
+    alvéolos do gabarito já preenchidos, gerada pelo sistema. Ela não é de estudante nenhum: é a referência com que
+    o leitor óptico calibra a tinta desta impressora, confere que o molde corresponde ao papel e confere que a chave
+    exportada é a mesma que foi impressa. Guarde-a como se guarda a prova — ela é o gabarito em papel. No rodapé de
+    toda folha vai a <strong>faixa de identificação</strong>, os blocos que dizem à máquina a matrícula, a versão e
+    o número da folha.</p>
   <p class="nota-tela"><strong>Cada estudante tem mais de uma folha</strong> — objetiva, discursiva (quando houver item tipo D) e redação, se a coordenação optar por imprimi-la. Todas trazem cabeçalho com nome, matrícula e turma, âncoras de leitura óptica nos cantos e a identificação “folha N de M”, para que a digitalização em lote saiba a qual estudante e a qual parte da prova cada imagem pertence. Os itens dos tipos B e D aparecem rotulados na grade principal e têm campos próprios: o tipo B na coluna à direita, com centena, dezena e unidade; o tipo D na folha seguinte, com a pauta de resposta e as bolhas de percentual de acerto (0, 25, 50, 75 e 100%) preenchidas por quem corrige.</p>`;
 }
 MUDS['cart-turma'] = (d, el) => { cartTurma = el.value; render(); };
@@ -5365,7 +5474,14 @@ ACOES['cart-imprimir'] = () => {
   if (!pAtiva) return;
   const filtrados = estudantesDaProva(pAtiva.id).filter(e => cartTurma === 'todas' || e.turma === cartTurma)
     .sort((a, b) => a.turma.localeCompare(b.turma) || a.nome.localeCompare(b.nome));
-  $('#print-area').innerHTML = filtrados.map(e => folhasDoCartao(pAtiva.id, e)).join('');
+  // Uma folha de referência por versão presente no lote, à frente de tudo: é a
+  // primeira coisa que o leitor óptico encontra e a partir da qual ele calibra
+  // a tinta e confere o molde. Versão que não tem estudante no filtro não gera
+  // referência — seria papel gasto com a chave de uma prova que ninguém fará.
+  const versoes = [...new Set(filtrados.map(e => e.versao === 'adaptada' ? 'adaptada' : 'regular'))]
+    .sort().filter(v => prova(pAtiva.id, v).length);
+  const referencia = versoes.map(v => folhasDoCartao(pAtiva.id, cartaoGabarito(v))).join('');
+  $('#print-area').innerHTML = referencia + filtrados.map(e => folhasDoCartao(pAtiva.id, e)).join('');
   window.print();
 };
 /* ---------------- cartões extras, sem identificação ----------------
@@ -5379,6 +5495,154 @@ ACOES['cart-imprimir'] = () => {
    lista) e para teste de impressão, que é uso sem risco: imprimir não grava
    nada, e este cartão não pertence a estudante nenhum. */
 const cartaoExtra = versao => ({ id: null, nome: '', matricula: '', turma: '', versao, extra: true });
+
+/* ---------------- o cartão-gabarito, à frente do lote ----------------
+   Sai automaticamente na frente da impressão, um por versão presente: um cartão
+   igual aos outros, com os alvéolos do gabarito já preenchidos. Ele não é
+   enfeite nem conferência de olho — é a folha de referência do leitor óptico, e
+   faz três coisas que nenhuma outra folha do lote faz:
+
+   1. calibra a tinta DESTA impressora e DESTE scanner. O limiar de “alvéolo
+      preenchido” deixa de ser um número escolhido no escuro e passa a sair de
+      uma folha onde se sabe, alvéolo por alvéolo, o que devia estar marcado;
+   2. confere a geometria. Se o molde exportado não corresponder ao cartão que
+      foi impresso, isso aparece já na primeira folha — e não depois de o lote
+      inteiro ter sido lançado torto;
+   3. confere o próprio gabarito. Se o JSON exportado discordar do que está
+      impresso, alguém mexeu nos itens depois de imprimir os cartões, e corrigir
+      o lote com a chave errada é o pior desfecho possível desta tela.
+
+   Ele leva a matrícula vazia e o tipo `gabarito` na faixa de identificação, e
+   por isso nunca é confundido com folha de estudante — nem na leitura, nem na
+   importação, que só aceita matrícula do elenco.
+
+   Uma ressalva que é de quem imprime, não do código: esta folha É a chave da
+   prova em papel, e viaja junto com o lote até a aplicação. Guarde-a como se
+   guarda a prova. */
+const cartaoGabarito = versao => ({
+  id: null, nome: 'GABARITO', matricula: '', turma: '—', versao, gabarito: true
+});
+
+// Preenche, no HTML já montado, os alvéolos que o gabarito manda marcar. Feito
+// sobre a árvore e não por troca de string: quem sabe o que cada alvéolo é são
+// os `data-alv`, e lê-los é mais barato e mais seguro do que recortar texto.
+function marcarGabarito(html, provaId, versao) {
+  const cx = document.createElement('div');
+  cx.innerHTML = html;
+  const respostaDe = new Map(prova(provaId, versao).map(({ item, numero }) => [numero, item.gabarito]));
+  cx.querySelectorAll('.bolha[data-alv]').forEach(alv => {
+    const [forma, ...partes] = alv.dataset.alv.split(':');
+    const g = respostaDe.get(+partes[0]);
+    if (g === undefined || g === null || g === '') return;
+    if (forma === 'i' && String(g).trim().toUpperCase() === partes[1]) alv.classList.add('m');
+    if (forma === 'b') {
+      const n = String(g).replace(/\D/g, '').padStart(3, '0').slice(-3);
+      const coluna = { C: 0, D: 1, U: 2 }[partes[1]];
+      if (n[coluna] === partes[2]) alv.classList.add('m');
+    }
+  });
+  return cx.innerHTML;
+}
+
+/* ---------------- o molde do leitor: geometria MEDIDA ----------------
+   Onde fica cada alvéolo na folha não é número que se possa escrever à mão do
+   lado de lá. A posição sai do flex do CSS — muda com o número de itens, com a
+   quantidade de colunas, com a altura do bloco de orientações — e um leitor com
+   a geometria decorada erraria em silêncio na primeira vez que alguém mexesse
+   numa medida do cartão. É o mesmo motivo pelo qual a capacidade da folha se
+   mede (`medirCartao`) em vez de se escrever.
+
+   Então quem mede é o navegador, no ato da exportação: monta o cartão de
+   verdade fora da tela, lê o retângulo de cada âncora, de cada alvéolo e de
+   cada célula do código, e manda tudo em pontos junto com o gabarito. O leitor
+   não sabe nada sobre o desenho do cartão — ele recebe o desenho.
+
+   Duas famílias de molde por versão: `nominal` (que serve também ao
+   cartão-gabarito, de geometria idêntica) e `extra`, que traz a grade da
+   matrícula no alto e por isso empurra o corpo para baixo. */
+function mapaDoCartao(provaId) {
+  const versoes = ['regular', 'adaptada'].filter(v => prova(provaId, v).length);
+  if (!versoes.length) return null;
+  const combinacoes = [];
+  for (const versao of versoes) {
+    combinacoes.push({ versao, familia: 'nominal',
+      est: { nome: 'ESTUDANTE DE RÉGUA', matricula: '000000000', turma: '0ª A', versao } });
+    combinacoes.push({ versao, familia: 'extra', est: cartaoExtra(versao) });
+  }
+
+  const molde = document.createElement('div');
+  molde.style.cssText = 'position:absolute;left:-10000pt;top:0;visibility:hidden';
+  molde.innerHTML = `<div class="cr-previa" style="padding:0;background:none;overflow:visible">${
+    combinacoes.map(c => `<div data-familia>${folhasDoCartao(provaId, c.est)}</div>`).join('')}</div>`;
+  document.body.appendChild(molde);
+
+  const familias = [...molde.querySelectorAll('[data-familia]')];
+  let ancoras = null, codigo = null, campos = null;
+
+  const medirFolha = folhaEl => {
+    const rf = folhaEl.getBoundingClientRect();
+    // px → pt pela própria largura da folha, que é 595pt por definição do CSS.
+    // Assim a medida não depende do zoom nem da densidade da tela.
+    const k = 595 / rf.width;
+    const pt = v => Math.round(v * k * 100) / 100;
+    const caixa = el => {
+      const r = el.getBoundingClientRect();
+      return { x: pt(r.left - rf.left), y: pt(r.top - rf.top), largura: pt(r.width), altura: pt(r.height) };
+    };
+    const centro = el => {
+      const c = caixa(el);
+      return { x: Math.round((c.x + c.largura / 2) * 100) / 100,
+               y: Math.round((c.y + c.altura / 2) * 100) / 100 };
+    };
+
+    const dessaFolha = [...folhaEl.querySelectorAll('.cr-ancoras i')].map(centro);
+    // As quatro âncoras têm de estar SEMPRE no mesmo lugar, em toda folha de
+    // todo cartão — é o que permite ao leitor calcular a homografia antes de
+    // saber que folha é aquela, e só então ler o código que lhe diz. Se um dia
+    // deixarem de estar, o erro tem de aparecer aqui, na exportação, e não na
+    // digitalização do lote.
+    if (!ancoras) ancoras = dessaFolha;
+    else if (dessaFolha.some((a, i) => Math.abs(a.x - ancoras[i].x) > 0.5 || Math.abs(a.y - ancoras[i].y) > 0.5))
+      throw new Error('As âncoras mudaram de lugar entre as folhas do cartão — o leitor conta com elas fixas.');
+
+    const celulas = [...folhaEl.querySelectorAll('.cr-codigo i')];
+    if (!codigo && celulas.length)
+      codigo = { celulas: celulas.map(centro), largura: caixa(celulas[0]).largura,
+                 altura: caixa(celulas[0]).altura, sinc: CODIGO_SINC.join(''), digitos: CODIGO_DIGITOS };
+    const campoMat = folhaEl.querySelector('[data-campo="matricula"]');
+    if (!campos && campoMat) campos = { matricula: caixa(campoMat) };
+
+    const alveolos = [...folhaEl.querySelectorAll('.bolha[data-alv]')].map(alv => {
+      const [forma, ...partes] = alv.dataset.alv.split(':');
+      const c = centro(alv), r = Math.round(caixa(alv).largura / 2 * 100) / 100;
+      if (forma === 'i') return { ...c, r, item: +partes[0], valor: partes[1] };
+      if (forma === 'b') return { ...c, r, item: +partes[0], coluna: partes[1], digito: +partes[2] };
+      if (forma === 'm') return { ...c, r, campo: 'matricula', posicao: +partes[0], digito: +partes[1] };
+      return { ...c, r, item: +partes[0], percentual: +partes[1] };
+    });
+    const faixa = folhaEl.querySelector('.cr-faixa')?.textContent || '';
+    return {
+      tipo: /tipo d/i.test(faixa) ? 'discursiva' : /redação/i.test(faixa) ? 'redacao' : 'objetiva',
+      alveolos
+    };
+  };
+
+  try {
+    const cartoes = {};
+    combinacoes.forEach((c, i) => {
+      const folhas = [...familias[i].querySelectorAll('.cr-folha')].map(medirFolha);
+      (cartoes[c.versao] = cartoes[c.versao] || {})[c.familia] = { folhas };
+    });
+    return {
+      unidade: 'pt',
+      folhaPt: { largura: 595, altura: 842 },
+      ancoras, codigo, campos, cartoes,
+      observacao: 'Medido pelo navegador na exportação. O cartão-gabarito usa o molde `nominal`.'
+    };
+  } finally {
+    molde.remove();
+  }
+}
 
 ACOES['cart-extras'] = () => {
   const p = provaAtual();
@@ -5436,10 +5700,15 @@ ACOES['cart-template'] = () => {
       folhas.push({ folha: folhas.length + 1, tipo: 'redacao', linhas: LINHAS_REDACAO });
     return { totalItens: pv.length, folhas };
   };
-  // v3: o gabarito passa a dizer de que prova ele é. Sem isso o leitor não
-  // consegue distinguir a folha do 9º ano da folha da 3ª série.
+  // v4: além de dizer de que prova é, o arquivo passa a levar a GEOMETRIA medida
+  // do cartão — onde está cada âncora, cada alvéolo e cada célula da faixa de
+  // identificação. Sem ela o leitor teria de guardar o desenho do cartão do lado
+  // dele, e erraria calado na primeira mudança de medida daqui.
+  let layout = null;
+  try { layout = mapaDoCartao(pAtiva.id); }
+  catch (e) { toast(`Não deu para medir o cartão: ${e.message}`); return; }
   const tpl = {
-    formato: 'pas-marista/gabarito-v3',
+    formato: 'pas-marista/gabarito-v4',
     prova: { id: pAtiva.id, serie: pAtiva.serie, etapa: pAtiva.etapa, nome: pAtiva.nome },
     simulado: pAtiva.nome, etapa: pAtiva.etapa,
     geradoEm: new Date().toISOString(),
@@ -5453,9 +5722,34 @@ ACOES['cart-template'] = () => {
       cartaoExtra: {
         descricao: 'cartão de reserva, sem identificação impressa',
         matriculaEmAlveolos: { posicoes: DIGITOS_DA_MATRICULA, digitos: 10, ordem: 'da esquerda para a direita' },
-        rodape: 'CARTÃO EXTRA — identifique nos alvéolos'
+        rodape: 'preenchida nos alvéolos pelo estudante'
+      },
+      // A faixa de blocos do rodapé, que em v3 ainda era decoração. A ordem dos
+      // campos é a ordem em que os blocos são impressos, da esquerda para a
+      // direita; o CRC-8 fecha o código.
+      faixa: {
+        celulas: CELULAS_DO_CODIGO,
+        sinc: CODIGO_SINC.join(''),
+        campos: [
+          { nome: 'versao', bits: 1, valores: { 0: 'regular', 1: 'adaptada' } },
+          { nome: 'tipo', bits: 2, valores: { [CARTAO_NOMINAL]: 'nominal', [CARTAO_EXTRA]: 'extra', [CARTAO_GABARITO]: 'gabarito' } },
+          { nome: 'folha', bits: 4 },
+          { nome: 'total', bits: 4 },
+          { nome: 'nDigitos', bits: 4 },
+          { nome: 'matricula', bits: 4 * CODIGO_DIGITOS, formato: `${CODIGO_DIGITOS} algarismos BCD` },
+          { nome: 'crc8', bits: 8, formato: 'CRC-8/ATM (0x07) sobre os campos acima, completados com zeros até fechar bytes' }
+        ]
       }
     },
+    // O cartão-gabarito: uma folha por versão, à frente do lote impresso, com os
+    // alvéolos do gabarito preenchidos. É por ela que o leitor calibra o limiar
+    // de tinta e confere que o molde e a chave correspondem ao papel.
+    referencia: {
+      descricao: 'cartão-gabarito impresso à frente do lote, com os alvéolos do gabarito preenchidos',
+      tipoNaFaixa: CARTAO_GABARITO,
+      molde: 'nominal'
+    },
+    layout,
     versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)]))
   };
   baixar(`pas-gabarito-${pAtiva.id}.json`, JSON.stringify(tpl, null, 2));
@@ -5867,6 +6161,18 @@ ACOES['resp-importar-ok'] = () => {
   const provaId = idProvaAtual();
   const elenco = estudantesDaProva(provaId);
   const linhas = $('#imp-resp').value.split('\n').map(l => l.trim()).filter(Boolean);
+  // A matrícula chega do leitor em ALGARISMOS: a faixa de identificação do
+  // rodapé é numérica, e `2026-0142` volta de lá como `20260142`. O texto exato
+  // continua valendo primeiro — quem digita o CSV à mão copia da tela —, e os
+  // dígitos são a segunda tentativa. Dois estudantes cujas matrículas só se
+  // distinguem pela pontuação ficam de fora das duas: `null` marca o empate, e
+  // recusar a linha é melhor do que lançar a prova de um na conta do outro.
+  const porTexto = new Map(elenco.map(e => [e.matricula, e]));
+  const porDigitos = new Map();
+  for (const e of elenco) {
+    const d = digitosDaMatricula(e.matricula);
+    if (d) porDigitos.set(d, porDigitos.has(d) ? null : e);
+  }
   const mapaProva = {};
   const afetados = new Set();
   let ok = 0, ign = 0, fora = 0;
@@ -5874,7 +6180,7 @@ ACOES['resp-importar-ok'] = () => {
     const [mat, no, resp] = l.split(/[;,\t]/).map(x => (x || '').trim());
     // Só o elenco desta prova: uma folha da 3ª série lida por engano no
     // lançamento do 9º ano é recusada em vez de gravar nota no lugar errado.
-    const est = elenco.find(e => e.matricula === mat);
+    const est = porTexto.get(mat) || porDigitos.get(digitosDaMatricula(mat)) || null;
     const numero = parseInt(no, 10);
     if (!est) { if (mat) fora++; else ign++; continue; }
     if (!numero || resp === undefined) { ign++; continue; }

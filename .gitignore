@@ -8,3 +8,15 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# As amostras do teste do leitor óptico: PDFs de cartão e digitalizações
+# simuladas, todos regeráveis por `node desktop/testes/gerar-amostras.mjs`.
+# Ficam de fora porque são megabytes de arquivo derivado — e porque um cartão
+# guardado no repositório envelheceria em silêncio junto com o desenho da folha.
+desktop/testes/amostras*/
+
+# Bytecode do Python. A pasta chegou a estar versionada, com .pyc de um módulo
+# que nem existe mais — arquivo derivado no repositório só serve para confundir
+# quem lê o diff.
+__pycache__/
+*.pyc

@@ -9,7 +9,7 @@ Estado em 27/07/2026.
 | 1 · MVP navegável | Todas as telas funcionando com dados no navegador (localStorage) | **concluída** |
 | 2 · Multiusuário | Banco on-line, login por conta, papéis e mesmo simulado para toda a equipe | **concluída** |
 | 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | **concluída** |
-| 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões digitalizados em lote | a fazer |
+| 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões digitalizados em lote | **pipeline concluído**; falta a interface gráfica e o `.exe` |
 | 5 · Calibração da pontuação | Parâmetro *x*, pesos oficiais por tipo de item e escore padronizado | a fazer |
 
 ## Arquitetura
@@ -259,8 +259,10 @@ o leitor local passou a descrever as folhas — qual é objetiva, qual é
 discursiva (com os percentuais aceitos) e qual é a redação —, além da chave de
 identificação (matrícula) e das âncoras. Com a entrada das quatro provas ele
 virou `pas-marista/gabarito-v3`, que diz também **de que prova** é o arquivo:
-sem isso o leitor não distingue a folha do 9º ano da folha da 3ª série. O
-formato está descrito em [`desktop/docs/contrato-dados.md`](../desktop/docs/contrato-dados.md).
+sem isso o leitor não distingue a folha do 9º ano da folha da 3ª série. Depois,
+com a implementação da leitura óptica, virou `v4` e passou a carregar a
+geometria medida do cartão (ver “Fase 4”, mais abaixo). O formato está descrito
+em [`desktop/docs/contrato-dados.md`](../desktop/docs/contrato-dados.md).
 
 O lançamento das notas dos discursivos, na tela de correção, passou a oferecer
 exatamente os mesmos cinco níveis do cartão, em vez de um número livre de 0 a
@@ -439,23 +441,76 @@ de build: o site é servido direto da raiz do repositório. `.vercelignore` deix
 de fora `supabase/`, `docs/`, `desktop/` e `.github/`, que existem só para o
 desenvolvimento.
 
-## A frente que continua aberta: o leitor óptico
+## Fase 4 — o leitor óptico
 
-Tudo o que este plano previa para a **fase on-line** está feito. A **fase
-offline** — digitalizar os cartões e lê-los opticamente — nunca saiu do papel, e
-é a única parte do fluxo que ainda é toda manual: hoje quem corrige lança
-marcação por marcação na tela “Correção e boletins”.
+A **fase offline** — digitalizar os cartões e lê-los opticamente — era, até
+agora, a única parte do fluxo inteiramente manual: quem corrigia lançava
+marcação por marcação na tela “Correção e boletins”. O miolo que faltava está
+feito e testado ponta a ponta; o material está em
+[`desktop/`](../desktop/README.md), e veio da PR #3 — fechada porque a metade
+`web/` dela virou o sistema em produção, enquanto a metade `desktop/` foi
+resgatada para o repositório em vez de ficar enterrada.
 
-O desenho existe e está em [`desktop/`](../desktop/README.md): o pipeline
-(âncoras → homografia → grade de bolhas → CSV, com fila de conferência para
-dupla marcação), o contrato dos dois arquivos que ligam as pontas e o esqueleto
-da linha de comando. As **duas pontas no sistema web já funcionam** — a
-exportação do gabarito, na tela de Cartões-resposta, e a importação do CSV, na de
-Correção. Falta o miolo: a leitura em si.
+Três decisões deste projeto sustentam o resto, e as três valem para quem for
+mexer no cartão impresso daqui em diante.
 
-Esse material veio da PR #3. Ela foi fechada porque a metade `web/` dela virou o
-sistema que está em produção; a metade `desktop/` foi resgatada para o
-repositório em vez de ficar enterrada numa PR fechada.
+### A geometria do cartão é medida, não escrita
+
+Onde fica cada alvéolo na folha nasce do flex do CSS: muda com o número de
+itens, com a quantidade de colunas, com a altura do bloco de orientações. Um
+leitor com essas medidas decoradas do lado de lá acertaria hoje e erraria calado
+na primeira mudança de medida daqui — o mesmo defeito que a régua do cartão
+(`medirCartao`) existe para não repetir.
+
+Então quem mede é o navegador, no ato da exportação (`mapaDoCartao`): monta o
+cartão de verdade fora da tela, lê o retângulo de cada âncora, de cada alvéolo e
+de cada célula do código, e manda tudo em pontos junto com o gabarito, agora no
+formato `pas-marista/gabarito-v4`. O leitor não sabe nada sobre o desenho do
+cartão: ele **recebe** o desenho. Gabarito antigo é recusado com uma mensagem
+que diz para exportar de novo.
+
+A exportação também **confere** que as quatro âncoras estão na mesma posição em
+toda folha de todo cartão, e se recusa a exportar se não estiverem — é essa
+invariância que permite alinhar a folha antes de saber que folha é.
+
+### A folha diz de quem é
+
+O rodapé imprimia `▮▯▮▮▯▮▮▯`: oito blocos iguais em toda folha de toda prova,
+decoração com cara de código de barras. O contrato de dados já a chamava de
+“faixa de blocos” e previa lê-la; não havia o que ler, e a folha nominal não
+tinha como se identificar sozinha.
+
+Hoje os blocos carregam versão, tipo de cartão, número da folha, total de folhas
+e os algarismos da matrícula, com CRC-8 no fim. O CRC é o que separa “não
+consegui ler” de “li errado”: folha torta, dobrada ou digitalizada pela metade
+falha no CRC e vai para a conferência, em vez de lançar as marcações de um
+estudante na linha de outro. É ele também que resolve sozinho a folha que entrou
+de cabeça para baixo.
+
+Como a faixa é numérica, `2026-0142` volta do leitor como `20260142`: a
+importação passou a casar por algarismos quando o texto exato não bate, e a tela
+de Cartões-resposta **avisa antes de imprimir** quais matrículas do elenco a
+faixa não consegue carregar.
+
+### O cartão-gabarito abre o lote
+
+A impressão sai com um cartão por versão à frente de tudo, com os alvéolos do
+gabarito já preenchidos. Ele não é de estudante nenhum e faz três coisas que
+nenhuma outra folha do lote faz: calibra o limiar de tinta desta impressora e
+deste scanner; confere que o molde exportado corresponde ao papel; e confere que
+a chave exportada é a mesma que foi impressa — se alguém mexeu nos itens depois
+de imprimir os cartões, o leitor interrompe, em vez de corrigir o lote inteiro
+com a chave errada.
+
+Em contrapartida, essa folha **é a chave da prova em papel** e viaja com o lote
+até a aplicação. Guarde-a como se guarda a prova.
+
+### O que falta
+
+A GUI (arrastar a pasta de digitalizações, barra de progresso) e o
+empacotamento `.exe` com PyInstaller, para instalar na máquina da secretaria sem
+Python. O pipeline já está separado da interface, e a linha de comando cobre o
+fluxo inteiro.
 
 ## Pendências operacionais
 
