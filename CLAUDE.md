@@ -232,6 +232,25 @@ alternativas, quando o problema está no enunciado.
   bloco tem de ser medido **solto**, porque dentro da coluna, que é um flex de
   altura limitada, ele encolhe e mede menos do que ocupa de verdade.
 
+## A prova adaptada tem tamanho próprio, e ele se escolhe
+
+Todo item nasce `versao: 'ambas'`, então, sem ninguém escolher, a adaptada sai
+do tamanho da regular — as quatro provas chegaram à produção com três ou quatro
+itens a menos, que não é prova adaptada, é a mesma prova. Quem escolhe é
+`ACOES['cad-adaptada']` (⚖ Montar a prova adaptada, no Caderno), e o que ela
+mexe é só o campo `versao`: `ambas` para quem fica, `regular` para quem sai. **A
+prova regular não muda** — o item desmarcado continua nela, com o mesmo número.
+
+- **Item com adaptação própria fica fora da escolha**, nos dois sentidos: o
+  original (quem entra é a cópia) e a cópia (`derivadoDe`, que só existe para a
+  adaptada — desmarcá-la a deixaria sem prova nenhuma).
+- **A gravação é em lote e esperada** (`PERS.itensAgora`): um `upsert` só com a
+  lista inteira, e se o banco recusar, recusa tudo e o estado local volta —
+  meia prova adaptada gravada seria pior que nenhuma. Conferido com o papel de
+  verdade: coordenação aceita, docente recusa.
+- `versao` já está em `campos_do_item()` (migração 0017), então cada entrada e
+  saída da adaptada fica registrada no histórico do item sem nada a fazer.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável
