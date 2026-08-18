@@ -4648,8 +4648,13 @@ const LINHAS_REDACAO = 30;
    alguém lembre de reajustar um número aqui. */
 const reguasDoCartao = new Map();
 
-function medirCartao(provaId) {
-  if (reguasDoCartao.has(provaId)) return reguasDoCartao.get(provaId);
+// A chave é a prova E o tipo de cartão: o cartão extra leva a grade da
+// matrícula no alto da folha, e por isso sobra menos altura para as colunas.
+// Medir um e usar no outro devolveria capacidade a mais — o erro que esta
+// régua existe para não repetir.
+function medirCartao(provaId, extra = false) {
+  const chave = `${provaId}/${extra ? 'extra' : 'nominal'}`;
+  if (reguasDoCartao.has(chave)) return reguasDoCartao.get(chave);
   // O molde leva o cabeçalho DESTA prova, e campos preenchidos. Com a prova
   // nula os campos saíam vazios, o bloco vazio não ocupa linha nenhuma, e a
   // folha de mentira ficava com o corpo mais alto que a real — capacidade a
@@ -4665,7 +4670,7 @@ function medirCartao(provaId) {
   const folha = `
     <div class="cr-folha">
       ${cabecalhoCartao(provaId, est, 'régua')}
-      ${orientacoesDoCartao()}
+      ${orientacoesDoCartao(extra)}
       <div class="cr-corpo">
         <div class="cr-ac"><div class="cr-ac-col"><div class="cr-tit">RÉGUA</div>
           ${linhaFalsa(1)}${linhaFalsa(2)}</div></div>
@@ -4739,7 +4744,7 @@ function medirCartao(provaId) {
     blocosBPorFolha: 2 * cabem(alturaDaCaixa(caixaB), mD.inicio, mD.passo, mD.altura)
   };
   molde.remove();
-  reguasDoCartao.set(provaId, regua);
+  reguasDoCartao.set(chave, regua);
   return regua;
 }
 
@@ -4770,7 +4775,8 @@ function rodapeCartao(est, folha, total) {
   return `
   <div class="cr-ancoras"><i></i><i></i></div>
   <div class="cr-rodape">
-    <span>▮▯▮▮▯▮▮▯ ${esc(est.matricula)}</span>
+    <span>${est.extra ? 'CARTÃO EXTRA — identifique nos alvéolos'
+      : `▮▯▮▮▯▮▮▯ ${esc(est.matricula)}`}</span>
     <span>folha ${folha} de ${total}</span>
   </div>`;
 }
@@ -4788,7 +4794,31 @@ function bolhasDe(tipo) {
 // régua (`medirCartao`) tem de montar uma folha idêntica à impressa: ele ocupa
 // uns 60pt do corpo, e medir sem ele daria uma coluna 60pt mais alta do que a
 // real — capacidade a mais, e conteúdo por cima da âncora.
-function orientacoesDoCartao() {
+// A matrícula em alvéolos, para o cartão que sai sem identificação impressa.
+// Nove posições porque a matrícula da escola tem nove dígitos; dez linhas
+// porque cada posição vai de 0 a 9. O desenho é o mesmo do bloco do tipo B —
+// dígito à esquerda, alvéolos embaixo —, e o alvéolo tem o tamanho de todos os
+// outros da folha: quem preenche não deve encontrar dois tamanhos de círculo, e
+// o leitor óptico procura um alvo só.
+const DIGITOS_DA_MATRICULA = 9;
+
+function gradeDaMatricula() {
+  const cabecalho = `<span></span>${Array.from({ length: DIGITOS_DA_MATRICULA },
+    () => '<span class="cr-mat-caixa"></span>').join('')}`;
+  const linhas = Array.from({ length: 10 }, (_, d) => `
+      <span class="dig">${d}</span>${Array.from({ length: DIGITOS_DA_MATRICULA },
+        () => '<span class="cel"><span class="bolha"></span></span>').join('')}`).join('');
+  return `
+          <div class="cr-mat">
+            <h6>MATRÍCULA <small>escreva o número e preencha os alvéolos</small></h6>
+            <div class="cr-mat-grade">${cabecalho}${linhas}</div>
+          </div>`;
+}
+
+// `extra` é o cartão sem identificação impressa: no lugar do nome já escrito,
+// ele traz a grade da matrícula para quem o usar preencher. O resto da folha é
+// o mesmo — mesmas colunas, mesmos alvéolos, mesma ordem dos itens.
+function orientacoesDoCartao(extra = false) {
   return `
         <div class="cr-orient">
           <div class="txt">
@@ -4804,6 +4834,7 @@ function orientacoesDoCartao() {
             <div class="ex"><i>tipo C</i><span class="bolha"></span><span>A</span><span class="bolha m"></span><span>B</span><span class="bolha"></span><span>C</span><span class="bolha"></span><span>D</span></div>
             <div class="ex"><i>tipo B</i><span>resposta 025 → C=0, D=2, U=5</span></div>
           </div>
+          ${extra ? gradeDaMatricula() : ''}
         </div>`;
 }
 
@@ -4824,9 +4855,9 @@ function blocoTipoB(numero) {
 
 // Folhas objetivas — todos os itens em ordem numérica; só A e C recebem
 // bolhas aqui. Quando não cabem numa folha, seguem em folhas de continuação.
-function corposObjetivos(pv, provaId) {
+function corposObjetivos(pv, provaId, extra) {
   const bs = pv.filter(e => e.item.tipo === 'B');
-  const { linhasPorColuna, blocosBPorColuna, blocosBPorFolha } = medirCartao(provaId);
+  const { linhasPorColuna, blocosBPorColuna, blocosBPorFolha } = medirCartao(provaId, extra);
   const porFolha = COLUNAS_CARTAO * linhasPorColuna;
   const quantas = Math.max(Math.ceil(pv.length / porFolha),
                            Math.ceil(bs.length / blocosBPorFolha), 1);
@@ -4859,7 +4890,7 @@ function corposObjetivos(pv, provaId) {
       faixa: soB ? 'Caderno de respostas — itens do tipo B (continuação)'
         : `Caderno de respostas — itens dos tipos A, B e C${quantas > 1 ? ` (${f + 1}ª parte)` : ''}`,
       html: `
-        ${orientacoesDoCartao()}
+        ${orientacoesDoCartao(extra)}
         <div class="cr-corpo">
           ${soB ? '' : `<div class="cr-ac">${acHtml}</div>`}
           <div class="cr-bcol${bsDaFolha.length > blocosBPorColuna ? ' duplo' : ''}" ${soB ? 'style="flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:6pt;align-content:start"' : ''}>
@@ -4901,10 +4932,10 @@ function blocoDiscursivo(numero, componente, linhas) {
           </div>`;
 }
 
-function corposDiscursivos(pv, provaId) {
+function corposDiscursivos(pv, provaId, extra) {
   const ds = pv.filter(e => e.item.tipo === 'D');
   if (!ds.length) return [];
-  const { alturaUtilD, baseD, linhaDaPauta } = medirCartao(provaId);
+  const { alturaUtilD, baseD, linhaDaPauta } = medirCartao(provaId, extra);
   const altura = e => baseD + (e.item.dLinhas || 10) * linhaDaPauta;
   const grupos = [];
   let grupo = [], soma = 0;
@@ -4951,7 +4982,7 @@ function corpoRedacao(provaId = idProvaAtual()) {
 function corposDoCartao(provaId, est) {
   const p = provaPorId(provaId);
   const pv = prova(provaId, est.versao);
-  const corpos = [...corposObjetivos(pv, provaId), ...corposDiscursivos(pv, provaId)];
+  const corpos = [...corposObjetivos(pv, provaId, est.extra), ...corposDiscursivos(pv, provaId, est.extra)];
   // A folha de redação só sai se a prova tiver redação e a coordenação optar
   // por imprimi-la.
   if (p?.temRedacao !== false && p?.imprimirRedacao !== false) corpos.push(corpoRedacao(provaId));
@@ -5006,6 +5037,7 @@ function telaCartoes() {
         <select class="caixa" style="width:auto" data-mud="cart-turma">${opsTurma}</select>
         ${ehCoord() ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
         ${ehCoord() ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
+        ${ehCoord() ? `<button class="btn fantasma" data-acao="cart-extras" ${nRegItens + nAdaItens ? '' : 'disabled'}>🖨 Cartões extras</button>` : ''}
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
     </div>
@@ -5088,6 +5120,53 @@ ACOES['cart-imprimir'] = () => {
   $('#print-area').innerHTML = filtrados.map(e => folhasDoCartao(pAtiva.id, e)).join('');
   window.print();
 };
+/* ---------------- cartões extras, sem identificação ----------------
+   Cartão de reserva: sai com a mesma organização do nominal — mesmas colunas,
+   mesma ordem de itens, mesmos alvéolos —, mas sem nome impresso. No lugar da
+   identificação já escrita vai a grade da matrícula em alvéolos, para quem o
+   usar preencher, e o rodapé diz que é extra em vez de repetir uma matrícula
+   que não existe.
+
+   Serve para o dia da aplicação (cartão rasgado, estudante que chegou fora da
+   lista) e para teste de impressão, que é uso sem risco: imprimir não grava
+   nada, e este cartão não pertence a estudante nenhum. */
+const cartaoExtra = versao => ({ id: null, nome: '', matricula: '', turma: '', versao, extra: true });
+
+ACOES['cart-extras'] = () => {
+  const p = provaAtual();
+  if (!p) return;
+  const temAda = prova(p.id, 'adaptada').length > 0;
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Cartões extras — ${esc(p.serie)}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 12px">Cartões <b>sem identificação impressa</b>,
+        com a mesma organização dos nominais. Quem usar escreve o nome nas linhas do alto e preenche a
+        <b>matrícula nos alvéolos</b> — são ${DIGITOS_DA_MATRICULA} dígitos. Servem de reserva na aplicação
+        e para teste de impressão.</p>
+      <div class="form-linha">
+        <div class="campo"><label>Quantos cartões</label>
+          <input class="caixa" type="number" min="1" max="60" id="ex-qtd" value="5"></div>
+        <div class="campo"><label>Versão</label>
+          <select class="caixa" id="ex-versao">
+            <option value="regular">A1 — regular</option>
+            ${temAda ? '<option value="adaptada">A2 — adaptada</option>' : ''}
+          </select></div>
+      </div>
+    </div>
+    <div class="dlg-pe"><button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="cart-extras-imprimir" data-id="${esc(p.id)}">Imprimir</button></div>`);
+};
+
+ACOES['cart-extras-imprimir'] = d => {
+  const qtd = Math.min(60, Math.max(1, parseInt($('#ex-qtd').value, 10) || 1));
+  const versao = $('#ex-versao').value === 'adaptada' ? 'adaptada' : 'regular';
+  const folhas = Array.from({ length: qtd }, () => folhasDoCartao(d.id, cartaoExtra(versao))).join('');
+  $('#dlg').close();
+  $('#print-area').innerHTML = folhas;
+  window.print();
+};
+
 ACOES['cart-template'] = () => {
   const pAtiva = provaAtual();
   if (!pAtiva) return;
@@ -5116,7 +5195,19 @@ ACOES['cart-template'] = () => {
     prova: { id: pAtiva.id, serie: pAtiva.serie, etapa: pAtiva.etapa, nome: pAtiva.nome },
     simulado: pAtiva.nome, etapa: pAtiva.etapa,
     geradoEm: new Date().toISOString(),
-    identificacao: { chave: 'matricula', ancoras: 'quatro quadrados pretos, dois no topo e dois no rodapé de cada folha' },
+    identificacao: {
+      chave: 'matricula',
+      ancoras: 'quatro quadrados pretos, dois no topo e dois no rodapé de cada folha',
+      // O cartão extra sai sem nome impresso e traz a matrícula em alvéolos —
+      // é por ela que o leitor descobre de quem é a folha. Some deles o
+      // cabeçalho nominal, então a área de respostas começa mais abaixo: para o
+      // leitor são dois moldes, e é isto que avisa.
+      cartaoExtra: {
+        descricao: 'cartão de reserva, sem identificação impressa',
+        matriculaEmAlveolos: { posicoes: DIGITOS_DA_MATRICULA, digitos: 10, ordem: 'da esquerda para a direita' },
+        rodape: 'CARTÃO EXTRA — identifique nos alvéolos'
+      }
+    },
     versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)]))
   };
   baixar(`pas-gabarito-${pAtiva.id}.json`, JSON.stringify(tpl, null, 2));

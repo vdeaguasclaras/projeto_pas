@@ -458,11 +458,15 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 /* coluna dos itens do tipo B */
 .cr-bcol{flex:0 0 118pt;border:.7pt solid #efc3da;border-radius:2pt;padding:3pt 4pt;background:#fff8fb;
   display:flex;flex-direction:column;gap:4pt}
+/* Duas colunas de blocos, para quando são mais de quatro. O ALVÉOLO NÃO
+   ENCOLHE: quem preenche à mão precisa do mesmo círculo em toda a folha, e o
+   leitor óptico procura um alvo de tamanho único. Encolher era desnecessário —
+   o que faltava era altura, e duas colunas já resolvem isso; a largura sempre
+   coube (a coluna dá uns 57pt por bloco, e o alvéolo de 8,5pt cabe folgado). */
 .cr-bcol.duplo{flex:0 0 126pt;display:grid;grid-template-columns:1fr 1fr;gap:3pt;align-content:start}
 .cr-bcol.duplo>.cr-tit{grid-column:1/-1}
 .cr-bcol.duplo .cr-bloco-b{padding:2pt}
-.cr-bcol.duplo .bolha{width:7pt;height:7pt}
-.cr-bcol.duplo .cr-bgrade{grid-template-columns:7pt repeat(3,1fr);font-size:5pt}
+.cr-bcol.duplo .cr-bgrade{grid-template-columns:7pt repeat(3,1fr)}
 .cr-bloco-b{border:.6pt solid #efc3da;border-radius:2pt;padding:3pt;background:#fff}
 .cr-bloco-b h6{margin:0 0 2pt;font-size:6.5pt;color:#0d2f8a;text-align:center;font-family:var(--mono)}
 .cr-bgrade{display:grid;grid-template-columns:9pt repeat(3,1fr);gap:1pt;font-size:5.6pt;color:#666}
@@ -490,6 +494,17 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .cr-red-pauta{padding-left:18pt}
 
 /* rodapé de leitura óptica */
+/* A matrícula em alvéolos, no cartão extra. Fica na faixa das orientações, no
+   alto da folha: o corpo abaixo dela é medido pela régua, então as colunas
+   continuam certas mesmo com a faixa mais alta. */
+.cr-mat{flex:0 0 auto;border:.7pt solid #efc3da;background:#fff;padding:3pt 5pt;border-radius:2pt}
+.cr-mat h6{margin:0 0 2pt;font-size:6.2pt;color:#e5007e;letter-spacing:.3pt;text-align:center}
+.cr-mat h6 small{display:block;font-weight:400;font-size:5.2pt;color:#777;letter-spacing:0}
+.cr-mat-grade{display:grid;grid-template-columns:8pt repeat(9,1fr);gap:1pt;font-size:5.6pt;color:#666}
+.cr-mat-grade .dig{text-align:right;padding-right:1pt;font-family:var(--mono)}
+.cr-mat-grade .cel{display:flex;justify-content:center}
+.cr-mat-caixa{height:11pt;border:.6pt solid #bbb;border-radius:1pt;background:#fcfcfc}
+
 .cr-ancoras{display:flex;justify-content:space-between;margin:4pt 0}
 .cr-ancoras i{width:9pt;height:9pt;background:#111;display:block}
 .cr-rodape{display:flex;justify-content:space-between;align-items:center;

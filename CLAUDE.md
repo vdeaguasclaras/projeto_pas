@@ -214,6 +214,11 @@ alternativas, quando o problema está no enunciado.
   do caderno, observação da capa e campo VERSÃO do cartão. **No sistema, no
   banco, no elenco, na correção e no gabarito do leitor óptico nada muda**:
   trocar o dado quebraria o contrato do leitor e o histórico gravado.
+- **O alvéolo tem um tamanho só na folha inteira** — item, tipo B e matrícula.
+  Quem preenche à mão não deve encontrar dois tamanhos de círculo, e o leitor
+  óptico procura um alvo de medida única. O formato de duas colunas do tipo B
+  chegou encolhendo o alvéolo para 7pt, e não precisava: o que faltava era
+  ALTURA, e duas colunas já resolvem isso — a largura sempre coube.
 - **A capacidade da folha do cartão é MEDIDA, não escrita à mão**
   (`medirCartao`). Era: 42 linhas por coluna e 5 blocos do tipo B. A coluna
   comporta 4, e com o quinto o bloco descia por cima da ÂNCORA do canto
