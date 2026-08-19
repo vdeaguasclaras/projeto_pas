@@ -135,7 +135,7 @@ def _conferir_extras() -> list[str]:
         digitalizar(pdf, entrada, semente=19)
         subprocess.run(
             [sys.executable, "-m", "src.leitor.cli", "ler",
-             "--gabarito", str(AMOSTRAS / "gabarito.json"),
+             "--gabarito", str(AMOSTRAS / "pacote.json"),
              "--entrada", str(entrada), "--saida", str(saida)],
             cwd=RAIZ / "desktop", capture_output=True, text=True)
         lidas = {(l["matricula"], int(l["item"])): l["resposta"]
@@ -188,7 +188,7 @@ def main() -> int:
 
         processo = subprocess.run(
             [sys.executable, "-m", "src.leitor.cli", "ler",
-             "--gabarito", str(AMOSTRAS / "gabarito.json"),
+             "--gabarito", str(AMOSTRAS / "pacote.json"),
              "--entrada", str(entrada), "--saida", str(saida)],
             cwd=RAIZ / "desktop", capture_output=True, text=True)
         print(processo.stdout)

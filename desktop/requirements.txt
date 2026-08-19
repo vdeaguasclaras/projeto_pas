@@ -6,3 +6,8 @@ opencv-python>=4.10
 numpy>=1.26
 pypdfium2>=4.30
 click>=8.1
+
+# A janela. `PySide6-Essentials` em vez do `PySide6` cheio: o pacote completo
+# traz WebEngine, 3D e multimídia, que esta janela não usa e que engordariam o
+# .exe em algumas centenas de megabytes.
+PySide6-Essentials>=6.7

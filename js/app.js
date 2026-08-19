@@ -5,7 +5,7 @@
 import { NUVEM } from './config-supabase.js';
 import {
   COMPONENTES, TODOS_COMPONENTES, ehComponenteLegado, SUCESSORAS_DE_ARTES,
-  GRUPOS, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
+  GRUPOS, PESOS_DO_ESCORE, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
   uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 } from './dados.js';
 import { nuvem } from './nuvem.js';
@@ -417,9 +417,11 @@ function prova(provaId, versao, extras = []) {
 const itensEmRevisao = provaId =>
   itensDaProva(provaId).filter(i => ['area', 'geral', 'devolvido'].includes(i.status));
 
-/* ---------------- correção ---------------- */
-// Pontuação (simplificação documentada — calibrável na fase de fidelidade):
-// A: certo +1 / errado −1 · B: certo +1 / errado 0 · C e D: certo +1 / errado −1.
+/* ---------------- correção ----------------
+   Quanto vale cada resposta está em `PESOS_DO_ESCORE` (js/dados.js), e não em
+   `if`s aqui dentro: o aplicativo local corrige também, para gerar os boletins
+   na secretaria, e a tabela é o que impede as duas pontas de divergirem. Ela
+   viaja no pacote da prova. */
 function corrigir(est, provaId = idProvaAtual()) {
   const pv = prova(provaId, est.versao);
   const resp = S.respostas[provaId]?.[est.id] || { marcacoes: {}, redacao: null };
@@ -434,9 +436,10 @@ function corrigir(est, provaId = idProvaAtual()) {
       dTotal++;
       const bruta = resp.discursivas?.[item.id];
       if (bruta !== undefined && bruta !== null && bruta !== '') {
-        const nota = Math.max(0, Math.min(10, parseFloat(bruta) || 0));
-        eb += nota / 10;
-        g.tot++; g.ac += nota / 10;
+        const escala = PESOS_DO_ESCORE.D.escala;
+        const nota = Math.max(0, Math.min(escala, parseFloat(bruta) || 0));
+        eb += nota / escala;
+        g.tot++; g.ac += nota / escala;
         dLanc++;
       }
       continue;
@@ -445,9 +448,10 @@ function corrigir(est, provaId = idProvaAtual()) {
     const gab = item.tipo === 'B' ? String(item.gabarito).padStart(3, '0') : String(item.gabarito).toUpperCase();
     const marcada = m !== '';
     const certa = marcada && (item.tipo === 'B' ? m.padStart(3, '0') === gab : m === gab);
-    if (!marcada) br++;
-    else if (certa) { ac++; eb += 1; }
-    else { er++; if (item.tipo !== 'B') eb -= 1; }
+    const peso = PESOS_DO_ESCORE[item.tipo] || PESOS_DO_ESCORE.C;
+    if (!marcada) { br++; eb += peso.branco; }
+    else if (certa) { ac++; eb += peso.certo; }
+    else { er++; eb += peso.errado; }
     g.tot++; if (certa) g.ac++;
     detalhes.push({ numero, gab, m: marcada ? m : null, certa });
   }
@@ -5439,7 +5443,7 @@ function telaCartoes() {
       <tbody>${linhas}</tbody></table>`
       : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      <button class="btn fantasma" data-acao="cart-template">⬇ Exportar gabarito p/ leitor local (JSON)</button>
+      <button class="btn fantasma" data-acao="cart-template">⬇ Exportar pacote da prova (leitor e boletins)</button>
     </div>
   </div>
   ${previa && (nRegItens + nAdaItens) ? `<div class="cr-previa"><div style="width:100%;text-align:center;font-size:12px;color:#6b5f52;margin-bottom:10px">Prévia — folhas do 1º estudante do filtro</div>${previa}</div>` : ''}
@@ -5732,17 +5736,52 @@ ACOES['cart-template'] = () => {
     const folhas = [{
       folha: 1, tipo: 'objetiva',
       itens: pv.filter(({ item }) => item.tipo !== 'D')
-        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito }))
+        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito,
+                                      grupo: item.grupo, componente: item.componente }))
     }];
     const ds = pv.filter(({ item }) => item.tipo === 'D');
     if (ds.length) folhas.push({
       folha: folhas.length + 1, tipo: 'discursiva', percentuais: PERCENTUAIS_D,
-      itens: ds.map(({ item, numero }) => ({ numero, tipo: 'D', linhas: item.dLinhas || 10 }))
+      itens: ds.map(({ item, numero }) => ({ numero, tipo: 'D', linhas: item.dLinhas || 10,
+                                             grupo: item.grupo, componente: item.componente }))
     });
     if (pAtiva.temRedacao !== false && pAtiva.imprimirRedacao !== false)
       folhas.push({ folha: folhas.length + 1, tipo: 'redacao', linhas: LINHAS_REDACAO });
     return { totalItens: pv.length, folhas };
   };
+  /* ---------------- o elenco e as notas já lançadas ----------------
+     O aplicativo local passou a gerar os boletins, e boletim precisa de coisas
+     que o gabarito não tinha: o NOME de quem fez a prova, a turma dele, e as
+     notas que só existem no banco — a do discursivo, lançada por quem corrige,
+     e a da redação, lançada pela professora. Sem isso o app produziria um
+     boletim pela metade, ou pediria que tudo fosse digitado de novo.
+
+     As notas do discursivo são chaveadas pelo NÚMERO do item, não pelo `id`
+     interno: o número é o que está impresso no cartão e o que o leitor conhece.
+
+     Este arquivo passa a levar nome de estudante, o que o gabarito evitava de
+     propósito. É dado da escola, indo para uma máquina da escola, e sem ele não
+     há boletim — mas convém tratá-lo como se trata a lista de estudantes, e não
+     como se tratava o gabarito. */
+  const notasLancadas = () => {
+    const porVersao = {}, saida = {};
+    for (const e of estudantesDaProva(pAtiva.id)) {
+      const r = S.respostas?.[pAtiva.id]?.[e.id];
+      if (!r) continue;
+      const v = e.versao === 'adaptada' ? 'adaptada' : 'regular';
+      const pv = porVersao[v] || (porVersao[v] = prova(pAtiva.id, v));
+      const discursivas = {};
+      for (const { item, numero } of pv) {
+        const nota = r.discursivas?.[item.id];
+        if (nota !== undefined && nota !== null && nota !== '') discursivas[numero] = Number(nota);
+      }
+      const red = redLancada(r.redacao)
+        ? { nc: Number(r.redacao.nc), ne: Number(r.redacao.ne), tl: Number(r.redacao.tl) } : null;
+      if (Object.keys(discursivas).length || red) saida[e.matricula] = { discursivas, redacao: red };
+    }
+    return saida;
+  };
+
   // v4: além de dizer de que prova é, o arquivo passa a levar a GEOMETRIA medida
   // do cartão — onde está cada âncora, cada alvéolo e cada célula da faixa de
   // identificação. Sem ela o leitor teria de guardar o desenho do cartão do lado
@@ -5751,7 +5790,11 @@ ACOES['cart-template'] = () => {
   try { layout = mapaDoCartao(pAtiva.id); }
   catch (e) { toast(`Não deu para medir o cartão: ${e.message}`); return; }
   const tpl = {
-    formato: 'pas-marista/gabarito-v4',
+    // `pacote-v1` é o `gabarito-v4` inteiro — mesma geometria, mesmos campos, no
+    // mesmo lugar — mais o elenco, as notas lançadas e a tabela de pesos. É um
+    // superconjunto de propósito: o leitor aceita os dois formatos, e ninguém
+    // precisa escolher entre exportar “para ler” e exportar “para o boletim”.
+    formato: 'pas-marista/pacote-v1',
     prova: { id: pAtiva.id, serie: pAtiva.serie, etapa: pAtiva.etapa, nome: pAtiva.nome },
     simulado: pAtiva.nome, etapa: pAtiva.etapa,
     geradoEm: new Date().toISOString(),
@@ -5797,10 +5840,24 @@ ACOES['cart-template'] = () => {
       molde: 'nominal'
     },
     layout,
-    versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)]))
+    versoes: Object.fromEntries(['regular', 'adaptada'].map(v => [v, daVersao(v)])),
+    elenco: estudantesDaProva(pAtiva.id).map(e => ({
+      matricula: e.matricula, nome: e.nome, turma: e.turma,
+      versao: e.versao === 'adaptada' ? 'adaptada' : 'regular'
+    })),
+    notas: notasLancadas(),
+    // A pontuação como DADO, e não como regra escrita dos dois lados. Calibrar o
+    // escore na fase 5 passa a ser mexer em `PESOS_DO_ESCORE` (js/dados.js) e
+    // exportar de novo.
+    escore: {
+      pesos: PESOS_DO_ESCORE,
+      grupos: GRUPOS,
+      redacao: { formula: 'NR = NC − 2·NE/TL', piso: 0 },
+      observacao: 'Simplificação documentada — os pesos oficiais e o parâmetro x entram na fase 5.'
+    }
   };
-  baixar(`pas-gabarito-${pAtiva.id}.json`, JSON.stringify(tpl, null, 2));
-  toast(`Gabarito da prova de ${pAtiva.serie} exportado.`);
+  baixar(`pas-pacote-${pAtiva.id}.json`, JSON.stringify(tpl, null, 2));
+  toast(`Pacote da prova de ${pAtiva.serie} exportado — leitura e boletins.`);
 };
 
 /* ================= TELA 7 · CORREÇÃO ================= */

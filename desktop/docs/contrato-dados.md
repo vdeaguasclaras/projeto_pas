@@ -3,22 +3,29 @@
 Dois arquivos ligam o sistema on-line ao leitor de cartões. Nenhum dos dois
 carrega dado sensível além de matrícula e marcações.
 
-## 1. Gabarito para o leitor (`pas-gabarito-<prova>.json`)
+## 1. O pacote da prova (`pas-pacote-<prova>.json`)
 
-Exportado no sistema web em **Cartões-resposta → “Exportar gabarito p/ leitor
-local (JSON)”**. Diz ao leitor de que prova é o arquivo, quantas folhas cada
-estudante recebe, o que procurar em cada uma — e **onde**.
+Exportado no sistema web em **Cartões-resposta → “Exportar pacote da prova
+(leitor e boletins)”**. Diz ao aplicativo local de que prova é o arquivo, quantas
+folhas cada estudante recebe, o que procurar em cada uma, **onde** — e, desde que
+o aplicativo passou a gerar os boletins, **quem** fez a prova e **quanto vale**
+cada resposta.
 
-> **Formato `v4`.** A `v1` descrevia cada versão da prova como uma lista simples
-> de itens. A `v3` acrescentou a identificação da prova e a divisão em folhas
-> (objetiva, discursiva, redação), porque o sistema passou a imprimir mais de uma
-> folha por estudante e a atender quatro provas. A `v4` acrescenta a **geometria
-> medida do cartão** e a descrição da **faixa de identificação** do rodapé —
-> sem elas o leitor teria de guardar o desenho da folha do lado dele, e erraria
-> em silêncio na primeira mudança de medida do cartão.
+> **Formato `pacote-v1`.** A `gabarito-v1` descrevia cada versão da prova como
+> uma lista simples de itens. A `v3` acrescentou a identificação da prova e a
+> divisão em folhas (objetiva, discursiva, redação). A `v4` acrescentou a
+> **geometria medida do cartão** e a **faixa de identificação** do rodapé — sem
+> elas o leitor teria de guardar o desenho da folha do lado dele, e erraria em
+> silêncio na primeira mudança de medida.
 >
-> Formato antigo é **recusado**, com mensagem dizendo para exportar de novo.
-> Adivinhar a geometria seria pior do que recusar.
+> O `pacote-v1` é o `gabarito-v4` **inteiro**, com tudo no mesmo lugar, mais
+> três coisas que só o boletim precisa: o **elenco**, as **notas já lançadas** e
+> a **tabela de pesos** do escore (§6). É um superconjunto de propósito — o
+> leitor aceita os dois formatos, e ninguém precisa escolher entre exportar
+> “para ler” e exportar “para o boletim”.
+>
+> Formato anterior à `v4` é **recusado**, com mensagem dizendo para exportar de
+> novo: adivinhar a geometria seria pior do que recusar.
 
 ```json
 {
@@ -29,7 +36,8 @@ estudante recebe, o que procurar em cada uma — e **onde**.
   "geradoEm": "2026-08-18T17:15:56.702Z",
   "identificacao": { "…": "ver §3" },
   "referencia": { "…": "ver §4" },
-  "layout":     { "…": "ver §5" },
+  "layout":     { "…": "ver §6" },
+  "elenco":     [ "…" ], "notas": { "…": "…" }, "escore": { "…": "ver §5" },
   "versoes": {
     "regular": {
       "totalItens": 42,
@@ -176,7 +184,48 @@ Divergência aí interrompe o lote com código de saída 1.
 
 Ele nunca gera resposta: a faixa o identifica, e a matrícula dele é vazia.
 
-## 5. A geometria (`layout`)
+## 5. Elenco, notas e pesos — o que o boletim precisa
+
+O aplicativo local gera os boletins de desempenho, e boletim precisa de coisas
+que o gabarito não tinha: o **nome** de quem fez a prova, a **turma**, e as notas
+que só existem no banco — a do **discursivo**, lançada por quem corrige, e a da
+**redação**, lançada pela professora.
+
+```json
+"elenco": [ { "matricula": "225100142", "nome": "Antonia Silva",
+              "turma": "1ª B", "versao": "regular" } ],
+"notas": { "225100142": { "discursivas": { "42": 8.5 },
+                          "redacao": { "nc": 8, "ne": 2, "tl": 25 } } },
+"escore": {
+  "pesos": { "A": {"certo":1,"errado":-1,"branco":0},
+             "B": {"certo":1,"errado":0,"branco":0},
+             "C": {"certo":1,"errado":-1,"branco":0},
+             "D": {"escala":10} },
+  "grupos": ["Interpretar","Planejar","Executar","Criticar"],
+  "redacao": { "formula": "NR = NC − 2·NE/TL", "piso": 0 }
+}
+```
+
+- As notas do discursivo são chaveadas pelo **número do item**, não pelo `id`
+  interno: o número é o que está impresso no cartão e o que o leitor conhece.
+- Cada item em `versoes[].folhas[].itens[]` passou a trazer também `grupo` (o
+  grupo de habilidades) e `componente` — é deles que sai a barra “proporção de
+  acertos por grupo” do boletim, e deduzi-los do número do item seria adivinhação.
+- **A tabela de pesos viaja como DADO, e não é detalhe.** O escore é calculado
+  dos dois lados agora — no sistema, para a tela de Correção; no aplicativo, para
+  os boletins — e regra escrita em dois lugares diverge em silêncio: bastaria a
+  fase 5 mudar o peso de um tipo num lado e esquecer o outro para a mesma prova
+  valer notas diferentes conforme quem a corrigiu. Do lado do sistema a tabela é
+  `PESOS_DO_ESCORE` (js/dados.js); do lado do leitor **não há número de pontuação
+  escrito em lugar nenhum**. Um teste (`desktop/testes/testar-correcao.py`) faz
+  os dois corrigirem as mesmas marcações e compara nota a nota.
+
+> ⚠️ **Este arquivo leva nome de estudante**, o que o gabarito evitava de
+> propósito. É dado da escola indo para uma máquina da escola, e sem ele não há
+> boletim — mas trata-se dele como se trata a lista de estudantes, e não como se
+> tratava o gabarito.
+
+## 6. A geometria (`layout`)
 
 Medida pelo navegador no ato da exportação, em **pontos**, na folha de 595×842pt,
 com origem no canto superior esquerdo.

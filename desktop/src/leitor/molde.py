@@ -19,7 +19,11 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FORMATO = "pas-marista/gabarito-v4"
+# O `pacote-v1` é o `gabarito-v4` inteiro mais o elenco, as notas e a tabela de
+# pesos (ver `pacote.py`). Para o molde os dois são a mesma coisa: a geometria
+# está no mesmo lugar, e ler cartão não depende de haver elenco.
+FORMATO = "pas-marista/pacote-v1"
+FORMATOS_ACEITOS = {FORMATO, "pas-marista/gabarito-v4"}
 FORMATOS_ANTIGOS = {
     "pas-marista/gabarito-v1", "pas-marista/gabarito-v2", "pas-marista/gabarito-v3",
 }
@@ -100,9 +104,21 @@ class Molde:
     campo_matricula: dict | None
     folha_pt: tuple[float, float]
     familias: dict[tuple[str, str], list[Folha]]
-    tipos_do_item: dict[tuple[str, int], str]
-    gabarito: dict[tuple[str, int], str]
+    itens: dict[tuple[str, int], dict]
     formato_matricula: FormatoDaMatricula
+
+    @property
+    def tipos_do_item(self) -> dict[tuple[str, int], str]:
+        return {k: v["tipo"] for k, v in self.itens.items()}
+
+    @property
+    def gabarito(self) -> dict[tuple[str, int], str]:
+        return {k: v["gabarito"] for k, v in self.itens.items() if v.get("gabarito") not in (None, "")}
+
+    def itens_da_versao(self, versao: str) -> list[dict]:
+        """Os itens daquela versão, em ordem de número — a ordem da prova."""
+        return [v for (ver, _n), v in sorted(self.itens.items(), key=lambda kv: kv[0][1])
+                if ver == versao]
 
     def folhas(self, versao: str, familia: str) -> list[Folha]:
         chave = (versao, familia)
@@ -144,8 +160,9 @@ def carregar(caminho: Path) -> Molde:
             f"em Cartões-resposta → “Exportar gabarito p/ leitor local (JSON)”, que hoje sai "
             f"em {FORMATO}. Sem a geometria o leitor não sabe onde procurar os alvéolos — e "
             "adivinhá-la seria pior do que recusar.")
-    if formato != FORMATO:
-        raise GabaritoIncompativel(f"formato inesperado ({formato!r}; esperava {FORMATO})")
+    if formato not in FORMATOS_ACEITOS:
+        raise GabaritoIncompativel(
+            f"formato inesperado ({formato!r}; esperava um de {', '.join(sorted(FORMATOS_ACEITOS))})")
 
     layout = dados.get("layout")
     if not layout:
@@ -163,14 +180,21 @@ def carregar(caminho: Path) -> Molde:
                 folhas.append(f)
             familias[(versao, familia)] = folhas
 
-    tipos: dict[tuple[str, int], str] = {}
-    chave: dict[tuple[str, int], str] = {}
+    # A tabela de itens: tipo, chave, grupo de habilidades e componente. O grupo
+    # existe aqui porque o boletim mostra a proporção de acertos por grupo, e
+    # deduzi-lo do número do item seria adivinhação.
+    itens: dict[tuple[str, int], dict] = {}
     for versao, conteudo in (dados.get("versoes") or {}).items():
         for folha in conteudo.get("folhas", []):
             for item in folha.get("itens", []) or []:
-                tipos[(versao, int(item["numero"]))] = str(item.get("tipo", "?"))
-                if item.get("gabarito") not in (None, ""):
-                    chave[(versao, int(item["numero"]))] = str(item["gabarito"])
+                itens[(versao, int(item["numero"]))] = {
+                    "numero": int(item["numero"]),
+                    "versao": versao,
+                    "tipo": str(item.get("tipo", "?")),
+                    "gabarito": item.get("gabarito"),
+                    "grupo": item.get("grupo") or "",
+                    "componente": item.get("componente") or "",
+                }
 
     cod = layout.get("codigo") or {}
     folha_pt = layout.get("folhaPt") or {}
@@ -186,8 +210,7 @@ def carregar(caminho: Path) -> Molde:
         campo_matricula=(layout.get("campos") or {}).get("matricula"),
         folha_pt=(float(folha_pt.get("largura", 595)), float(folha_pt.get("altura", 842))),
         familias=familias,
-        tipos_do_item=tipos,
-        gabarito=chave,
+        itens=itens,
         formato_matricula=FormatoDaMatricula(
             digitos=int(formato.get("digitos") or 0),
             prefixo=str(formato.get("prefixo") or ""),

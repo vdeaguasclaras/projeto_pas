@@ -9,7 +9,7 @@ Estado em 27/07/2026.
 | 1 · MVP navegável | Todas as telas funcionando com dados no navegador (localStorage) | **concluída** |
 | 2 · Multiusuário | Banco on-line, login por conta, papéis e mesmo simulado para toda a equipe | **concluída** |
 | 3 · Fidelidade dos documentos | Caderno e cartão calibrados página a página contra os PDFs reais do PAS | **concluída** |
-| 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões digitalizados em lote | **pipeline concluído**; falta a interface gráfica e o `.exe` |
+| 4 · Leitura óptica | Aplicativo local (Windows) que lê os cartões, corrige e emite os boletins | **concluída**, menos gerar o `.exe` (tem de ser no Windows) |
 | 5 · Calibração da pontuação | Parâmetro *x*, pesos oficiais por tipo de item e escore padronizado | a fazer |
 
 ## Arquitetura
@@ -514,12 +514,30 @@ com a chave errada.
 Em contrapartida, essa folha **é a chave da prova em papel** e viaja com o lote
 até a aplicação. Guarde-a como se guarda a prova.
 
+### A janela, e o que o aplicativo passou a fazer sozinho
+
+A coordenação pediu que o aplicativo da secretaria fosse responsável por ler os
+cartões, gerar os resultados **e os boletins de desempenho** — e que essa parte
+não precisasse existir no sistema on-line.
+
+Para isso a exportação da tela de Cartões-resposta virou o **pacote da prova**
+(`pas-marista/pacote-v1`): o gabarito e a geometria de antes, mais o elenco, as
+notas já lançadas (discursivo e redação) e a **tabela de pesos do escore**. A
+pontuação saiu de dentro do `corrigir()` e virou `PESOS_DO_ESCORE`
+(js/dados.js), porque agora a mesma prova é corrigida dos dois lados e regra
+escrita em dois lugares diverge em silêncio. Um teste faz o sistema e o
+aplicativo corrigirem as mesmas marcações e compara nota a nota.
+
+A janela é PySide6, com cinco passos na ordem do trabalho: prova, leitura,
+conferência (com o recorte do papel ao lado de cada marcação duvidosa),
+resultados e boletins. As cores vêm do `css/estilo.css` por uma ferramenta que
+as extrai — não há cor da identidade escrita à mão do lado do Qt.
+
 ### O que falta
 
-A GUI (arrastar a pasta de digitalizações, barra de progresso) e o
-empacotamento `.exe` com PyInstaller, para instalar na máquina da secretaria sem
-Python. O pipeline já está separado da interface, e a linha de comando cobre o
-fluxo inteiro.
+Gerar e testar o **`.exe`** com PyInstaller, o que tem de ser feito numa máquina
+Windows: a receita está em `desktop/empacotar.spec` e o caminho em
+`desktop/docs/instalacao.md`, mas ainda não foi executada.
 
 ## Pendências operacionais
 

@@ -123,15 +123,16 @@ if (GRANDE) {
 await pagina.evaluate(() => { location.hash = '#/cartoes'; });
 await pagina.waitForSelector('.cr-folha', { timeout: 30000 });
 
-// 1. O gabarito, pelo mesmo botão que a coordenação usa.
+// 1. O pacote da prova, pelo mesmo botão que a coordenação usa.
 const baixando = pagina.waitForEvent('download');
-await pagina.getByRole('button', { name: /Exportar gabarito/ }).click();
+await pagina.getByRole('button', { name: /Exportar pacote/ }).click();
 const baixado = await baixando;
-const gabarito = path.join(SAIDA, 'gabarito.json');
-await baixado.saveAs(gabarito);
-const g = JSON.parse(await readFile(gabarito, 'utf-8'));
-console.log(`gabarito ${g.formato} · ${g.prova.serie}`);
-if (!g.layout) throw new Error('o gabarito saiu sem a geometria (layout) — o leitor não teria molde');
+const pacote = path.join(SAIDA, 'pacote.json');
+await baixado.saveAs(pacote);
+const g = JSON.parse(await readFile(pacote, 'utf-8'));
+console.log(`pacote ${g.formato} · ${g.prova.serie} · ${g.elenco?.length ?? 0} no elenco`);
+if (!g.layout) throw new Error('o pacote saiu sem a geometria (layout) — o leitor não teria molde');
+if (!g.elenco) throw new Error('o pacote saiu sem o elenco — não haveria como montar boletim');
 
 // 2. Os cartões impressos. `window.print()` não abre diálogo aqui; o conteúdo
 //    fica em #print-area e o PDF sai com a MESMA folha de estilo de impressão.
