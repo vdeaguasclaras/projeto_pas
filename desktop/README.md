@@ -1,8 +1,9 @@
 # PAS Marista — Leitor de Cartões (app local Windows)
 
 > **Situação: o aplicativo tem janela, lê os cartões, corrige e monta os
-> boletins.** Falta gerar e testar o `.exe` — o empacotamento tem de rodar no
-> Windows (ver [`docs/instalacao.md`](docs/instalacao.md)).
+> boletins.** A receita do PyInstaller foi ensaiada e o pacote roda; falta gerar
+> o `.exe` **no Windows**, que é onde ele vai viver (ver
+> [`docs/instalacao.md`](docs/instalacao.md)).
 >
 > **O pipeline OMR foi conferido no papel.** Quatro cartões
 > da prova da 2ª série impressos na impressora da escola, dois preenchidos à mão
@@ -121,7 +122,7 @@ desktop/
 ├── docs/
 │   ├── contrato-dados.md      ← formatos JSON/CSV compartilhados com o web
 │   └── pipeline-omr.md        ← etapas da leitura óptica e casos de erro
-├── leitor.py                  ← ponto de entrada do `.exe`
+├── principal.py               ← ponto de entrada do `.exe`
 ├── empacotar.spec             ← receita do PyInstaller
 ├── ferramentas/
 │   └── extrair-tema.py        ← lê as cores do css/estilo.css do sistema
