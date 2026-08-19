@@ -1,6 +1,10 @@
 # PAS Marista — Leitor de Cartões (app local Windows)
 
-> **Situação: o pipeline OMR funciona, e foi conferido no papel.** Quatro cartões
+> **Situação: o aplicativo tem janela, lê os cartões, corrige e monta os
+> boletins.** Falta gerar e testar o `.exe` — o empacotamento tem de rodar no
+> Windows (ver [`docs/instalacao.md`](docs/instalacao.md)).
+>
+> **O pipeline OMR foi conferido no papel.** Quatro cartões
 > da prova da 2ª série impressos na impressora da escola, dois preenchidos à mão
 > e os quatro digitalizados no scanner da secretaria: **165 marcações, todas
 > conferidas contra o papel, todas certas**, nenhuma na fila de conferência.
@@ -117,17 +121,51 @@ desktop/
 ├── docs/
 │   ├── contrato-dados.md      ← formatos JSON/CSV compartilhados com o web
 │   └── pipeline-omr.md        ← etapas da leitura óptica e casos de erro
+├── leitor.py                  ← ponto de entrada do `.exe`
+├── empacotar.spec             ← receita do PyInstaller
+├── ferramentas/
+│   └── extrair-tema.py        ← lê as cores do css/estilo.css do sistema
 ├── src/leitor/
-│   ├── cli.py                 ← a linha de comando: `ler` e `conferir`
+│   ├── cli.py                 ← a linha de comando: `ler`, `corrigir`, `janela`
+│   ├── lote.py                ← a leitura de um lote (a janela e o CLI usam esta)
+│   ├── pacote.py              ← o pacote da prova: elenco, notas e pesos
+│   ├── correcao.py            ← escore, desempenho por grupo e posição
+│   ├── apuracao.py            ← das marcações à planilha e aos boletins
+│   ├── boletim.py             ← o boletim individual, no desenho do sistema
+│   ├── ui/                    ← a janela (PySide6) e o tema vindo do CSS
 │   ├── molde.py               ← a geometria que veio do gabarito v4
 │   ├── imagem.py              ← ingestão de PDF/JPEG/PNG
 │   ├── ancoras.py             ← as 4 âncoras e a homografia
 │   ├── codigo.py              ← a faixa de identificação (e o CRC-8)
 │   ├── leitura.py             ← decisão por alvéolo, e a calibração
-│   └── saida.py               ← os CSVs e as miniaturas de conferência
+│   └── saida.py               ← os CSVs, os recortes e a página de conferência
 └── testes/
     ├── gerar-amostras.mjs     ← imprime cartões DE VERDADE, pelo sistema web
-    └── testar-leitura.py      ← digitaliza-os torto e cobra o resultado
+    ├── testar-leitura.py      ← digitaliza-os torto e cobra o resultado
+    ├── testar-correcao.py     ← o sistema e o app corrigem o mesmo, e se comparam
+    └── testar-janela.py       ← percorre os cinco passos da janela
+```
+
+## A janela
+
+Cinco passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
+**Ler cartões** (a pasta das digitalizações, com barra de progresso),
+**Conferência** (o que ficou em dúvida, com o pedaço do papel ao lado e um campo
+para corrigir), **Resultados** (a planilha) e **Boletins**. Um passo só abre
+quando o anterior deu o que ele precisa.
+
+O desenho é o do sistema on-line, e as cores vêm de lá **de verdade**:
+`ferramentas/extrair-tema.py` lê o `:root` do `css/estilo.css` e gera
+`src/leitor/ui/tema.py`. Nenhum código de cor da identidade está escrito à mão
+deste lado — dois azuis quase iguais, e ninguém sabendo qual é o certo, é pior do
+que um só. Ao mexer nas cores do sistema, rode a ferramenta de novo.
+
+O que a janela **não** faz é repetir trabalho: ler o lote é `lote.ler_lote`,
+corrigir é `apuracao.apurar` — os mesmos que a linha de comando chama. Casca não
+é dona de regra.
+
+```bash
+python -m src.leitor.cli janela      # ou, no .exe, clicar duas vezes
 ```
 
 ## Uso
@@ -183,6 +221,7 @@ node desktop/testes/gerar-amostras.mjs --grande   # 42 itens, 32 estudantes
 python3 desktop/testes/testar-leitura.py
 python3 desktop/testes/testar-leitura.py amostras-grande
 python3 desktop/testes/testar-correcao.py
+QT_QPA_PLATFORM=offscreen python3 desktop/testes/testar-janela.py
 ```
 
 `testar-correcao.py` é de outra natureza: ele faz o **sistema on-line** e o
@@ -207,6 +246,7 @@ leitor devolver marcação que não foi impressa, ou se um dos casos difíceis
 - [x] Pipeline OMR: âncoras → homografia → faixa → alvéolos → CSV
 - [x] Dupla marcação / leitura duvidosa / tipo B incompleto → fila de conferência
 - [x] Teste ponta a ponta contra os PDFs impressos pelo sistema web
-- [ ] GUI simples (arrastar pasta de digitalizações, barra de progresso)
-- [ ] Empacotamento `.exe` com PyInstaller + guia de instalação
+- [x] Correção, resultados e boletins no próprio aplicativo
+- [x] Janela (PySide6) com a identidade visual do sistema
+- [ ] Gerar e testar o `.exe` numa máquina Windows
 - [ ] Importação dos percentuais de acerto do discursivo pelo sistema web

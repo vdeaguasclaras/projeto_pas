@@ -381,11 +381,23 @@ passa e o leitor falha na secretaria.
   faz os dois corrigirem as mesmas marcações e compara nota a nota; ao mexer na
   pontuação (a fase 5 vai mexer), mexa na tabela e rode esse teste.
 
+- **A janela é casca; o trabalho mora num lugar só.** O aplicativo local tem
+  agora duas frentes — a janela (PySide6, `desktop/src/leitor/ui/`) e a linha de
+  comando —, e as duas chamam `lote.ler_lote` e `apuracao.apurar`. Quando a
+  janela apareceu, o miolo do lote estava dentro do `cli.py` e a tentação foi
+  copiá-lo; copiar regra entre cascas é o mesmo erro do escore escrito duas
+  vezes, só que mais fácil de cometer. Se for preciso “só chamar aquela função
+  privada da outra casca”, o lugar dela está errado.
+- **As cores da janela vêm do CSS do sistema, por ferramenta.**
+  `desktop/ferramentas/extrair-tema.py` lê o `:root` do `css/estilo.css` e gera
+  `ui/tema.py`. Não acerte cor à mão do lado do Qt: dois azuis quase iguais, e
+  ninguém sabendo qual é o certo, é pior do que um só. Ao mexer nas cores do
+  sistema, rode a ferramenta e commite o gerado.
+
 ## A frente que continua aberta
 
-Do leitor óptico falta a **interface gráfica** (arrastar a pasta, barra de
-progresso) e o **empacotamento `.exe`** com PyInstaller, para instalar na máquina
-da secretaria sem Python — o pipeline já está separado da interface. Falta também
-a **importação dos percentuais do discursivo**: o leitor os lê e grava em
-`percentuais.csv`, e o sistema ainda não os consome. Ver `desktop/README.md` e
-`docs/plano-implantacao.md`.
+Do leitor óptico falta **gerar e testar o `.exe`**, que tem de ser feito numa
+máquina Windows (`desktop/docs/instalacao.md`); a receita do PyInstaller está
+escrita e não foi executada. Falta também a **importação dos percentuais do
+discursivo**: o leitor os lê e grava em `percentuais.csv`, e o sistema ainda não
+os consome. Ver `desktop/README.md` e `docs/plano-implantacao.md`.

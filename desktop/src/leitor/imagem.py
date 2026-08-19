@@ -55,6 +55,26 @@ def _da_imagem(caminho: Path):
     yield Pagina(caminho, 1, bruto)
 
 
+def contar_paginas(arquivos: list[Path]) -> int:
+    """Quantas páginas o lote tem, sem rasterizar nenhuma.
+
+    A barra de progresso precisa do total antes de começar, e abrir os PDFs só
+    para contar custa milissegundos — rasterizar custa segundos por página.
+    """
+    total = 0
+    for caminho in arquivos:
+        if caminho.suffix.lower() != ".pdf":
+            total += 1
+            continue
+        import pypdfium2 as pdfium
+        documento = pdfium.PdfDocument(caminho)
+        try:
+            total += len(documento)
+        finally:
+            documento.close()
+    return total
+
+
 def paginas(arquivos: list[Path], dpi: int = DPI_PADRAO):
     """Todas as páginas dos arquivos, na ordem em que vieram."""
     for caminho in arquivos:
