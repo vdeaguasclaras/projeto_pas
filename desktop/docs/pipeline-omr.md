@@ -151,6 +151,26 @@ escola digitaliza: **mesa A3, cartão deitado**, com inclinação de até 0,9°,
 deslocamento, borrão, chuvisco, JPEG de qualidade 82 e uma folha ainda por cima
 de cabeça para baixo. Foram 85 s no total.
 
+## Conferido no papel, com a impressora e o scanner da escola
+
+Em 18/08/2026 a coordenação imprimiu quatro cartões da prova da 2ª série (110
+itens na regular, 55 na adaptada), preencheu dois à mão e digitalizou os quatro
+juntos. **As 165 marcações foram conferidas uma a uma contra o papel: bateu
+tudo.** Zero na fila de conferência, zero divergência entre o cartão-gabarito
+impresso e a chave exportada, e as duas matrículas lidas da faixa do rodapé
+(`225240380` e `225260117`) conferidas pelo CRC.
+
+Foi essa passagem — e não o teste automático — que descobriu as três coisas que
+este documento explica: a mesa A3, o cartão deitado e a diferença entre toner e
+caneta. **Nenhuma delas aparecia em digitalização simulada por quem escreveu o
+leitor**, porque cada uma vinha de uma suposição que só o papel desmente.
+
+> **Uma expectativa que convém não criar.** Zero na fila veio de duas folhas
+> preenchidas com cuidado por uma pessoa só. Na aplicação de verdade haverá
+> rasura, marca fraca e dupla marcação — a fila de conferência vai existir, e é
+> para isso que ela existe. O que se mede é se ela fica pequena, não se ela
+> some.
+
 **Digitalizar em pé, e em A4, é quatro vezes mais rápido** — a página tem metade
 dos pixels e o leitor não precisa procurar a posição. O leitor resolve os dois
 casos sozinho e avisa, ao fim do lote, quantas folhas vieram deitadas.

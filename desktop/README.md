@@ -1,6 +1,10 @@
 # PAS Marista — Leitor de Cartões (app local Windows)
 
-> **Situação: o pipeline OMR funciona.** `python -m src.leitor.cli ler` alinha as
+> **Situação: o pipeline OMR funciona, e foi conferido no papel.** Quatro cartões
+> da prova da 2ª série impressos na impressora da escola, dois preenchidos à mão
+> e os quatro digitalizados no scanner da secretaria: **165 marcações, todas
+> conferidas contra o papel, todas certas**, nenhuma na fila de conferência.
+> `python -m src.leitor.cli ler` alinha as
 > folhas pelas âncoras, descobre de quem é cada uma pela faixa de identificação
 > do rodapé, lê os alvéolos e gera os CSVs. O que falta é a interface gráfica e o
 > empacotamento `.exe` — a leitura em si está de pé e testada ponta a ponta
