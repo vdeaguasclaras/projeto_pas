@@ -18,6 +18,7 @@ Duas coisas valem por todo o resto:
 """
 from __future__ import annotations
 
+import csv
 import sys
 from pathlib import Path
 
@@ -28,8 +29,10 @@ from .ancoras import SemAncoras, girar, homografia, voltas_para_endireitar
 from .codigo import FaixaIlegivel
 from .imagem import DPI_PADRAO, Pagina, digitalizacoes, paginas
 from .leitura import Leitura, Limiares, calibrar, ler_faixa, ler_folha, limiar_de_tinta
-from .molde import GabaritoIncompativel, Molde, carregar
-from . import saida
+from .molde import GabaritoIncompativel, Molde
+from . import boletim, saida
+from .correcao import corrigir_todos
+from .pacote import Pacote, carregar
 
 # Quantas páginas do começo da pilha são varridas atrás do cartão-gabarito antes
 # de a leitura começar. O sistema o imprime na frente; esta folga cobre a capa
@@ -43,12 +46,73 @@ def cli() -> None:
     pass
 
 
-def _molde(caminho: Path) -> Molde:
+def _pacote(caminho: Path) -> Pacote:
     try:
         return carregar(caminho)
     except GabaritoIncompativel as erro:
         click.echo(f"ERRO: {erro}", err=True)
         sys.exit(2)
+
+
+def _marcacoes_dos_csv(pacote: Pacote, caminhos: list[Path]) -> tuple[dict, int, int]:
+    """Junta as marcações de um ou mais CSVs, na ordem em que vierem.
+
+    A ordem importa: o CSV da conferência vem DEPOIS do da leitura, e o que a
+    pessoa decidiu olhando o recorte vale sobre o que a máquina achou. Resposta
+    vazia apaga a marcação, como na importação do sistema on-line.
+    """
+    marcacoes: dict[str, dict[int, str]] = {}
+    lidas = fora = 0
+    for caminho in caminhos:
+        if not caminho or not caminho.exists():
+            continue
+        with caminho.open(encoding="utf-8-sig") as arquivo:
+            for linha in csv.DictReader(arquivo, delimiter=";"):
+                matricula = (linha.get("matricula") or "").strip()
+                numero = (linha.get("item") or "").strip()
+                if not matricula or not numero.isdigit():
+                    continue
+                estudante = pacote.casar(matricula)
+                if estudante is None:
+                    fora += 1
+                    continue
+                resposta = (linha.get("resposta") or "").strip().upper()
+                alvo = marcacoes.setdefault(estudante.matricula, {})
+                if resposta:
+                    alvo[int(numero)] = resposta
+                    lidas += 1
+                else:
+                    alvo.pop(int(numero), None)
+    return marcacoes, lidas, fora
+
+
+def _resultados(pacote: Pacote, marcacoes: dict, saida_dir: Path) -> None:
+    """Corrige, grava a planilha de resultados e monta os boletins."""
+    resultados = corrigir_todos(pacote, marcacoes)
+    linhas = []
+    for r in sorted(resultados, key=lambda r: (r.estudante.turma, r.estudante.nome)):
+        if not r.tem_resposta:
+            continue
+        linhas.append([
+            r.estudante.matricula, r.estudante.nome, r.estudante.turma, r.estudante.versao,
+            r.acertos, r.erros, r.brancos,
+            f"{r.escore:.2f}".replace(".", ","),
+            "" if r.nr is None else f"{r.nr:.1f}".replace(".", ","),
+            r.posicao or "", r.de or "",
+            *[f"{r.por_grupo[g].proporcao:.2f}".replace(".", ",") if g in r.por_grupo
+              and r.por_grupo[g].total else "" for g in pacote.escore.grupos],
+        ])
+    cabecalho = ["matricula", "nome", "turma", "versao", "certas", "erradas", "brancos",
+                 "escore_bruto", "redacao_nr", "posicao", "de",
+                 *[f"grupo_{g.lower()}" for g in pacote.escore.grupos]]
+    with (saida_dir / "resultados.csv").open("w", encoding="utf-8", newline="") as arquivo:
+        escritor = csv.writer(arquivo, delimiter=";", lineterminator="\n")
+        escritor.writerow(cabecalho)
+        escritor.writerows(linhas)
+    pagina = boletim.escrever(saida_dir, pacote, resultados)
+    click.echo(f"{len(linhas)} estudante(s) em {saida_dir / 'resultados.csv'}")
+    if pagina:
+        click.echo(f"Boletins de desempenho em {pagina}")
 
 
 def _alinhar(pagina: Pagina, molde: Molde):
@@ -90,7 +154,8 @@ def _alinhar(pagina: Pagina, molde: Molde):
 @click.option("--dpi", default=DPI_PADRAO, show_default=True,
               help="Resolução com que as páginas de PDF são rasterizadas.")
 def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> None:
-    molde = _molde(gabarito_path)
+    pacote = _pacote(gabarito_path)
+    molde = pacote.molde
     click.echo(f"Simulado: {molde.simulado} · {molde.etapa}")
     click.echo(f"Prova: {molde.prova.get('serie')} ({molde.prova.get('id')})")
 
@@ -146,6 +211,18 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
     if pagina_conferencia:
         click.echo(f"\nPara conferir o que ficou em dúvida, com a imagem de cada marcação:\n"
                    f"  {pagina_conferencia}")
+
+    # E a correção, quando o arquivo é o pacote da prova e não o gabarito sozinho.
+    if pacote.tem_boletim:
+        click.echo("")
+        marcacoes, _, fora = _marcacoes_dos_csv(pacote, [saida_dir / "respostas.csv"])
+        if fora:
+            click.echo(f"{fora} marcação(ões) de estudante fora do elenco desta prova, ignoradas.",
+                       err=True)
+        _resultados(pacote, marcacoes, saida_dir)
+    else:
+        click.echo("\nSem elenco no arquivo — só a leitura. Para os resultados e os boletins, "
+                   "exporte o PACOTE da prova em Cartões-resposta.")
     if deitadas:
         click.echo(f"{deitadas} folha(s) entraram deitadas na mesa e foram endireitadas aqui — "
                    "digitalizar em pé é mais rápido.")
@@ -204,14 +281,52 @@ def _procurar_referencia(arquivos: list[Path], molde: Molde, dpi: int):
     return limiares, avisos, divergencias
 
 
-@cli.command(help="Descreve um gabarito exportado, sem ler digitalização nenhuma.")
+@cli.command(help="Corrige a partir de CSVs de marcações e gera resultados e boletins.")
+@click.option("--gabarito", "gabarito_path", required=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="O pacote da prova exportado pelo sistema (pas-pacote-<prova>.json).")
+@click.option("--respostas", "respostas_csv", required=True, multiple=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="CSV de marcações. Pode repetir: o último vale sobre os anteriores.")
+@click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path))
+def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Path) -> None:
+    """Refaz a correção depois de a conferência ter sido resolvida.
+
+    O caminho normal é `ler`, que já corrige. Este comando existe para o depois:
+    o operador abriu `conferencia.html`, decidiu as marcações duvidosas olhando o
+    recorte, e agora quer os boletins com o que ele decidiu — sem digitalizar o
+    lote de novo.
+    """
+    pacote = _pacote(gabarito_path)
+    if not pacote.tem_boletim:
+        click.echo("ERRO: este arquivo é o gabarito sozinho, sem elenco. Exporte o PACOTE da "
+                   "prova em Cartões-resposta para gerar resultados e boletins.", err=True)
+        sys.exit(2)
+    saida_dir.mkdir(parents=True, exist_ok=True)
+    marcacoes, lidas, fora = _marcacoes_dos_csv(pacote, list(respostas_csv))
+    click.echo(f"Prova: {pacote.molde.prova.get('serie')} · {lidas} marcação(ões) de "
+               f"{len(marcacoes)} estudante(s)")
+    if fora:
+        click.echo(f"{fora} marcação(ões) de estudante fora do elenco desta prova, ignoradas.",
+                   err=True)
+    _resultados(pacote, marcacoes, saida_dir)
+
+
+@cli.command(help="Descreve um pacote ou gabarito exportado, sem ler digitalização nenhuma.")
 @click.option("--gabarito", "gabarito_path", required=True,
               type=click.Path(exists=True, dir_okay=False, path_type=Path))
 def conferir(gabarito_path: Path) -> None:
-    molde = _molde(gabarito_path)
+    pacote = _pacote(gabarito_path)
+    molde = pacote.molde
     click.echo(f"Simulado: {molde.simulado} · {molde.etapa}")
     click.echo(f"Prova: {molde.prova.get('serie')} ({molde.prova.get('id')})")
     click.echo(f"Âncoras: {len(molde.ancoras)} · faixa de identificação: {len(molde.codigo)} células")
+    if pacote.tem_boletim:
+        click.echo(f"Elenco: {len(pacote.elenco)} estudante(s) · notas lançadas para "
+                   f"{len(pacote.notas)} · pesos do escore: "
+                   + ", ".join(f"{t}={p}" for t, p in sorted(pacote.escore.pesos.items())))
+    else:
+        click.echo("Sem elenco: dá para ler os cartões, mas não para gerar boletins.")
     for (versao, familia), folhas in sorted(molde.familias.items()):
         click.echo(f"  {versao} · cartão {familia}: {len(folhas)} folha(s)")
         for numero, folha in enumerate(folhas, 1):

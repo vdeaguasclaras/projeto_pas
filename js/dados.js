@@ -44,6 +44,24 @@ const SUCESSORAS_DE_ARTES = ['Artes Visuais', 'Dança', 'Música', 'Teatro'];
 
 const GRUPOS = ['Interpretar', 'Planejar', 'Executar', 'Criticar'];
 
+/* Quanto vale cada resposta no escore bruto, por tipo de item.
+   Estava escrito dentro de `corrigir()` (js/app.js), em `if`s — e enquanto o
+   escore só existia no sistema on-line isso bastava. Agora o aplicativo local
+   também corrige, para gerar os boletins na secretaria, e uma regra escrita em
+   dois lugares é uma regra que vai divergir: bastaria a fase 5 mudar o peso de
+   um tipo aqui e esquecer lá para a mesma prova valer notas diferentes conforme
+   quem a corrigiu.
+   Então a regra vira TABELA, e a tabela viaja dentro do pacote da prova. Os
+   dois lados leem os mesmos números, e calibrar a pontuação passa a ser mexer
+   num lugar só. O tipo D não tem certo nem errado: a nota lançada de 0 a 10
+   vale `nota / escala`. */
+const PESOS_DO_ESCORE = {
+  A: { certo: 1, errado: -1, branco: 0 },
+  B: { certo: 1, errado: 0, branco: 0 },
+  C: { certo: 1, errado: -1, branco: 0 },
+  D: { escala: 10 }
+};
+
 // Tipos de item no formato PAS. Pontuação do MVP (calibrável na fase 3):
 // A: certo +1 / errado −1 · B: certo +1 · C: certo +1 / errado −1 ·
 // D (discursivo): nota lançada de 0 a 10, vale nota/10 no escore bruto.
@@ -392,6 +410,6 @@ function substituir(novo) {
 export {
   KEY, VERSAO_ESTADO, COMPONENTES, COMPONENTES_LEGADOS, TODOS_COMPONENTES,
   ehComponenteLegado, SUCESSORAS_DE_ARTES,
-  GRUPOS, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
+  GRUPOS, PESOS_DO_ESCORE, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
   uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 };

@@ -38,7 +38,7 @@ O contrato de dados entre as duas pontas está em
 [`docs/contrato-dados.md`](docs/contrato-dados.md); o caminho da imagem à
 resposta, em [`docs/pipeline-omr.md`](docs/pipeline-omr.md).
 
-## As três decisões que sustentam o resto
+## As quatro decisões que sustentam o resto
 
 **1. A geometria do cartão não mora aqui.** Onde fica cada alvéolo nasce do flex
 do CSS do sistema web — muda com o número de itens, com a quantidade de colunas,
@@ -60,7 +60,15 @@ escola (nove algarismos começando em `225`), que vem no gabarito junto com a
 geometria. Fora do padrão, a folha vai para a fila de conferência, com as
 marcações já lidas junto.
 
-**3. Nada duvidoso vira resposta.** Dupla marcação, alvéolo a meio caminho, tipo
+**3. A pontuação não está escrita aqui.** O aplicativo corrige e monta os
+boletins, e o sistema on-line também corrige — a mesma prova, duas
+implementações. Quanto vale cada resposta vem da **tabela de pesos que o pacote
+traz**, a mesma que o sistema usa. Regra escrita em dois lugares diverge em
+silêncio, e nota de prova ninguém confere contra uma segunda implementação:
+descobre-se pelo estudante que reclama. Um teste faz os dois lados corrigirem as
+mesmas marcações e compara nota a nota.
+
+**4. Nada duvidoso vira resposta.** Dupla marcação, alvéolo a meio caminho, tipo
 B com uma coluna vazia, faixa que não fecha: tudo isso sai em
 `respostas_conferir.csv`, com o motivo. Resposta inventada é o único defeito que
 ninguém descobre a tempo.
@@ -129,12 +137,17 @@ cd desktop
 python -m venv .venv && .venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 
-# o que o gabarito exportado contém, sem ler digitalização nenhuma
-python -m src.leitor.cli conferir --gabarito pas-gabarito-pr-2em.json
+# o que o pacote exportado contém, sem ler digitalização nenhuma
+python -m src.leitor.cli conferir --gabarito pas-pacote-pr-2em.json
 
-# a leitura do lote
-python -m src.leitor.cli ler --gabarito pas-gabarito-pr-2em.json \
+# a leitura do lote — e, se o arquivo for o pacote, já os resultados e boletins
+python -m src.leitor.cli ler --gabarito pas-pacote-pr-2em.json \
     --entrada ./digitalizacoes --saida ./resultado
+
+# depois de resolver a conferência: refaz a correção com o que foi decidido
+python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
+    --respostas ./resultado/respostas.csv --respostas ./conferido.csv \
+    --saida ./resultado
 ```
 
 Sai em `./resultado`:
@@ -145,6 +158,8 @@ Sai em `./resultado`:
 | `respostas_conferir.csv` | o que precisa de olho humano, com o motivo |
 | `percentuais.csv` | os percentuais de acerto do discursivo, quando marcados |
 | `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
+| `resultados.csv` | acertos, erros, brancos, escore, redação, posição e desempenho por grupo |
+| `boletins.html` | o boletim de desempenho de cada estudante, pronto para imprimir |
 | `conferencia.html` | a fila de conferência com a imagem de cada marcação duvidosa |
 | `conferencia/*.png` | os recortes e as miniaturas das folhas que caíram na fila |
 
@@ -167,7 +182,13 @@ node desktop/testes/gerar-amostras.mjs            # a prova de exemplo
 node desktop/testes/gerar-amostras.mjs --grande   # 42 itens, 32 estudantes
 python3 desktop/testes/testar-leitura.py
 python3 desktop/testes/testar-leitura.py amostras-grande
+python3 desktop/testes/testar-correcao.py
 ```
+
+`testar-correcao.py` é de outra natureza: ele faz o **sistema on-line** e o
+aplicativo local corrigirem exatamente as mesmas marcações — as que o leitor
+tirou dos cartões impressos — e compara nota a nota. É o que impede as duas
+implementações do escore de divergirem.
 
 Se o Chromium já estiver instalado em outro lugar, `CHROMIUM=/caminho/do/chrome`
 dispensa o download; e `PLAYWRIGHT_BROWSERS_PATH`, se estiver definido, é

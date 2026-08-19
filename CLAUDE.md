@@ -371,6 +371,16 @@ deitado, torto, borrado, em JPEG e com uma folha virada. Não escreva teste de
 leitor contra cartão desenhado à mão nem contra digitalização limpa e reta: ele
 passa e o leitor falha na secretaria.
 
+- **O escore é calculado dos dois lados, e por isso virou TABELA.** O aplicativo
+  local passou a gerar os boletins da secretaria, então a mesma prova é corrigida
+  no sistema e nele. Quanto vale cada resposta está em `PESOS_DO_ESCORE`
+  (js/dados.js) e viaja dentro do pacote da prova; do lado do leitor **não há
+  número de pontuação escrito**. Regra escrita em dois lugares diverge em
+  silêncio — e nota de prova ninguém confere contra uma segunda implementação:
+  descobre-se pelo estudante que reclama. `desktop/testes/testar-correcao.py`
+  faz os dois corrigirem as mesmas marcações e compara nota a nota; ao mexer na
+  pontuação (a fase 5 vai mexer), mexa na tabela e rode esse teste.
+
 ## A frente que continua aberta
 
 Do leitor óptico falta a **interface gráfica** (arrastar a pasta, barra de
