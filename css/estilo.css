@@ -422,9 +422,16 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .cr-cab-prova b{display:block;font-size:9pt;color:#0d2f8a;line-height:1.2}
 .cr-cab-prova span{display:block;font-size:7pt;color:#555;margin-top:2pt}
 .cr-cab-est{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:2pt 10pt;align-content:center}
-.cr-cab-est div{display:flex;gap:5pt;align-items:baseline;border-bottom:.5pt dotted #bbb}
-.cr-cab-est span{font-size:6pt;letter-spacing:.4pt;color:#777;min-width:44pt}
+.cr-cab-est div{display:flex;gap:5pt;align-items:baseline;border-bottom:.5pt dotted #bbb;min-width:0}
+.cr-cab-est span{font-size:6pt;letter-spacing:.4pt;color:#777;min-width:44pt;flex:none}
 .cr-cab-est b{font-size:8.5pt}
+/* NADA NO CABEÇALHO PODE QUEBRAR LINHA. As âncoras de leitura óptica vêm logo
+   abaixo dele, e o leitor as espera sempre na mesma altura da folha — um nome
+   comprido que passasse para a segunda linha empurraria as âncoras de cima para
+   baixo, esticaria a homografia e desalinharia todos os alvéolos. Nome longo
+   é cortado com reticências; a matrícula, que é o que identifica, não é longa. */
+.cr-cab-prova b,.cr-cab-prova span,.cr-cab-est b,.cr-faixa,.cr-d-cab span{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr-sala{flex:0 0 52pt;border:1.5pt solid #e5007e;color:#e5007e;text-align:center;
   display:flex;flex-direction:column;justify-content:center;font-weight:800}
 .cr-sala small{display:block;font-size:6pt;letter-spacing:.6pt}
@@ -509,6 +516,18 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .cr-ancoras i{width:9pt;height:9pt;background:#111;display:block}
 .cr-rodape{display:flex;justify-content:space-between;align-items:center;
   font-family:var(--mono);font-size:6.5pt;color:#666;margin-top:2pt}
+
+/* A FAIXA DE IDENTIFICAÇÃO — a que diz de quem é a folha.
+   Até aqui o rodapé imprimia a string fixa `▮▯▮▮▯▮▮▯`, que parecia um código e
+   não era: nenhum bloco dependia do estudante. O leitor óptico não tinha por
+   onde descobrir de quem era a folha nominal, e a alternativa era o operador
+   digitar 30 matrículas por turma. Agora os blocos são o código de verdade —
+   matrícula, folha, total e versão, com CRC-8 para a leitura torta se recusar
+   em vez de trocar um estudante por outro.
+   A célula tem 4,2pt: a 300 dpi são ~17px, folgado para o limiar. */
+.cr-codigo{display:flex;gap:1.3pt;align-items:center}
+.cr-codigo i{width:4.2pt;height:5pt;display:block;border:.4pt solid #e6e6e6}
+.cr-codigo i.c{background:#111;border-color:#111}
 
 .cr-previa{background:#e9e4de;padding:24px;overflow:auto}
 .cr-previa .cr-folha{box-shadow:0 3px 14px rgba(0,0,0,.3);margin-bottom:18px}

@@ -295,12 +295,12 @@ function seed() {
   ];
 
   s.estudantes = [
-    { id: 'e1', nome: 'Antonia Silva',   matricula: '2026-0142', turma: '1ª B', versao: 'regular'  },
-    { id: 'e2', nome: 'Bruno Carvalho',  matricula: '2026-0077', turma: '1ª A', versao: 'regular'  },
-    { id: 'e3', nome: 'Clara Nogueira',  matricula: '2026-0119', turma: '1ª B', versao: 'regular'  },
-    { id: 'e4', nome: 'Davi Sampaio',    matricula: '2026-0205', turma: '1ª C', versao: 'regular'  },
-    { id: 'e5', nome: 'Elisa Fontes',    matricula: '2026-0231', turma: '1ª D', versao: 'adaptada' },
-    { id: 'e6', nome: 'Felipe Arruda',   matricula: '2026-0058', turma: '1ª A', versao: 'regular'  }
+    { id: 'e1', nome: 'Antonia Silva',   matricula: '225100142', turma: '1ª B', versao: 'regular'  },
+    { id: 'e2', nome: 'Bruno Carvalho',  matricula: '225100077', turma: '1ª A', versao: 'regular'  },
+    { id: 'e3', nome: 'Clara Nogueira',  matricula: '225100119', turma: '1ª B', versao: 'regular'  },
+    { id: 'e4', nome: 'Davi Sampaio',    matricula: '225100205', turma: '1ª C', versao: 'regular'  },
+    { id: 'e5', nome: 'Elisa Fontes',    matricula: '225100231', turma: '1ª D', versao: 'adaptada' },
+    { id: 'e6', nome: 'Felipe Arruda',   matricula: '225100058', turma: '1ª A', versao: 'regular'  }
   ].map(e => ({ ...e, serie: SERIE_EXEMPLO }));
 
   s.elencos = { [PROVA_EXEMPLO]: s.estudantes.map(e => e.id) };

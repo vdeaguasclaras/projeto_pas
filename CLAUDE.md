@@ -298,9 +298,84 @@ A política de rede bloqueia saída direta para `supabase.co` e para
 ferramentas MCP (Supabase, Vercel), que alcançam esses serviços pelo lado do
 servidor.
 
+## O leitor óptico: o cartão impresso virou contrato com uma máquina
+
+O leitor (`desktop/`) lê os cartões digitalizados e devolve o CSV que a tela de
+Correção importa. Ele funciona, e funciona porque o cartão impresso passou a
+cumprir quatro invariantes. **Mexer no desenho do cartão sem respeitá-las quebra
+a leitura do lote inteiro, e o defeito só aparece no dia de digitalizar, com a
+prova já aplicada.**
+
+- **A geometria é MEDIDA e exportada, nunca escrita do lado do leitor.**
+  `mapaDoCartao()` monta o cartão fora da tela e lê o retângulo de cada âncora,
+  de cada alvéolo e de cada célula do código; isso viaja no gabarito
+  (`pas-marista/gabarito-v4`). É o mesmo princípio de `medirCartao`, pelo mesmo
+  motivo: número de alvéolo escrito à mão acerta hoje e erra calado na primeira
+  mudança de medida. Quem sabe o que cada alvéolo é são os `data-alv` do HTML —
+  alvéolo novo sem `data-alv` é alvéolo que o leitor não enxerga; alvéolo de
+  enfeite COM `data-alv` (o quadro “exemplo de preenchimento”) é alvo falso.
+  **Mudou o cartão? Exporte o gabarito de novo** — o arquivo velho descreve a
+  folha velha.
+- **Nada no cabeçalho pode quebrar linha.** As quatro âncoras têm de estar
+  sempre na mesma altura, em toda folha de todo cartão, porque é isso que
+  permite alinhar a folha ANTES de saber que folha é. Um nome comprido que
+  passasse para a segunda linha empurraria as âncoras de cima e esticaria a
+  homografia. Por isso `.cr-cab-est b` e companhia são `nowrap` com reticências,
+  e por isso `mapaDoCartao()` se RECUSA a exportar se as âncoras saírem do
+  lugar. Se a exportação começar a reclamar disso, o defeito é no cartão, não na
+  conferência.
+- **A faixa de identificação do rodapé tem a mesma conta dos dois lados.**
+  `bitsDaFolha()` (js/app.js) escreve e `desktop/src/leitor/codigo.py` lê. Se uma
+  mudar sem a outra, o leitor passa a atribuir folha ao estudante errado — e sem
+  reclamar, porque o CRC continuaria fechando dos dois lados da mudança. A faixa
+  carrega ALGARISMOS, e é por isso que a importação do CSV casa por dígitos
+  quando o texto exato não bate.
+- **A matrícula da escola tem NOVE algarismos e começa em `225`**
+  (`FORMATO_DA_MATRICULA`, js/app.js), e isso desce ao leitor pelo gabarito, como
+  a geometria — não é validação de enfeite. É a única conferência que existe
+  sobre a matrícula do CARTÃO EXTRA, a única do sistema que não viaja protegida
+  por CRC: ali o estudante preenche nove alvéolos, o que sai é leitura óptica
+  pura, e um algarismo a mais atribuiria a prova a outra pessoa em silêncio.
+  Matrícula sem algarismo, com mais de 12, fora do padrão ou que colida com
+  outra depois de tirada a pontuação não é identificável — a tela de Cartões
+  avisa antes de imprimir, que é quando sai barato consertar a planilha.
+- **Caneta não é toner, e a régua é de cada folha.** O cartão-gabarito parecia
+  o lugar óbvio de onde tirar o limiar de “alvéolo preenchido” — uma folha onde
+  se sabe o que devia estar marcado. Mas as marcas dele saem da impressora e
+  passam de 80% sempre, enquanto a caneta enche de 30% a 100% conforme a pressão
+  da mão: no primeiro lote real, duas folhas preenchidas por pessoas diferentes
+  ficaram em faixas completamente distintas, e a régua vinda do impresso mandou
+  24 marcações legítimas de uma delas para a conferência. Hoje a folha inteira é
+  medida ANTES de qualquer decisão, e a régua vai no vão entre os dois grupos
+  daquela folha (`limiares_da_folha`). Do cartão-gabarito sai o nível do PAPEL,
+  que se transfere, e a conferência entre a chave e o impresso.
+- **O cartão-gabarito é a chave da prova em papel.** Sai automaticamente à frente
+  do lote, um por versão, com os alvéolos do gabarito preenchidos. É dele que o
+  leitor tira o limiar de tinta desta impressora, e é ele que denuncia — antes de
+  o lote ser lançado — que a chave exportada não corresponde ao papel. Em troca,
+  ele circula junto com os cartões em branco até a aplicação: é papel sigiloso, e
+  a tela diz isso.
+
+- **A página digitalizada não é o cartão, e pode estar deitada.** As duas coisas
+  vieram juntas na primeira digitalização de verdade, e derrubaram o lote
+  inteiro: mesa A3 com o A4 solto no meio (a escala estimada pela largura da
+  página saiu 1,4× errada) e o cartão a 90° (o retângulo das âncoras com a
+  proporção invertida). Hoje a escala sai da MANCHA IMPRESSA, e a posição sai
+  das próprias âncoras — elas dizem se a folha está em pé ou deitada, e o CRC
+  diz se está de cabeça para baixo. Ao mexer na detecção, não volte a supor que
+  a folha digitalizada tem o tamanho da folha impressa.
+
+E o teste (`desktop/testes/`) **imprime cartões de verdade** pelo sistema web num
+Chromium, depois os digitaliza como a escola digitaliza: mesa A3, cartão
+deitado, torto, borrado, em JPEG e com uma folha virada. Não escreva teste de
+leitor contra cartão desenhado à mão nem contra digitalização limpa e reta: ele
+passa e o leitor falha na secretaria.
+
 ## A frente que continua aberta
 
-O **leitor óptico dos cartões** (`desktop/`): projetado, não implementado. Hoje
-a correção é toda lançada à mão. As duas pontas no sistema web já funcionam — a
-exportação do gabarito (`pas-marista/gabarito-v3`) e a importação do CSV. Falta
-o miolo. Ver `desktop/README.md` e `docs/plano-implantacao.md`.
+Do leitor óptico falta a **interface gráfica** (arrastar a pasta, barra de
+progresso) e o **empacotamento `.exe`** com PyInstaller, para instalar na máquina
+da secretaria sem Python — o pipeline já está separado da interface. Falta também
+a **importação dos percentuais do discursivo**: o leitor os lê e grava em
+`percentuais.csv`, e o sistema ainda não os consome. Ver `desktop/README.md` e
+`docs/plano-implantacao.md`.

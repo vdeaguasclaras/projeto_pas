@@ -695,8 +695,8 @@ planilha funciona):
 
 ```
 nome completo;matrícula;turma;série;versão
-Antonia Silva de Oliveira;2026-0142;1ª B;1ª série EM;regular
-Elisa Fontes Marques;2026-0231;9º D;9º ano;adaptada
+Antonia Silva de Oliveira;225100142;1ª B;1ª série EM;regular
+Elisa Fontes Marques;225100231;9º D;9º ano;adaptada
 ```
 
 - A **série** aceita as grafias de sempre — “9º ano”, “1ª série”, “2a serie EM”,

@@ -1,92 +1,230 @@
-"""CLI do leitor de cartões — esqueleto.
+"""A linha de comando do leitor de cartões.
 
-Uso previsto:
     python -m src.leitor.cli ler --gabarito pas-gabarito-pr-2em.json \
         --entrada ./digitalizacoes --saida ./resultado
 
-Nesta fase o comando valida as entradas e descreve o que fará; o pipeline OMR
-(desktop/docs/pipeline-omr.md) é implementado na fase seguinte.
+O caminho inteiro está em desktop/docs/pipeline-omr.md. Em resumo, por página:
+âncoras → homografia → faixa de identificação do rodapé → alvéolos → CSV.
 
-O esqueleto nasceu validando `gabarito-v1`, quando cada versão da prova era uma
-lista simples de itens. O sistema web hoje exporta `v3`, com uma FOLHA por tipo
-de resposta (objetiva, discursiva, redação) e a identificação da prova — um
-leitor preso à v1 recusaria todo arquivo que a escola consegue gerar. Este lê a
-v3 e explica o que fazer quando vier arquivo antigo.
+Duas coisas valem por todo o resto:
+
+1. **O cartão-gabarito vem na frente da pilha.** O sistema web o imprime
+   automaticamente à frente do lote, um por versão. É dele que sai o limiar de
+   tinta desta impressora e deste scanner, e é ele que denuncia — antes de o
+   lote ser lançado — que o gabarito exportado não corresponde ao papel que foi
+   impresso. Por isso as primeiras páginas são varridas antes de tudo.
+2. **Nada duvidoso vira resposta.** O que não for inequívoco sai em
+   `respostas_conferir.csv`, com o motivo e uma miniatura da folha.
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
 import click
 
-FORMATO_GABARITO = "pas-marista/gabarito-v3"
-FORMATOS_ANTIGOS = {"pas-marista/gabarito-v1", "pas-marista/gabarito-v2"}
+from . import __version__
+from .ancoras import SemAncoras, girar, homografia, voltas_para_endireitar
+from .codigo import FaixaIlegivel
+from .imagem import DPI_PADRAO, Pagina, digitalizacoes, paginas
+from .leitura import Leitura, Limiares, calibrar, ler_faixa, ler_folha, limiar_de_tinta
+from .molde import GabaritoIncompativel, Molde, carregar
+from . import saida
 
-# A única folha que o OMR lê: as outras são pauta (redação) ou percentuais
-# marcados por quem corrige (discursiva).
-FOLHA_LIDA = "objetiva"
+# Quantas páginas do começo da pilha são varridas atrás do cartão-gabarito antes
+# de a leitura começar. O sistema o imprime na frente; esta folga cobre a capa
+# de rosto que a secretaria às vezes põe por cima, e custa segundos.
+TOPO_DA_PILHA = 8
 
 
 @click.group(help="Leitor de cartões-resposta PAS Marista (OMR local).")
+@click.version_option(__version__)
 def cli() -> None:
     pass
 
 
-def _folhas(versao) -> list[dict]:
-    """As folhas de uma versão da prova, tolerando o formato antigo.
-
-    Em v1 a versão ERA a lista de itens; em v3 é um dicionário com `folhas`.
-    Aceitar os dois evita que um gabarito guardado de antes trave o leitor sem
-    explicação.
-    """
-    if isinstance(versao, list):
-        return [{"folha": 1, "tipo": FOLHA_LIDA, "itens": versao}]
-    return versao.get("folhas", [])
-
-
-@cli.command(help="Lê uma pasta de digitalizações e gera o CSV de respostas.")
-@click.option("--gabarito", "gabarito_path", required=True, type=click.Path(exists=True, path_type=Path),
-              help="Arquivo pas-gabarito-<prova>.json exportado pelo sistema web.")
-@click.option("--entrada", "entrada_dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path),
-              help="Pasta com as digitalizações (PDF/JPEG/PNG, 300 dpi).")
-@click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path),
-              help="Pasta de saída para respostas.csv e respostas_conferir.csv.")
-def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path) -> None:
-    gabarito = json.loads(gabarito_path.read_text(encoding="utf-8"))
-    formato = gabarito.get("formato")
-    if formato in FORMATOS_ANTIGOS:
-        click.echo(f"AVISO: gabarito em formato antigo ({formato}). Exporte de novo pelo "
-                   f"sistema web para obter {FORMATO_GABARITO} — sem isso o leitor não sabe "
-                   "de que prova é a folha.", err=True)
-    elif formato != FORMATO_GABARITO:
-        click.echo(f"ERRO: gabarito em formato inesperado ({formato!r}; "
-                   f"esperava {FORMATO_GABARITO}).", err=True)
+def _molde(caminho: Path) -> Molde:
+    try:
+        return carregar(caminho)
+    except GabaritoIncompativel as erro:
+        click.echo(f"ERRO: {erro}", err=True)
         sys.exit(2)
 
-    prova = gabarito.get("prova") or {}
-    click.echo(f"Simulado: {gabarito.get('simulado')} · {gabarito.get('etapa')}")
-    if prova:
-        click.echo(f"Prova: {prova.get('serie')} ({prova.get('id')})")
 
-    for nome_versao, versao in (gabarito.get("versoes") or {}).items():
-        folhas = _folhas(versao)
-        objetivas = [f for f in folhas if f.get("tipo") == FOLHA_LIDA]
-        n_itens = sum(len(f.get("itens", [])) for f in objetivas)
-        outras = ", ".join(f.get("tipo", "?") for f in folhas if f.get("tipo") != FOLHA_LIDA)
-        click.echo(f"  versão {nome_versao}: {len(folhas)} folha(s) por estudante · "
-                   f"{n_itens} item(ns) com bolha na folha objetiva"
-                   + (f" · também impressas: {outras}" if outras else ""))
+def _alinhar(pagina: Pagina, molde: Molde):
+    """Alinha e identifica a página, em qualquer das quatro posições.
 
-    paginas = sorted(p for p in entrada_dir.iterdir()
-                     if p.suffix.lower() in {".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff"})
-    click.echo(f"Digitalizações encontradas: {len(paginas)} arquivo(s) em {entrada_dir}")
+    A folha chega da mesa do scanner como der: em pé, deitada, de cabeça para
+    baixo. As duas coisas se resolvem em ordem, e cada uma tem quem a responda:
+
+    - **em pé ou deitada** quem diz são as ÂNCORAS, pela proporção do retângulo
+      que elas formam. Isso reduz quatro posições possíveis a duas;
+    - **de cabeça para baixo ou não** quem diz é o CRC da faixa do rodapé. Ler
+      ao contrário devolveria lixo com cara de matrícula, e é o CRC que recusa.
+
+    Sem o CRC nada disso seria seguro; com ele, tentar é barato.
+    """
+    voltas = voltas_para_endireitar(pagina.cinza, molde.ancoras)
+    if not voltas:
+        raise SemAncoras("não achei as quatro âncoras do cartão nesta página")
+    ultimo = None
+    for n in voltas:
+        cinza = girar(pagina.cinza, n)
+        try:
+            matriz = homografia(cinza, molde.ancoras)
+            return cinza, matriz, ler_faixa(cinza, matriz, molde, limiar_de_tinta(cinza)), n
+        except (SemAncoras, FaixaIlegivel) as erro:
+            ultimo = erro
+    raise ultimo if ultimo else SemAncoras("página sem âncoras")
+
+
+@cli.command(help="Lê uma pasta de digitalizações e gera os CSVs de respostas.")
+@click.option("--gabarito", "gabarito_path", required=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Arquivo pas-gabarito-<prova>.json exportado pelo sistema web.")
+@click.option("--entrada", "entrada_dir", required=True,
+              type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Pasta com as digitalizações (PDF/JPEG/PNG, 300 dpi).")
+@click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path),
+              help="Pasta de saída para os CSVs e as miniaturas de conferência.")
+@click.option("--dpi", default=DPI_PADRAO, show_default=True,
+              help="Resolução com que as páginas de PDF são rasterizadas.")
+def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> None:
+    molde = _molde(gabarito_path)
+    click.echo(f"Simulado: {molde.simulado} · {molde.etapa}")
+    click.echo(f"Prova: {molde.prova.get('serie')} ({molde.prova.get('id')})")
+
+    arquivos = digitalizacoes(entrada_dir)
+    if not arquivos:
+        click.echo(f"ERRO: nenhuma digitalização em {entrada_dir}.", err=True)
+        sys.exit(2)
+    click.echo(f"Digitalizações: {len(arquivos)} arquivo(s) em {entrada_dir}")
+
+    limiares, avisos, divergencias = _procurar_referencia(arquivos, molde, dpi)
+    click.echo(f"Limiar de tinta: {limiares}")
+    for aviso in avisos + divergencias:
+        click.echo(f"  ATENÇÃO — {aviso}", err=True)
+
     saida_dir.mkdir(parents=True, exist_ok=True)
+    pasta_conferencia = saida_dir / "conferencia"
+    leituras: list[Leitura] = []
+    achados: list[dict] = []
 
-    # Próxima fase: pipeline OMR (âncoras → homografia → bolhas → CSV).
-    click.echo("Pipeline OMR ainda não implementado — ver desktop/docs/pipeline-omr.md.")
-    sys.exit(3)
+    with click.progressbar(paginas(arquivos, dpi), label="Lendo") as fila:
+        for pagina in fila:
+            leitura, cinza, matriz = _ler_pagina(pagina, molde, limiares)
+            if leitura.identificacao and leitura.identificacao.eh_referencia:
+                # A folha de referência não é de estudante: ela não gera resposta.
+                leitura.respostas.clear()
+                leitura.conferir.clear()
+                leitura.situacao = "referencia"
+            leituras.append(leitura)
+            if matriz is not None:
+                achados.extend(saida.recortes(pasta_conferencia, cinza, matriz, leitura))
+            if leitura.situacao not in ("lida", "referencia"):
+                saida.miniatura(pasta_conferencia, cinza, matriz, molde.campo_matricula,
+                                pagina.onde.replace(":", "-p"))
+
+    n_resp = saida.respostas(saida_dir, leituras)
+    n_conf = saida.conferir(saida_dir, leituras)
+    n_perc = saida.percentuais(saida_dir, leituras)
+    saida.folhas(saida_dir, leituras)
+    pagina_conferencia = saida.conferencia(saida_dir, molde.prova, achados)
+
+    lidas = sum(1 for l in leituras if l.situacao == "lida")
+    referencia = sum(1 for l in leituras if l.situacao == "referencia")
+    # Lote inteiro deitado é o scanner configurado de lado. O leitor resolve
+    # sozinho, mas quem opera merece saber — na próxima vez sai mais rápido.
+    deitadas = sum(1 for l in leituras if l.voltas % 2)
+    click.echo(f"\n{len(leituras)} página(s) · {lidas} lida(s) · {referencia} de referência · "
+               f"{len(leituras) - lidas - referencia} para conferência")
+    click.echo(f"{n_resp} marcação(ões) em respostas.csv")
+    click.echo(f"{n_conf} linha(s) em respostas_conferir.csv")
+    if n_perc:
+        click.echo(f"{n_perc} percentual(is) de acerto em percentuais.csv")
+    click.echo(f"Rastro folha a folha em {saida_dir / 'folhas.csv'}")
+    if pagina_conferencia:
+        click.echo(f"\nPara conferir o que ficou em dúvida, com a imagem de cada marcação:\n"
+                   f"  {pagina_conferencia}")
+    if deitadas:
+        click.echo(f"{deitadas} folha(s) entraram deitadas na mesa e foram endireitadas aqui — "
+                   "digitalizar em pé é mais rápido.")
+    if divergencias:
+        click.echo("\nO cartão-gabarito impresso divergiu do gabarito exportado. Confira antes de "
+                   "importar: alguém pode ter mexido nos itens depois de imprimir os cartões.",
+                   err=True)
+        sys.exit(1)
+
+
+def _ler_pagina(pagina: Pagina, molde: Molde, limiares: Limiares):
+    """Uma página, do começo ao fim. Nunca levanta: recusa é resultado."""
+    try:
+        cinza, matriz, ident, voltas = _alinhar(pagina, molde)
+    except SemAncoras as erro:
+        return (Leitura(onde=pagina.onde, situacao="descartada", motivo=f"sem_ancoras: {erro}"),
+                pagina.cinza, None)
+    except FaixaIlegivel as erro:
+        return (Leitura(onde=pagina.onde, situacao="conferir", motivo=f"faixa_ilegivel: {erro}"),
+                pagina.cinza, None)
+    leitura = ler_folha(cinza, matriz, molde, ident, limiares, pagina.onde)
+    leitura.voltas = voltas
+    return leitura, cinza, matriz
+
+
+def _procurar_referencia(arquivos: list[Path], molde: Molde, dpi: int):
+    """Varre o topo da pilha atrás do cartão-gabarito e calibra por ele.
+
+    Devolve `(limiares, avisos, divergências)`, e a diferença entre os dois
+    últimos é o que separa um lote que segue de um lote que para. **Aviso** é
+    “não achei a folha de referência”: o lote é lido assim mesmo, com o limiar
+    padrão, e o que se perde é a conferência. **Divergência** é a folha de
+    referência ter aparecido e DISCORDADO do gabarito exportado — aí alguém
+    mexeu nos itens depois de imprimir os cartões, e seguir seria corrigir a
+    prova inteira com a chave errada.
+    """
+    limiares, divergencias = Limiares(), []
+    achou_referencia = False
+    for indice, pagina in enumerate(paginas(arquivos, dpi)):
+        if indice >= TOPO_DA_PILHA:
+            break
+        try:
+            cinza, matriz, ident, _ = _alinhar(pagina, molde)
+        except (SemAncoras, FaixaIlegivel):
+            continue
+        if not ident.eh_referencia:
+            continue
+        achou_referencia = True
+        medido, achados = calibrar(cinza, matriz, molde, ident)
+        divergencias.extend(achados)
+        if medido.origem != "padrão":
+            limiares = medido
+    avisos = [] if achou_referencia else [
+        "não achei o cartão-gabarito no topo da pilha — o limiar de tinta fica no padrão, "
+        "e o lote segue sem a conferência entre o papel e o gabarito exportado"]
+    return limiares, avisos, divergencias
+
+
+@cli.command(help="Descreve um gabarito exportado, sem ler digitalização nenhuma.")
+@click.option("--gabarito", "gabarito_path", required=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path))
+def conferir(gabarito_path: Path) -> None:
+    molde = _molde(gabarito_path)
+    click.echo(f"Simulado: {molde.simulado} · {molde.etapa}")
+    click.echo(f"Prova: {molde.prova.get('serie')} ({molde.prova.get('id')})")
+    click.echo(f"Âncoras: {len(molde.ancoras)} · faixa de identificação: {len(molde.codigo)} células")
+    for (versao, familia), folhas in sorted(molde.familias.items()):
+        click.echo(f"  {versao} · cartão {familia}: {len(folhas)} folha(s)")
+        for numero, folha in enumerate(folhas, 1):
+            partes = []
+            if folha.itens:
+                partes.append(f"{len(folha.itens)} item(ns) A/C")
+            if folha.tipo_b:
+                partes.append(f"{len(folha.tipo_b)} do tipo B")
+            if folha.matricula:
+                partes.append(f"matrícula em {len(folha.matricula)} posições")
+            if folha.percentuais:
+                partes.append(f"{len(folha.percentuais)} quadro(s) de percentual")
+            click.echo(f"    folha {numero} ({folha.tipo}): " + (", ".join(partes) or "sem alvéolo"))
 
 
 if __name__ == "__main__":
