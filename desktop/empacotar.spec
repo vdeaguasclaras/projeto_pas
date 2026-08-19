@@ -20,13 +20,16 @@ Duas escolhas que valem explicação:
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
 a = Analysis(
-    ['leitor.py'],
+    # NÃO renomeie para `leitor.py`: o script de entrada com o mesmo nome do
+    # pacote faz o PyInstaller resolver `from leitor.cli import cli` para o
+    # próprio script, e o executável sai sem biblioteca nenhuma dentro.
+    ['principal.py'],
     pathex=['src'],
     binaries=collect_dynamic_libs('pypdfium2'),
     datas=[],
     # O pdfium entra por binário, não por import — sem isto o `.exe` abre e só
     # falha quando alguém escolhe um PDF, que é o pior momento para descobrir.
-    hiddenimports=['pypdfium2_raw'],
+    hiddenimports=['pypdfium2_raw', 'leitor.ui.janela'],
     excludes=[
         # Nada disto é usado, e cada um custa dezenas de megabytes no instalador.
         'tkinter', 'matplotlib', 'PySide6.QtWebEngineCore', 'PySide6.QtQuick',

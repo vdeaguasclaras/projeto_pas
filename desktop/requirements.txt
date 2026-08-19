@@ -1,8 +1,9 @@
-# O leitor roda na máquina da secretaria, que é Windows — e lá `opencv-python`
-# é o pacote certo. Em servidor Linux sem ambiente gráfico ele não importa
-# (falta a libGL); nesse caso, troque por `opencv-python-headless`, que traz o
-# mesmo módulo `cv2` sem a parte de janela. O leitor não abre janela nenhuma.
-opencv-python>=4.10
+# `opencv-python-headless` traz o mesmo módulo `cv2` sem a parte de janela do
+# OpenCV — que este aplicativo não usa: quem desenha a interface é o Qt. Em
+# Linux sem ambiente gráfico o pacote cheio nem importa (falta a libGL), e no
+# executável ele só engorda o instalador. Se a máquina já tiver o
+# `opencv-python` instalado, funciona igual; não vale desinstalar por isso.
+opencv-python-headless>=4.10
 numpy>=1.26
 pypdfium2>=4.30
 click>=8.1
