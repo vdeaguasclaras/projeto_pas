@@ -286,10 +286,25 @@ Isso dispensa credencial e cobre toda a lógica de papel e de tela.
 
 Vercel (projeto `projeto-pas`), conectada ao GitHub.
 
-**A branch de produção é `claude/locate-created-files-xzeih0`, não `main`.**
-`main` ficou para trás, com só o protótipo antigo. É na branch de produção que
-os PRs entram, e é o push nela que republica sozinho — PR aberto contra `main`
-não chega ao ar.
+**A branch que a Vercel publica é `claude/locate-created-files-xzeih0`.** É nela
+que os PRs entram, e é o push nela que republica sozinho — PR aberto contra outra
+branch não chega ao ar.
+
+`main` foi trazida ao mesmo ponto (era só um avanço direto: a produção sempre
+descendeu dela) e as branches antigas foram encerradas. **Falta um clique para
+terminar a unificação**, e ele é no painel da Vercel, não aqui: *Settings → Git →
+Production Branch* → `main`. Depois disso, `main` passa a ser a branch de
+produção em todo lugar, e esta seção pode ser reescrita para dizer só isso.
+
+Enquanto o clique não acontece, as duas apontam para o mesmo commit — mas quem
+mandar só para `main` **não republica o site**.
+
+Duas coisas que o ambiente desta sessão NÃO deixa fazer, e por isso ficam para
+quem tem o repositório aberto no navegador: **apagar branch e publicar etiqueta**.
+As duas levam 403 do proxy (`git push --delete`, `git push --tags`), e a
+ferramenta do GitHub disponível aqui só cria branch, não apaga. Branch de PR
+fechada se apaga na tela de *Branches*; o histórico dela continua alcançável por
+`refs/pull/<n>/head`, que o GitHub guarda para sempre.
 
 ## Ambiente de desenvolvimento remoto
 
