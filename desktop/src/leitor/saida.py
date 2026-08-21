@@ -103,6 +103,19 @@ def _recortar(cinza: np.ndarray, matriz, caixa, px_por_pt: float = 5.0) -> np.nd
     return cv2.warpPerspective(cinza, matriz_recorte, (l, a), borderValue=255)
 
 
+# A folha de 595×842pt: o recorte com contexto não pode sair dela.
+FOLHA_PT = (595.0, 842.0)
+
+
+def _com_folga(caixa, folga: float = 46.0):
+    """A mesma caixa, com folha em volta, sem passar da borda do cartão."""
+    x, y, largura, altura = caixa
+    x0, y0 = max(0.0, x - folga), max(0.0, y - folga * 0.6)
+    x1 = min(FOLHA_PT[0], x + largura + folga)
+    y1 = min(FOLHA_PT[1], y + altura + folga * 0.6)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
 def recortes(pasta: Path, cinza: np.ndarray, matriz, leitura: Leitura) -> list[dict]:
     """Uma imagem por marcação duvidosa — o que quem confere precisa VER.
 
@@ -118,14 +131,28 @@ def recortes(pasta: Path, cinza: np.ndarray, matriz, leitura: Leitura) -> list[d
         if pedaco is None:
             continue
         pasta.mkdir(parents=True, exist_ok=True)
-        nome = (f"{leitura.matricula or 'sem-matricula'}"
+        base = (f"{leitura.matricula or 'sem-matricula'}"
                 f"-{leitura.onde.replace(':', '-p').replace('/', '_')}"
-                f"-item-{marcacao.item:03d}.png")
-        cv2.imwrite(str(pasta / nome), pedaco)
+                f"-item-{marcacao.item:03d}")
+        cv2.imwrite(str(pasta / f"{base}.png"), pedaco)
+
+        # E um segundo recorte, com FOLHA EM VOLTA. O apertado responde “o que
+        # está marcado aqui”; este responde “e o que há em volta” — a linha de
+        # cima, a de baixo, o rótulo da coluna. É o que resolve a dúvida de
+        # verdade: quase toda marcação duvidosa se explica pelo vizinho (um
+        # traço que invadiu, uma rasura ao lado), e o recorte apertado esconde
+        # exatamente isso.
+        contexto = _recortar(cinza, matriz, _com_folga(marcacao.caixa), px_por_pt=4.0)
+        nome_contexto = ""
+        if contexto is not None:
+            nome_contexto = f"conferencia/{base}-contexto.png"
+            cv2.imwrite(str(pasta / f"{base}-contexto.png"), contexto)
+
         achados.append({
             "matricula": leitura.matricula, "item": marcacao.item,
             "resposta": marcacao.resposta, "motivo": marcacao.motivo or "",
-            "folha": leitura.onde, "imagem": f"conferencia/{nome}",
+            "folha": leitura.onde, "imagem": f"conferencia/{base}.png",
+            "contexto": nome_contexto,
         })
     return achados
 

@@ -533,7 +533,30 @@ conferência (com o recorte do papel ao lado de cada marcação duvidosa),
 resultados e boletins. As cores vêm do `css/estilo.css` por uma ferramenta que
 as extrai — não há cor da identidade escrita à mão do lado do Qt.
 
+### A segunda nota, e o boletim que a escola reconhece
+
+O escore do PAS desconta erro e pode ser negativo. É o número certo para
+preparar o estudante para a prova de verdade, e é errado como nota de boletim:
+nenhuma família já viu nota assim. Ao lado dele passou a ir a **Nota Marista** —
+a fração da prova que o estudante acertou, sem desconto e sem peso por tipo, na
+escala em que a escola lança nota. O discursivo entra proporcional à nota
+recebida (8,5 de 10 valem 0,85 de um acerto) e o que ainda não foi corrigido sai
+da conta inteiro, do numerador e do denominador, para não virar erro por atraso
+de quem corrige. A escala viaja no pacote (`escore.marista`), como os pesos, pela
+mesma razão: mudá-la é mudar a exportação, não o aplicativo.
+
+O boletim foi redesenhado no molde do boletim real do PAS/UnB: faixa de
+identificação no alto, barras de proporção de acertos por grupo de habilidades
+comparando o estudante à turma e ao geral, o gabarito ao lado das marcações item
+a item, e o quadro de notas com o escore, a Nota Marista e a posição. E na
+conferência, clicar no recorte abre a marcação ampliada com um segundo recorte do
+papel em volta — de que item é, qual coluna, o que o vizinho recebeu.
+
 ### O que falta
+
+Uma **exportação em TXT da Nota Marista** no formato que o sistema acadêmico
+importa — combinada com a coordenação, à espera do arquivo de referência que
+descreve o formato.
 
 Gerar e testar o **`.exe`** com PyInstaller, o que tem de ser feito numa máquina
 Windows: a receita está em `desktop/empacotar.spec` e o caminho em

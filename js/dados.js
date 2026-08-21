@@ -62,6 +62,23 @@ const PESOS_DO_ESCORE = {
   D: { escala: 10 }
 };
 
+/* A NOTA MARISTA — a segunda nota, e ela não é o escore.
+
+   O escore bruto é do PAS: desconta erro, e por isso pode ser negativo e não
+   se parece com nada que uma família já tenha visto num boletim. Ele continua
+   valendo, porque é o que prepara o estudante para a prova de verdade.
+
+   Ao lado dele vai a nota da escola, que é outra pergunta: **que fração da
+   prova o estudante acertou**. Sem desconto, sem peso por tipo — acertos sobre
+   itens —, convertida para a escala em que a escola lança nota.
+
+   O item do tipo D entra PROPORCIONALMENTE: a nota de 0 a 10 vale a fração
+   correspondente de um acerto. É como o escore já o trata, e é o que impede que
+   quem foi bem no discursivo seja punido por ele nesta conta. Discursivo ainda
+   não corrigido sai da conta inteiro — do numerador e do denominador —, para
+   não virar erro por atraso de quem corrige. */
+const NOTA_MARISTA = { escala: 2, rotulo: 'Nota Marista' };
+
 // Tipos de item no formato PAS. Pontuação do MVP (calibrável na fase 3):
 // A: certo +1 / errado −1 · B: certo +1 · C: certo +1 / errado −1 ·
 // D (discursivo): nota lançada de 0 a 10, vale nota/10 no escore bruto.
@@ -410,6 +427,6 @@ function substituir(novo) {
 export {
   KEY, VERSAO_ESTADO, COMPONENTES, COMPONENTES_LEGADOS, TODOS_COMPONENTES,
   ehComponenteLegado, SUCESSORAS_DE_ARTES,
-  GRUPOS, PESOS_DO_ESCORE, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
+  GRUPOS, PESOS_DO_ESCORE, NOTA_MARISTA, TIPOS, STATUS_ITEM, SERIES, ID_DA_SERIE,
   uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 };

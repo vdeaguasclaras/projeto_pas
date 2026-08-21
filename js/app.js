@@ -5,7 +5,7 @@
 import { NUVEM } from './config-supabase.js';
 import {
   COMPONENTES, TODOS_COMPONENTES, ehComponenteLegado, SUCESSORAS_DE_ARTES,
-  GRUPOS, PESOS_DO_ESCORE, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
+  GRUPOS, PESOS_DO_ESCORE, NOTA_MARISTA, TIPOS, STATUS_ITEM, SERIES, VERSAO_ESTADO,
   uid, blank, seed, load, save, substituir, provaNova, migrarDeV1, migrarV2paraV3
 } from './dados.js';
 import { nuvem } from './nuvem.js';
@@ -5851,6 +5851,7 @@ ACOES['cart-template'] = () => {
     // exportar de novo.
     escore: {
       pesos: PESOS_DO_ESCORE,
+      marista: NOTA_MARISTA,
       grupos: GRUPOS,
       redacao: { formula: 'NR = NC − 2·NE/TL', piso: 0 },
       observacao: 'Simplificação documentada — os pesos oficiais e o parâmetro x entram na fase 5.'

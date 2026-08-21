@@ -201,6 +201,7 @@ que só existem no banco — a do **discursivo**, lançada por quem corrige, e a
              "B": {"certo":1,"errado":0,"branco":0},
              "C": {"certo":1,"errado":-1,"branco":0},
              "D": {"escala":10} },
+  "marista": { "escala": 2, "rotulo": "Nota Marista" },
   "grupos": ["Interpretar","Planejar","Executar","Criticar"],
   "redacao": { "formula": "NR = NC − 2·NE/TL", "piso": 0 }
 }
@@ -219,6 +220,17 @@ que só existem no banco — a do **discursivo**, lançada por quem corrige, e a
   `PESOS_DO_ESCORE` (js/dados.js); do lado do leitor **não há número de pontuação
   escrito em lugar nenhum**. Um teste (`desktop/testes/testar-correcao.py`) faz
   os dois corrigirem as mesmas marcações e compara nota a nota.
+
+- **`escore.marista` é a segunda nota, e ela não é o escore.** O escore bruto do
+  PAS desconta erro, pode ser negativo, e não se parece com nada que uma família
+  já tenha visto num boletim; ele continua valendo, porque é o que prepara para a
+  prova de verdade. Ao lado dele vai a nota da escola, que responde a outra
+  pergunta — que **fração da prova** o estudante acertou, sem desconto e sem peso
+  por tipo, na escala em que a escola lança nota (`escala`, hoje 2 pontos). O
+  discursivo entra **proporcional à nota** lançada: 8,5 de 10 vale 0,85 de um
+  acerto — e discursivo ainda não corrigido sai da conta inteiro, do numerador e
+  do denominador, para não virar erro por atraso de quem corrige. Como a escala
+  vem no arquivo, mudá-la é mudar a exportação, não o aplicativo.
 
 > ⚠️ **Este arquivo leva nome de estudante**, o que o gabarito evitava de
 > propósito. É dado da escola indo para uma máquina da escola, e sem ele não há

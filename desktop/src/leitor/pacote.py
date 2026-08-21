@@ -50,6 +50,16 @@ class Escore:
     """Quanto vale cada resposta. Vem do arquivo, nunca escrito aqui."""
     pesos: dict
     grupos: list[str]
+    marista: dict = field(default_factory=dict)
+
+    @property
+    def escala_marista(self) -> float:
+        """Em quantos pontos a Nota Marista é lançada. Vem do pacote."""
+        return float(self.marista.get("escala") or 2)
+
+    @property
+    def rotulo_marista(self) -> str:
+        return str(self.marista.get("rotulo") or "Nota Marista")
 
     def peso(self, tipo: str) -> dict:
         return self.pesos.get(tipo) or self.pesos.get("C") or {}
@@ -121,7 +131,8 @@ def carregar(caminho: Path) -> Pacote:
         notas[str(matricula)] = Notas(discursivas=discursivas, redacao=bruto.get("redacao"))
 
     bruto = dados.get("escore") or {}
-    escore = Escore(pesos=bruto.get("pesos") or {}, grupos=list(bruto.get("grupos") or []))
+    escore = Escore(pesos=bruto.get("pesos") or {}, grupos=list(bruto.get("grupos") or []),
+                    marista=bruto.get("marista") or {})
     return Pacote(molde=molde, elenco=elenco, notas=notas, escore=escore)
 
 

@@ -21,10 +21,10 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
-    QProgressBar, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QDialog, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
+    QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..apuracao import apurar, marcacoes_de
@@ -254,6 +254,77 @@ class PaginaLeitura(QWidget):
                   "Confira antes de usar estes resultados.")
 
 
+class ImagemClicavel(QLabel):
+    """Um recorte que se abre ao clique — a miniatura não decide sozinha.
+
+    300px bastam para “tem alguma coisa marcada aqui”. Não bastam para “é o 8 ou
+    o 3”, que é a pergunta que trouxe a marcação para esta fila.
+    """
+    clicada = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip("Clique para ver a marcação em tamanho grande")
+
+    def mouseReleaseEvent(self, evento) -> None:
+        if evento.button() == Qt.LeftButton:
+            self.clicada.emit()
+        super().mouseReleaseEvent(evento)
+
+
+def _esc_html(texto) -> str:
+    return str(texto).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+class DialogoMarcacao(QDialog):
+    """A marcação duvidosa em tamanho grande, com a folha em volta.
+
+    Duas imagens, e cada uma responde a uma pergunta diferente: a de cima, o que
+    está marcado; a de baixo, o que há em volta. Quase toda dúvida se explica
+    pelo vizinho — um traço que invadiu a linha, uma rasura ao lado —, e o
+    recorte apertado esconde exatamente isso.
+
+    O campo de resposta está aqui dentro de propósito: quem ampliou para decidir
+    quer decidir agora, não voltar à lista para procurar a linha certa.
+    """
+
+    def __init__(self, achado: dict, saida: Path, campo: QLineEdit, pai=None):
+        super().__init__(pai)
+        self.setWindowTitle(f"Item {achado['item']} · {achado['matricula'] or 'sem matrícula'}")
+        self.campo_da_lista = campo
+        coluna = QVBoxLayout(self)
+        coluna.setContentsMargins(18, 16, 18, 16)
+        coluna.setSpacing(10)
+
+        coluna.addWidget(rotulo(
+            f"<b>{_esc_html(achado['matricula'] or '—')}</b> · item {achado['item']}"
+            f" · <span style='color:#8a5a00'>{_esc_html(achado['motivo'])}</span>"
+            f"<br><span style='color:#5d6685;font-size:12px'>{_esc_html(achado['folha'])}</span>",
+            "sub"))
+        for chave, legenda in (("imagem", "A marcação"), ("contexto", "Com a folha em volta")):
+            caminho = saida / achado[chave] if achado.get(chave) else None
+            if not (caminho and caminho.exists()):
+                continue
+            coluna.addWidget(rotulo(legenda, "secao"))
+            imagem = QLabel()
+            mapa = QPixmap(str(caminho))
+            if mapa.width() > 620:
+                mapa = mapa.scaledToWidth(620, Qt.SmoothTransformation)
+            imagem.setPixmap(mapa)
+            coluna.addWidget(imagem)
+
+        self.campo = QLineEdit(campo.text())
+        self.campo.setFixedWidth(140)
+        self.campo.setAlignment(Qt.AlignCenter)
+        coluna.addWidget(rotulo("Resposta — apague se o cartão estiver em branco", "sub"))
+        coluna.addLayout(linha(self.campo, None, botao("Guardar e fechar", "rosa", self.guardar)))
+
+    def guardar(self) -> None:
+        self.campo_da_lista.setText(self.campo.text().strip().upper())
+        self.accept()
+
+
 class PaginaConferencia(QWidget):
     """Passo 3 — o que o leitor não leu com certeza, com a imagem da marcação."""
 
@@ -303,13 +374,14 @@ class PaginaConferencia(QWidget):
         faixa.setContentsMargins(10, 8, 10, 8)
         faixa.setSpacing(12)
 
-        imagem = QLabel()
+        imagem = ImagemClicavel()
         caminho = saida / achado["imagem"]
         if caminho.exists():
             mapa = QPixmap(str(caminho))
             # Cabe em 300×170: o bloco do tipo B é alto e estreito, e limitá-lo
             # pela altura de uma linha de item o deixaria ilegível justamente no
-            # caso em que quem confere precisa contar dez alvéolos.
+            # caso em que quem confere precisa contar dez alvéolos. Para além
+            # disso, o clique abre em tamanho grande.
             if mapa.width() > 300 or mapa.height() > 170:
                 mapa = mapa.scaled(300, 170, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             imagem.setPixmap(mapa)
@@ -326,6 +398,14 @@ class PaginaConferencia(QWidget):
         campo.setFixedWidth(110)
         campo.setAlignment(Qt.AlignCenter)
         faixa.addWidget(campo)
+
+        lupa = botao("Ampliar", "fantasma")
+        lupa.setFixedWidth(96)
+        faixa.addWidget(lupa)
+        abrir = lambda: DialogoMarcacao(achado, saida, campo, self).exec()
+        imagem.clicada.connect(abrir)
+        lupa.clicked.connect(abrir)
+
         self.campos.append((achado, campo))
         return fila
 
@@ -352,10 +432,28 @@ class PaginaConferencia(QWidget):
 class PaginaResultados(QWidget):
     """Passo 4 — a planilha de quem fez quanto."""
 
-    COLUNAS = ["Matrícula", "Nome", "Turma", "Versão", "Certas", "Erradas",
-               "Brancos", "Escore", "Redação", "Posição"]
+    # Certas, erradas e brancos numa coluna só. Como três, empurravam a posição e
+    # a redação para fora da janela — e são o detalhe, não a resposta: quem abre
+    # esta tela quer a nota e o lugar na turma, e tem tudo isso na planilha.
+    #
+    # Os títulos são curtos DE PROPÓSITO: a coluna se ajusta ao conteúdo, e aqui
+    # o conteúdo é sempre menor que o título — quem manda na largura é o texto do
+    # cabeçalho. “Escore PAS” custava 25px de janela para dizer o que a ajuda ao
+    # lado (e o resumo acima da tabela) já dizem. O que ficou curto demais para
+    # ser óbvio ganha `AJUDA`, que aparece ao pousar o ponteiro.
+    COLUNAS = ["Matrícula", "Nome", "Turma", "Versão", "Cert·Err·Br",
+               "Escore", "% acertos", "Marista", "Redação", "Posição"]
+    AJUDA = {
+        "Cert·Err·Br": "Certas · erradas · em branco",
+        "Escore": "Escore bruto do PAS — acerto soma, erro desconta",
+        "% acertos": "Proporção de acertos, sem desconto",
+        "Marista": "Nota Marista — a proporção de acertos na escala da escola",
+        "Redação": "NR, a nota da redação lançada no sistema",
+        "Posição": "Lugar na turma pelo escore do PAS",
+    }
     # “1º/5” em vez de “1º de 5”: a coluna é a última, e é a que caía fora da
     # janela quando o texto crescia.
+    NOME_MINIMO, NOME_MAXIMO = 130, 320
 
     def __init__(self, janela: "Janela"):
         super().__init__()
@@ -375,7 +473,10 @@ class PaginaResultados(QWidget):
         cabecalho.setSectionResizeMode(QHeaderView.ResizeToContents)
         cabecalho.setSectionResizeMode(1, QHeaderView.Interactive)
         cabecalho.setStretchLastSection(False)
-        self.tabela.setColumnWidth(1, 190)
+        self.tabela.setColumnWidth(1, self.NOME_MINIMO)
+        for j, titulo in enumerate(self.COLUNAS):
+            if titulo in self.AJUDA:
+                self.tabela.horizontalHeaderItem(j).setToolTip(self.AJUDA[titulo])
         self.resumo = rotulo("", "sub")
         coluna = QVBoxLayout(self)
         coluna.setContentsMargins(0, 0, 0, 0)
@@ -388,23 +489,61 @@ class PaginaResultados(QWidget):
         if self.janela.sessao.saida:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.janela.sessao.saida)))
 
+    def _ajustar_nome(self) -> None:
+        """A coluna do nome fica com o que sobrar — nem esticada, nem espremida.
+
+        Com todas as colunas ajustadas ao conteúdo, a soma passava da janela e a
+        última — a posição na turma — ficava do lado de fora, atrás de uma barra
+        de rolagem horizontal. Deixar o Qt esticar o nome (`Stretch`) faz o
+        contrário: quando as outras somam mais que a janela, o nome encolhe até
+        virar uma tira de dois caracteres e a tabela vira uma fileira de números
+        sem dono. A conta é aqui, e é sempre a mesma: sobra = janela − as outras,
+        com piso e teto. Nome comprido demais sai com reticências e o inteiro
+        fica na dica — e na planilha.
+        """
+        outras = sum(self.tabela.columnWidth(c)
+                     for c in range(self.tabela.columnCount()) if c != 1)
+        sobra = self.tabela.viewport().width() - outras
+        self.tabela.setColumnWidth(
+            1, max(self.NOME_MINIMO, min(self.NOME_MAXIMO, sobra)))
+
+    def resizeEvent(self, evento) -> None:  # noqa: N802 (nome do Qt)
+        super().resizeEvent(evento)
+        self._ajustar_nome()
+
     def mostrar(self, resultados: list[Resultado]) -> None:
         com_resposta = [r for r in resultados if r.tem_resposta]
         com_resposta.sort(key=lambda r: (r.estudante.turma, r.estudante.nome))
-        self.resumo.setText(f"{len(com_resposta)} estudante(s) com respostas · "
-                            f"planilha em resultados.csv")
+        self.resumo.setText(
+            f"{len(com_resposta)} estudante(s) com respostas · planilha em resultados.csv. "
+            "Duas notas: o escore do PAS, que desconta erro, e a Nota Marista, que é a "
+            "proporção de acertos na escala da escola.")
         self.tabela.setRowCount(len(com_resposta))
         for i, r in enumerate(com_resposta):
+            # A versão sai como o CÓDIGO impresso no cartão (A1/A2), não como a
+            # palavra: é o que está no papel que a pessoa tem na mão, e cabe na
+            # coluna. “Adaptada” também é palavra de bastidor — ver o CLAUDE.md.
+            codigo = "A2" if r.estudante.versao == "adaptada" else "A1"
             valores = [r.estudante.matricula, r.estudante.nome, r.estudante.turma,
-                       r.estudante.versao, str(r.acertos), str(r.erros), str(r.brancos),
+                       codigo, f"{r.acertos} · {r.erros} · {r.brancos}",
                        f"{r.escore:.2f}".replace(".", ","),
+                       "—" if r.percentual is None
+                       else f"{r.percentual * 100:.1f}%".replace(".", ","),
+                       "—" if r.nota_marista is None
+                       else f"{r.nota_marista:.2f}".replace(".", ","),
                        "—" if r.nr is None else f"{r.nr:.1f}".replace(".", ","),
                        f"{r.posicao}º/{r.de}" if r.posicao else "—"]
             for j, valor in enumerate(valores):
                 celula = QTableWidgetItem(valor)
-                if j >= 4:
+                if j >= 3:
                     celula.setTextAlignment(Qt.AlignCenter)
+                if j == 1:
+                    celula.setToolTip(r.estudante.nome)
+                if j == 4:
+                    celula.setToolTip(f"{r.acertos} certas · {r.erros} erradas · "
+                                      f"{r.brancos} em branco")
                 self.tabela.setItem(i, j, celula)
+        self._ajustar_nome()
 
 
 class PaginaBoletins(QWidget):

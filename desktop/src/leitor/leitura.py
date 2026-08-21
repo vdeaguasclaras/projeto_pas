@@ -245,7 +245,10 @@ def _medir(cinza, matriz, folha: Folha, limiar: float) -> list[_Grupo]:
         # O recorte é o BLOCO inteiro do item, com as três colunas e o rótulo:
         # ver uma coluna solta não diz a quem confere que número foi marcado.
         todos = [a for c in colunas.values() for a in c.values()]
-        caixa = caixa_dos(todos, folga_esquerda=10, folga_direita=8, folga_topo=17)
+        # 22pt à esquerda para trazer a COLUNA DOS ALGARISMOS (0 a 9) para dentro
+        # do recorte: sem ela quem confere vê um alvéolo cheio e não sabe que
+        # algarismo é — que é exatamente o que se veio perguntar.
+        caixa = caixa_dos(todos, folga_esquerda=22, folga_direita=8, folga_topo=17)
         for coluna in ("C", "D", "U"):
             digitos = colunas.get(coluna, {})
             if digitos:

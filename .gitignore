@@ -20,3 +20,11 @@ desktop/testes/amostras*/
 # quem lê o diff.
 __pycache__/
 *.pyc
+
+# O Playwright, que só os testes do leitor usam (`npm i playwright`, e o
+# Chromium por fora). O site não tem etapa de build nem dependência de npm — o
+# que aparece aqui é ferramenta de teste instalada na hora, não parte do
+# projeto.
+node_modules/
+package.json
+package-lock.json
