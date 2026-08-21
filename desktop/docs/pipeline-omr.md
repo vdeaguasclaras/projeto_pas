@@ -93,7 +93,8 @@ semanas depois.
    Por grupo de alvéolos (as opções de um item, os 10 algarismos de uma coluna):
    - exatamente 1 marcado, e nenhum a meio caminho → resposta;
    - 0 marcados → item em branco, e não sai linha nenhuma;
-   - 2+ marcados → `dupla_marcacao`;
+   - 2+ marcados → `dupla_marcacao` — que a conferência já recebe proposto como
+     `NULO`, o item anulado: é o que o papel diz, e quem confere só concorda;
    - marcado + borrão ao lado, ou só borrão → `leitura_duvidosa`, com o palpite
      junto para quem confere;
    - tipo B com 1 ou 2 colunas resolvidas → `tipo_b_incompleto`. Número pela

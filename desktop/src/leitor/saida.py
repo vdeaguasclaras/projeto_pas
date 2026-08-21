@@ -22,6 +22,7 @@ import cv2
 import numpy as np
 
 from .ancoras import em_pixels
+from .correcao import NULO
 from .leitura import Leitura
 
 
@@ -183,7 +184,8 @@ def conferencia(pasta: Path, molde_prova: dict, achados: list[dict]) -> Path | N
       <td class="mat">{_esc(a['matricula'] or '—')}</td>
       <td class="num">{a['item']}</td>
       <td class="motivo">{_esc(a['motivo'])}<small>{_esc(a['folha'])}</small></td>
-      <td><input value="{_esc(a['resposta'])}" data-mat="{_esc(a['matricula'])}"
+      <td><input value="{_esc(NULO if 'dupla_marcacao' in a['motivo'] else a['resposta'])}"
+                 data-mat="{_esc(a['matricula'])}"
                  data-item="{a['item']}" size="6" autocomplete="off"></td>
     </tr>""" for a in achados)
 
@@ -214,7 +216,9 @@ def conferencia(pasta: Path, molde_prova: dict, achados: list[dict]) -> Path | N
 <header>
   <h1>Conferência da leitura óptica — {_esc(molde_prova.get('serie', ''))}</h1>
   <p>{len(achados)} marcação(ões) que o leitor não leu com certeza. Confira no recorte,
-     corrija o que estiver errado e apague o que estiver em branco no papel.</p>
+     corrija o que estiver errado e apague o campo quando no papel não houver marca nenhuma.
+     <b>Dupla marcação é item anulado</b> — deixe <b>{NULO}</b> no campo: vale como erro e sai
+     marcado no boletim. O que ficar sem decisão não entra em nota nenhuma.</p>
 </header>
 <main>
 <table><thead><tr><th>Marcação no papel</th><th>Matrícula</th><th>Item</th>

@@ -97,6 +97,19 @@ Regras:
 - **Dupla marcação, leitura duvidosa ou tipo B pela metade**: NÃO vira valor. Vai
   para `respostas_conferir.csv` (mesmas colunas + `motivo` e `folha`), com uma
   miniatura em `conferencia/`, para lançamento manual.
+- **`NULO` é uma resposta**, e sai do CSV da conferência (`conferido.csv`). Quer
+  dizer *item anulado*: o estudante marcou duas alternativas, e no PAS isso vale
+  como erro — com o peso de erro do tipo, que no tipo B é zero. Não é a mesma
+  coisa que resposta vazia, que quer dizer “no papel não há marca nenhuma”, e não
+  é a mesma coisa que a ausência de linha, que quer dizer “ninguém decidiu
+  ainda”. As três contam diferente, e o boletim imprime as três diferente: a
+  letra, `.` e `N`.
+- **O que continua na fila não vira nada.** Item que está em
+  `respostas_conferir.csv` e não aparece no `conferido.csv` sai de toda conta —
+  do escore, do denominador da Nota Marista, da média do grupo — e sai impresso
+  como `?`, com um aviso no alto do boletim. Contá-lo como branco daria nota,
+  posição na turma e grau de desenvolvimento a partir de uma afirmação sobre o
+  papel que ninguém fez.
 - Codificação UTF-8; a importação aceita `;`, `,` ou tabulação.
 
 Saem junto, na mesma pasta: `percentuais.csv` (os percentuais do discursivo — o

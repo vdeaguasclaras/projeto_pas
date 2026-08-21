@@ -35,6 +35,20 @@ class Acertos:
         return self.acertos / self.total if self.total else 0.0
 
 
+# A resposta que não é resposta, e que precisa aparecer assim mesmo.
+#
+# Dupla marcação é item ANULADO: no PAS o estudante marcou duas alternativas e a
+# regra é clara — vale como erro. Antes disso virava silêncio: a marcação ia para
+# a conferência, e se ninguém a resolvesse o item saía do boletim como "em
+# branco", que é outra coisa e conta diferente. O boletim tem de mostrar o que
+# aconteceu no papel, e "você anulou este item" é informação que o estudante
+# precisa ler — é o que ele vai evitar na prova de verdade.
+#
+# É um valor de resposta como "A" ou "096": viaja no CSV da conferência, entra na
+# correção e sai impresso com marca própria.
+NULO = "NULO"
+
+
 @dataclass
 class Detalhe:
     numero: int
@@ -42,6 +56,13 @@ class Detalhe:
     gabarito: str
     marcada: str | None
     certa: bool
+    # Anulado: marcou duas. Conta como erro, e aparece com marca própria.
+    nulo: bool = False
+    # Ainda na fila de conferência quando o boletim foi gerado. NÃO conta como
+    # nada — nem acerto, nem erro, nem branco: ninguém decidiu ainda, e afirmar
+    # qualquer das três seria inventar. Sai do numerador E do denominador, como o
+    # discursivo que ainda não foi corrigido.
+    pendente: bool = False
 
 
 @dataclass
@@ -56,6 +77,12 @@ class Resultado:
     detalhes: list[Detalhe] = field(default_factory=list)
     discursivas_lancadas: int = 0
     discursivas_total: int = 0
+    # Anulados por dupla marcação. Estão DENTRO de `erros` — contam como erro,
+    # com o peso de erro do tipo —, e são contados à parte só para poderem
+    # aparecer com marca própria no boletim e na planilha.
+    nulos: int = 0
+    # Itens que continuavam na fila de conferência na hora de corrigir.
+    pendentes: int = 0
     total_itens: int = 0
     tem_resposta: bool = False
     posicao: int = 0
@@ -117,9 +144,14 @@ def _chave_esperada(item: dict) -> str:
     return bruta.upper()
 
 
-def corrigir(pacote: Pacote, estudante: Estudante,
-             marcacoes: dict[int, str]) -> Resultado:
-    """Corrige um estudante. `marcacoes` é {número do item: resposta lida}."""
+def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
+             pendentes: set[int] | frozenset = frozenset()) -> Resultado:
+    """Corrige um estudante. `marcacoes` é {número do item: resposta lida}.
+
+    `pendentes` são os itens que ainda estavam na fila de conferência. Eles não
+    entram em conta nenhuma: quem decide o que está no papel é quem confere, e
+    até lá não há acerto, erro nem branco a afirmar.
+    """
     escore = pacote.escore
     notas = pacote.notas.get(estudante.matricula)
     itens = pacote.molde.itens_da_versao(estudante.versao)
@@ -148,8 +180,31 @@ def corrigir(pacote: Pacote, estudante: Estudante,
                 resultado.itens_avaliaveis += 1
             continue
 
-        marcada = str(marcacoes.get(item["numero"], "") or "").strip().upper()
         esperada = _chave_esperada(item)
+        if item["numero"] in pendentes:
+            resultado.pendentes += 1
+            resultado.detalhes.append(
+                Detalhe(item["numero"], item["tipo"], esperada, None, False, pendente=True))
+            continue
+
+        marcada = str(marcacoes.get(item["numero"], "") or "").strip().upper()
+        if marcada == NULO:
+            # Anulado vale como erro — com o peso de erro DO TIPO, que no tipo B
+            # é zero: no PAS o tipo B não desconta, e anular não pode inventar um
+            # desconto que a prova não tem.
+            peso = escore.peso(item["tipo"])
+            resultado.erros += 1
+            resultado.nulos += 1
+            resultado.escore += float(peso.get("errado", 0))
+            grupo.total += 1
+            resultado.itens_avaliaveis += 1
+            resultado.detalhes.append(
+                Detalhe(item["numero"], item["tipo"], esperada, NULO, False, nulo=True))
+            continue
+
+        # A partir daqui é resposta de verdade. O tipo B se compara por
+        # algarismos — e por isso `NULO` tinha de sair antes: aqui ele viraria
+        # texto sem número nenhum, ou seja, um branco.
         if item["tipo"] == "B" and marcada:
             marcada = "".join(c for c in marcada if c.isdigit()).rjust(3, "0")[-3:]
         certa = bool(marcada) and marcada == esperada
@@ -175,18 +230,24 @@ def corrigir(pacote: Pacote, estudante: Estudante,
             Detalhe(item["numero"], item["tipo"], esperada, marcada or None, certa))
 
     resultado.nr = nota_da_redacao(notas.redacao if notas else None)
-    resultado.tem_resposta = bool(marcacoes) or resultado.discursivas_lancadas > 0
+    # Quem só tem item pendente também FEZ a prova: se ficasse de fora, sumiria
+    # da planilha e dos boletins justamente enquanto espera conferência.
+    resultado.tem_resposta = (bool(marcacoes) or resultado.discursivas_lancadas > 0
+                              or resultado.pendentes > 0)
     return resultado
 
 
-def corrigir_todos(pacote: Pacote,
-                   marcacoes: dict[str, dict[int, str]]) -> list[Resultado]:
+def corrigir_todos(pacote: Pacote, marcacoes: dict[str, dict[int, str]],
+                   pendencias: dict[str, set[int]] | None = None) -> list[Resultado]:
     """Corrige o elenco inteiro e resolve a posição de cada um.
 
     A posição é dentro da PRÓPRIA versão da prova: a adaptada tem menos itens, e
     ordenar as duas juntas compararia quem fez provas diferentes.
     """
-    resultados = [corrigir(pacote, e, marcacoes.get(e.matricula, {})) for e in pacote.elenco]
+    pendencias = pendencias or {}
+    resultados = [corrigir(pacote, e, marcacoes.get(e.matricula, {}),
+                           pendencias.get(e.matricula, frozenset()))
+                  for e in pacote.elenco]
     for versao in ("regular", "adaptada"):
         turma = sorted((r for r in resultados if r.estudante.versao == versao and r.tem_resposta),
                        key=lambda r: -r.escore)

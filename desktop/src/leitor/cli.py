@@ -38,9 +38,18 @@ def cli() -> None:
     pass
 
 
-def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path) -> None:
-    _resultados, quantos, boletins = apurar(pacote, marcacoes, saida_dir)
+def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes=()) -> None:
+    resultados, quantos, boletins = apurar(pacote, marcacoes, saida_dir, decisoes)
     click.echo(f"{quantos} estudante(s) em {saida_dir / 'resultados.csv'}")
+    anulados = sum(r.nulos for r in resultados)
+    if anulados:
+        click.echo(f"{anulados} item(ns) anulado(s) por dupla marcação — contam como erro e "
+                   "saem marcados no boletim.")
+    pendentes = sum(r.pendentes for r in resultados)
+    if pendentes:
+        click.echo(f"ATENÇÃO: {pendentes} marcação(ões) continuam na conferência e ficaram FORA "
+                   "das notas. Resolva-as e rode `corrigir` antes de entregar os boletins.",
+                   err=True)
     if boletins:
         click.echo(f"Boletins de desempenho em {boletins}")
 
@@ -152,7 +161,7 @@ def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Pa
     if fora:
         click.echo(f"{fora} marcação(ões) de estudante fora do elenco desta prova, ignoradas.",
                    err=True)
-    _mostrar_apuracao(pacote, marcacoes, saida_dir)
+    _mostrar_apuracao(pacote, marcacoes, saida_dir, list(respostas_csv))
 
 
 @cli.command(help="Abre a janela do aplicativo.")

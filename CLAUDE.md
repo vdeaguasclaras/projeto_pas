@@ -391,6 +391,17 @@ passa e o leitor falha na secretaria.
   como erro transformaria atraso de quem corrige em nota baixa do estudante; e
   mostrar 0% quando não há item avaliável afirmaria uma nota que ninguém apurou,
   por isso `percentual` devolve `None`, não zero.
+- **“Em branco” já engoliu duas coisas que não são branco.** Dupla marcação é
+  item ANULADO — a resposta `NULO` (`desktop/src/leitor/correcao.py`), que viaja
+  no CSV da conferência como qualquer outra resposta: o estudante marcou duas alternativas, no PAS isso vale como erro — com o peso de
+  erro do TIPO, que no tipo B é zero — e o boletim imprime `N`. Item que continua
+  na fila de conferência não é nada ainda: sai de toda conta (escore, denominador
+  da Nota Marista, média do grupo), imprime `?` e põe um aviso no alto do
+  boletim. Enquanto os dois viravam ausência de marcação, o boletim dava nota,
+  posição na turma e grau de desenvolvimento a partir de uma afirmação sobre o
+  papel que ninguém tinha feito. Ao mexer na correção, lembre que são **quatro**
+  estados por item, não três — e que `NULO` tem de sair antes da normalização do
+  tipo B, que o transformaria num branco por não ter algarismo nenhum.
 - **A janela é casca; o trabalho mora num lugar só.** O aplicativo local tem
   agora duas frentes — a janela (PySide6, `desktop/src/leitor/ui/`) e a linha de
   comando —, e as duas chamam `lote.ler_lote` e `apuracao.apurar`. Quando a

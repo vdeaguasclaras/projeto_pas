@@ -51,19 +51,68 @@ def marcacoes_de(pacote: Pacote, caminhos: list[Path]) -> tuple[dict, int, int]:
     return marcacoes, lidas, fora
 
 
-def apurar(pacote: Pacote, marcacoes: dict, saida_dir: Path):
+def _chaves_de(pacote: Pacote, caminhos) -> set[tuple[str, int]]:
+    """Os `(matrícula, item)` que aparecem nestes CSVs — decididos ou não.
+
+    A matrícula sai normalizada pela do elenco (`casar`), porque a da faixa vem
+    em algarismos e a da planilha pode vir pontuada: comparar como texto solto
+    faria a mesma pessoa parecer duas.
+    """
+    chaves: set[tuple[str, int]] = set()
+    for caminho in caminhos:
+        if not caminho or not Path(caminho).exists():
+            continue
+        with Path(caminho).open(encoding="utf-8-sig") as arquivo:
+            for linha in csv.DictReader(arquivo, delimiter=";"):
+                matricula = (linha.get("matricula") or "").strip()
+                numero = (linha.get("item") or "").strip()
+                if not matricula or not numero.isdigit():
+                    continue
+                estudante = pacote.casar(matricula)
+                if estudante is not None:
+                    chaves.add((estudante.matricula, int(numero)))
+    return chaves
+
+
+def pendencias_de(pacote: Pacote, conferir: Path, decisoes) -> dict[str, set[int]]:
+    """O que foi para a conferência e ninguém decidiu ainda.
+
+    A diferença entre “resolvido como branco” e “ninguém olhou” não está nas
+    marcações: as duas chegam ali como ausência. Está em ter havido uma DECISÃO —
+    uma linha, ainda que de resposta vazia, no CSV da conferência. Por isso a
+    conta é por chave `(matrícula, item)`, e não por valor.
+
+    Sem isto, item duvidoso não conferido virava “em branco” no boletim, com
+    nota, posição na turma e tudo — uma afirmação sobre o papel que ninguém
+    tinha feito.
+    """
+    decididos = _chaves_de(pacote, decisoes)
+    pendentes: dict[str, set[int]] = {}
+    for matricula, numero in _chaves_de(pacote, [conferir]):
+        if (matricula, numero) not in decididos:
+            pendentes.setdefault(matricula, set()).add(numero)
+    return pendentes
+
+
+def apurar(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes=()):
     """Corrige, grava `resultados.csv` e monta `boletins.html`.
+
+    `decisoes` são CSVs de conferência fora do lugar de sempre — a linha de
+    comando aceita `--respostas` de onde a pessoa quiser. O da janela
+    (`conferido.csv`, ao lado da saída) entra sozinho.
 
     Devolve `(resultados, quantos saíram na planilha, caminho dos boletins)`.
     """
-    resultados = corrigir_todos(pacote, marcacoes)
+    pendencias = pendencias_de(pacote, saida_dir / "respostas_conferir.csv",
+                               [saida_dir / "conferido.csv", *decisoes])
+    resultados = corrigir_todos(pacote, marcacoes, pendencias)
     linhas = []
     for r in sorted(resultados, key=lambda r: (r.estudante.turma, r.estudante.nome)):
         if not r.tem_resposta:
             continue
         linhas.append([
             r.estudante.matricula, r.estudante.nome, r.estudante.turma, r.estudante.versao,
-            r.acertos, r.erros, r.brancos,
+            r.acertos, r.erros, r.brancos, r.nulos, r.pendentes,
             f"{r.escore:.2f}".replace(".", ","),
             # As duas notas, lado a lado: a do PAS (com desconto) e a da escola
             # (acertos sobre itens). São perguntas diferentes, e a planilha traz
@@ -75,7 +124,12 @@ def apurar(pacote: Pacote, marcacoes: dict, saida_dir: Path):
             *[f"{r.por_grupo[g].proporcao:.2f}".replace(".", ",")
               if g in r.por_grupo and r.por_grupo[g].total else "" for g in pacote.escore.grupos],
         ])
+    # `anulados` está DENTRO de `erradas` (dupla marcação vale como erro), e
+    # `pendentes` está fora de tudo — são os itens que continuavam na fila de
+    # conferência na hora de corrigir. Coluna com número diferente de zero ali é
+    # trabalho por fazer, não característica da prova.
     cabecalho = ["matricula", "nome", "turma", "versao", "certas", "erradas", "brancos",
+                 "anulados", "pendentes",
                  "escore_bruto", "percentual_acerto", "nota_marista", "redacao_nr",
                  "posicao", "de",
                  *[f"grupo_{g.lower()}" for g in pacote.escore.grupos]]

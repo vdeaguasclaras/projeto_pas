@@ -545,6 +545,14 @@ da conta inteiro, do numerador e do denominador, para não virar erro por atraso
 de quem corrige. A escala viaja no pacote (`escore.marista`), como os pesos, pela
 mesma razão: mudá-la é mudar a exportação, não o aplicativo.
 
+No fluxo da secretaria, a conferência vem ANTES dos boletins, e o boletim passou a
+mostrar isso. Dupla marcação é item **anulado** — o estudante marcou duas
+alternativas, o que no PAS vale como erro —, e sai impresso com `N`, não como
+branco: é informação que o estudante precisa ler para não repetir na prova de
+verdade. Item que continua na fila de conferência sai como `?`, fora de toda
+conta, com um aviso no alto do boletim; enquanto sobrar um, a tela de Boletins
+diz quantos são e manda voltar ao passo 3.
+
 O boletim foi redesenhado no molde do boletim real do PAS/UnB: faixa de
 identificação no alto, barras de proporção de acertos por grupo de habilidades
 comparando o estudante à turma e ao geral, o gabarito ao lado das marcações item
