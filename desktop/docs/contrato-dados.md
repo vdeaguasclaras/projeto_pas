@@ -250,6 +250,38 @@ que só existem no banco — a do **discursivo**, lançada por quem corrige, e a
 > boletim — mas trata-se dele como se trata a lista de estudantes, e não como se
 > tratava o gabarito.
 
+## 5.1. O TXT do sistema acadêmico (saída)
+
+O último arquivo do fluxo, e o único que sai deste projeto para dentro da vida
+acadêmica do estudante. **O formato não é escolha nossa**: é contrato com um
+programa que já existe, e que recusa o arquivo inteiro se uma vírgula mudar de
+lugar. Está descrito em `desktop/src/leitor/academico.py` e conferido byte a byte
+contra o arquivo que a escola importou em 2025.
+
+```
+ALUNO,DISCIPLINA,TURMA,ANO,PERIODO,PROVA,CONCEITO,COMPARECEU
+225210327,225031001,EM-1ªB-M,2025,0,E3_P3,1.4,S
+```
+
+- Vírgula, **CRLF**, cabeçalho na primeira linha, codificação **ISO-8859-1** —
+  não UTF-8. O `ª` da turma é o único caractere fora do ASCII.
+- **Uma linha por estudante E por componente.** A mesma prova conta para vários
+  componentes curriculares e todos recebem a mesma nota; quem escolhe quais é a
+  coordenação, na tela de exportação.
+- `DISCIPLINA` tem nove algarismos: `225` (unidade) + segmento (`02` fundamental,
+  `03` médio) + série (`9`, `1`, `2`, `3`) + três do componente. A tabela dos três
+  últimos veio da planilha de códigos da escola e está resolvida série a série no
+  código — no 9º ano existe Ciências e não Biologia; na 1ª série é o contrário.
+- `TURMA` é a nomenclatura oficial (`EM-1ªB-M`), montada a partir da série da
+  prova e da letra da turma do elenco, que é texto livre.
+- `CONCEITO` é a **Nota Marista**, com ponto decimal, uma casa, e sem o `.0` do
+  inteiro: `2`, `1.4`, `0`. `PERIODO` é sempre `0`. `COMPARECEU` é `S` ou `N` —
+  quem não fez a prova entra com `N` e conceito `0`, porque deixá-lo de fora
+  faria o sistema acadêmico ficar sem notícia de quem faltou.
+- **A exportação se recusa a acontecer com marcação na fila de conferência.**
+  Nota provisória lançada no sistema acadêmico ninguém descobre que era
+  provisória.
+
 ## 6. A geometria (`layout`)
 
 Medida pelo navegador no ato da exportação, em **pontos**, na folha de 595×842pt,

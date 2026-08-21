@@ -164,6 +164,72 @@ def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Pa
     _mostrar_apuracao(pacote, marcacoes, saida_dir, list(respostas_csv))
 
 
+@cli.command(help="Gera o TXT de notas para o sistema acadêmico.")
+@click.option("--gabarito", "gabarito_path", required=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="O pacote da prova exportado pelo sistema.")
+@click.option("--respostas", "respostas_csv", required=True, multiple=True,
+              type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="CSV de marcações. Pode repetir: o último vale sobre os anteriores.")
+@click.option("--prova", required=True,
+              help="O código da prova no calendário da escola, como E3_P3.")
+@click.option("--componente", "componentes", multiple=True,
+              help="Componente que recebe esta nota. Pode repetir. Sem nenhum, lista os "
+                   "componentes da série e para.")
+@click.option("--ano", default=0, help="O ano letivo. Sem isto, o ano de hoje.")
+@click.option("--turno", default="M", show_default=True, help="M, V ou N.")
+@click.option("--saida", "saida_dir", default=Path("resultado"),
+              type=click.Path(path_type=Path),
+              help="A pasta do resultado — é dela que sai a fila de conferência.")
+@click.option("--arquivo", "arquivo_txt", default=None, type=click.Path(path_type=Path),
+              help="O TXT a gerar. Sem isto, um nome derivado da prova, dentro da saída.")
+def exportar(gabarito_path: Path, respostas_csv: tuple[Path, ...], prova: str,
+             componentes: tuple[str, ...], ano: int, turno: str,
+             saida_dir: Path, arquivo_txt: Path | None) -> None:
+    """O arquivo que a secretaria importa no sistema acadêmico.
+
+    A janela faz isto com caixas de seleção; aqui é para quando a janela não
+    estiver à mão — ou para conferir, que é o que este aplicativo mais faz.
+    """
+    from datetime import date
+
+    from . import academico
+
+    pacote = _pacote(gabarito_path)
+    try:
+        serie = academico.serie_do_pacote(pacote)
+    except academico.NaoDaParaExportar as erro:
+        click.echo(f"ERRO: {erro}", err=True)
+        sys.exit(2)
+
+    disponiveis = academico.disciplinas_da_serie(serie)
+    if not componentes:
+        click.echo(f"Componentes da {serie} — repita `--componente` para os que recebem "
+                   f"esta nota:")
+        for area, nome, codigo in disponiveis:
+            click.echo(f"  {codigo}  {nome}   ({area})")
+        sys.exit(2)
+
+    marcacoes, _lidas, _fora = marcacoes_de(pacote, list(respostas_csv))
+    resultados, _quantos, _boletins = apurar(pacote, marcacoes, saida_dir, list(respostas_csv))
+    try:
+        linhas = academico.linhas_do_arquivo(
+            pacote, resultados, prova, ano or date.today().year,
+            list(componentes), turno=turno, serie=serie)
+    except academico.NaoDaParaExportar as erro:
+        click.echo(f"ERRO: {erro}", err=True)
+        sys.exit(2)
+
+    alvo = Path(arquivo_txt) if arquivo_txt else (
+        saida_dir / academico.nome_sugerido(prova, serie))
+    academico.escrever(alvo, linhas)
+    sem_prova = sum(1 for r in resultados if not r.tem_resposta)
+    click.echo(f"{len(linhas)} linha(s) em {alvo}")
+    click.echo(f"{len(pacote.elenco)} estudante(s) × {len(set(componentes))} componente(s)"
+               + (f" · {sem_prova} sem prova, com 0 e COMPARECEU=N" if sem_prova else ""))
+    click.echo("Confira uma linha antes de importar: matrícula, disciplina, turma e nota.")
+
+
 @cli.command(help="Abre a janela do aplicativo.")
 def janela() -> None:
     """A interface gráfica — é o que o `.exe` abre quando ninguém digita nada.

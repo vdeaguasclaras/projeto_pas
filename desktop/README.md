@@ -1,19 +1,14 @@
 # PAS Marista — Leitor de Cartões (app local Windows)
 
-> **Situação: o aplicativo tem janela, lê os cartões, corrige e monta os
-> boletins.** A receita do PyInstaller foi ensaiada e o pacote roda; falta gerar
-> o `.exe` **no Windows**, que é onde ele vai viver (ver
-> [`docs/instalacao.md`](docs/instalacao.md)).
+> **Situação: está de pé.** O aplicativo tem janela, lê os cartões, corrige,
+> monta os boletins e exporta as notas para o sistema acadêmico da escola. O
+> `.exe` foi **gerado e rodado numa máquina Windows** da escola, com o fluxo
+> inteiro percorrido ali (ver [`docs/instalacao.md`](docs/instalacao.md)).
 >
-> **O pipeline OMR foi conferido no papel.** Quatro cartões
+> **E o pipeline OMR foi conferido no papel.** Quatro cartões
 > da prova da 2ª série impressos na impressora da escola, dois preenchidos à mão
 > e os quatro digitalizados no scanner da secretaria: **165 marcações, todas
 > conferidas contra o papel, todas certas**, nenhuma na fila de conferência.
-> `python -m src.leitor.cli ler` alinha as
-> folhas pelas âncoras, descobre de quem é cada uma pela faixa de identificação
-> do rodapé, lê os alvéolos e gera os CSVs. O que falta é a interface gráfica e o
-> empacotamento `.exe` — a leitura em si está de pé e testada ponta a ponta
-> contra os PDFs que o sistema web imprime.
 >
 > O material veio da PR #3, fechada porque a metade `web/` dela virou o sistema
 > que está em produção. As duas pontas que ligam este app ao sistema web já
@@ -143,12 +138,13 @@ desktop/
 ├── ferramentas/
 │   └── extrair-tema.py        ← lê as cores do css/estilo.css do sistema
 ├── src/leitor/
-│   ├── cli.py                 ← a linha de comando: `ler`, `corrigir`, `janela`
+│   ├── cli.py                 ← a linha de comando: `ler`, `corrigir`, `exportar`, `janela`
 │   ├── lote.py                ← a leitura de um lote (a janela e o CLI usam esta)
 │   ├── pacote.py              ← o pacote da prova: elenco, notas e pesos
 │   ├── correcao.py            ← escore, desempenho por grupo e posição
 │   ├── apuracao.py            ← das marcações à planilha e aos boletins
 │   ├── boletim.py             ← o boletim individual, no desenho do boletim do PAS
+│   ├── academico.py           ← o TXT de notas do sistema acadêmico da escola
 │   ├── ui/                    ← a janela (PySide6) e o tema vindo do CSS
 │   ├── molde.py               ← a geometria que veio do gabarito v4
 │   ├── imagem.py              ← ingestão de PDF/JPEG/PNG
@@ -160,16 +156,28 @@ desktop/
     ├── gerar-amostras.mjs     ← imprime cartões DE VERDADE, pelo sistema web
     ├── testar-leitura.py      ← digitaliza-os torto e cobra o resultado
     ├── testar-correcao.py     ← o sistema e o app corrigem o mesmo, e se comparam
-    └── testar-janela.py       ← percorre os cinco passos da janela
+    ├── testar-anulacao.py     ← anulado e pendente não são “em branco”
+    ├── testar-academico.py    ← o TXT, byte a byte, contra o arquivo de 2025
+    ├── testar-janela.py       ← percorre os seis passos da janela
+    └── referencia/            ← o trecho anonimizado do arquivo de 2025
 ```
 
 ## A janela
 
-Cinco passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
-**Ler cartões** (a pasta das digitalizações, com barra de progresso),
-**Conferência** (o que ficou em dúvida, com o pedaço do papel ao lado e um campo
-para corrigir), **Resultados** (a planilha) e **Boletins**. Um passo só abre
-quando o anterior deu o que ele precisa.
+Seis passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
+**Ler cartões** (a pasta das digitalizações, ou o PDF do lote, com barra de
+progresso), **Conferência** (o que ficou em dúvida, com o pedaço do papel ao lado
+e um campo para corrigir), **Resultados** (a planilha), **Boletins** e **Exportar
+notas** (o TXT do sistema acadêmico). Um passo só abre quando o anterior deu o
+que ele precisa.
+
+A **exportação** pergunta só o que o aplicativo não tem como saber: o código da
+prova no calendário da escola (`E3_P3`), o ano, o turno e para quais componentes
+curriculares esta nota conta. O resto — matrícula, turma, nota e o código de nove
+algarismos da disciplina — sai do pacote e da correção. **Ela se recusa a
+acontecer enquanto houver marcação na fila de conferência**: essa nota vai para o
+histórico escolar, e nota provisória lançada lá ninguém descobre que era
+provisória.
 
 A conferência já chega com a dupla marcação **proposta como `NULO`** — é o que o
 papel diz, e quem confere só precisa concordar. Enquanto sobrar item na fila, a
@@ -220,6 +228,13 @@ python -m src.leitor.cli ler --gabarito pas-pacote-pr-2em.json \
 python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
     --respostas ./resultado/respostas.csv --respostas ./conferido.csv \
     --saida ./resultado
+
+# as notas no formato do sistema acadêmico. Sem `--componente`, ele lista os
+# componentes daquela série, com o código de cada um, e para
+python -m src.leitor.cli exportar --gabarito pas-pacote-pr-2em.json \
+    --respostas ./resultado/respostas.csv --respostas ./conferido.csv \
+    --prova E3_P3 --componente "Matemática" --componente Biologia \
+    --saida ./resultado
 ```
 
 Sai em `./resultado`:
@@ -234,6 +249,7 @@ Sai em `./resultado`:
 | `boletins.html` | o boletim de desempenho de cada estudante, pronto para imprimir |
 | `conferencia.html` | a fila de conferência com a imagem de cada marcação duvidosa |
 | `conferencia/*.png` | os recortes e as miniaturas das folhas que caíram na fila |
+| `E3_P3-1serie.txt` | as notas no formato que o sistema acadêmico importa (só quando pedido) |
 
 Código de saída: `0` tudo certo · `1` o cartão-gabarito divergiu do gabarito
 exportado · `2` erro de uso (gabarito velho, pasta vazia).
@@ -256,6 +272,7 @@ python3 desktop/testes/testar-leitura.py
 python3 desktop/testes/testar-leitura.py amostras-grande
 python3 desktop/testes/testar-correcao.py
 python3 desktop/testes/testar-anulacao.py
+python3 desktop/testes/testar-academico.py
 QT_QPA_PLATFORM=offscreen python3 desktop/testes/testar-janela.py
 ```
 
@@ -263,6 +280,11 @@ QT_QPA_PLATFORM=offscreen python3 desktop/testes/testar-janela.py
 à mão para cobrir os dois casos que já viraram “em branco” por descuido — o item
 anulado e o item que ficou na fila — e confere o que cada um fez com a nota e com
 o que sai impresso.
+
+`testar-academico.py` compara o TXT gerado, **byte a byte**, com um trecho
+anonimizado do arquivo que a escola importou em 2025. Formato de importação é
+contrato com um programa que já existe, e que recusa o arquivo inteiro se uma
+vírgula mudar de lugar.
 
 `testar-correcao.py` é de outra natureza: ele faz o **sistema on-line** e o
 aplicativo local corrigirem exatamente as mesmas marcações — as que o leitor
@@ -288,5 +310,6 @@ leitor devolver marcação que não foi impressa, ou se um dos casos difíceis
 - [x] Teste ponta a ponta contra os PDFs impressos pelo sistema web
 - [x] Correção, resultados e boletins no próprio aplicativo
 - [x] Janela (PySide6) com a identidade visual do sistema
-- [ ] Gerar e testar o `.exe` numa máquina Windows
+- [x] Gerar e testar o `.exe` numa máquina Windows
+- [x] Exportação das notas para o sistema acadêmico da escola (TXT)
 - [ ] Importação dos percentuais de acerto do discursivo pelo sistema web

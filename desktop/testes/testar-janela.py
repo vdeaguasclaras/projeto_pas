@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Passa a janela pelos cinco passos, sem ninguém clicando.
+"""Passa a janela pelos seis passos, sem ninguém clicando.
 
 Interface é o que mais apodrece sem ninguém olhar: um campo renomeado no leitor,
 e a tela que o mostrava fica vazia sem quebrar nada — nenhum teste de leitura
@@ -70,6 +70,8 @@ def main() -> int:
         # Um passo só abre quando o anterior deu o que ele precisa: com o pacote
         # carregado dá para ler, e ainda não dá para conferir nem ver resultado.
         aberto = lambda i: bool(janela.passos.item(i).flags() & Qt.ItemIsEnabled)
+        if len(janela.paginas) != janela.passos.count():
+            falhas.append("o menu lateral e as telas discordam de quantos passos existem")
         if not aberto(1):
             falhas.append("com o pacote carregado, o passo de ler continuou fechado")
         if aberto(2) or aberto(3):
@@ -124,7 +126,42 @@ def main() -> int:
                 falhas.append("o que foi decidido na conferência não entrou na correção "
                               f"(item {achado['item']} ficou {marcada!r})")
 
-        print(f"5 passos percorridos · {lote.lidas} folha(s) lida(s) · "
+        # 6 · a exportação para o sistema acadêmico
+        exportacao = janela.paginas[5]
+        if not exportacao.caixas:
+            falhas.append("a tela de exportação não listou componente nenhum")
+        # Com marcação em conferência, exportar tem de estar TRAVADO: essa nota
+        # vai para o histórico escolar.
+        exportacao.prova.setText("E1_P2")
+        for _nome, caixa in exportacao.caixas[:1]:
+            caixa.setChecked(True)
+        if conferencia.campos and exportacao.botao.isEnabled():
+            falhas.append("a exportação ficou liberada com marcação ainda em conferência")
+
+        # Resolvida a conferência inteira, libera.
+        with open(saida / "conferido.csv", "w", encoding="utf-8") as arquivo:
+            arquivo.write("matricula;item;resposta\n")
+            for achado, _campo in conferencia.campos:
+                arquivo.write(f"{achado['matricula']};{achado['item']};C\n")
+        janela.recorrigir()
+        aplicacao.processEvents()
+        if not exportacao.botao.isEnabled():
+            falhas.append("a exportação continuou travada depois de a conferência ser "
+                          f"resolvida ({exportacao.resumo.text()})")
+        else:
+            from leitor import academico
+            linhas = academico.linhas_do_arquivo(
+                janela.sessao.pacote, janela.sessao.resultados, "E1_P2", 2026,
+                [exportacao.caixas[0][0]], serie=exportacao.serie)
+            alvo = academico.escrever(saida / "notas.txt", linhas)
+            bruto = alvo.read_bytes()
+            if len(linhas) != len(janela.sessao.pacote.elenco):
+                falhas.append(f"o TXT saiu com {len(linhas)} linha(s) para "
+                              f"{len(janela.sessao.pacote.elenco)} estudante(s)")
+            if b"\r\n" not in bruto or not bruto.startswith(b"ALUNO,DISCIPLINA"):
+                falhas.append("o TXT não saiu no formato do sistema acadêmico")
+
+        print(f"6 passos percorridos · {lote.lidas} folha(s) lida(s) · "
               f"{len(conferencia.campos)} na conferência · {tabela.rowCount()} no resultado")
 
     if falhas:
@@ -132,7 +169,7 @@ def main() -> int:
         for f in falhas:
             print(f"  · {f}", file=sys.stderr)
         return 1
-    print("\nPASSOU: a janela percorreu os cinco passos e cada tela mostrou o que devia.")
+    print("\nPASSOU: a janela percorreu os seis passos e cada tela mostrou o que devia.")
     return 0
 
 

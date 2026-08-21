@@ -96,6 +96,14 @@ def folha(t: dict[str, str] = CLARO) -> str:
     }}
     QPushButton[papel="rosa"] {{ background: {t['rosa']}; }}
     QPushButton[papel="rosa"]:hover {{ background: {_mistura('#ffffff', t['rosa'], .10)}; }}
+    /* Sem ESTA linha o botão rosa desligado continua rosa vivo: o seletor de
+       atributo empata em especificidade com o `:disabled` genérico lá de cima, e
+       quem empata por último vence. Ficava convidando ao clique exatamente nas
+       telas em que clicar é o que não pode — “Ler os cartões” sem lote escolhido,
+       “Gerar o arquivo” com a conferência por resolver. */
+    QPushButton[papel="rosa"]:disabled {{
+      background: {_mistura(t['rosa'], t['fundo'], .30)}; color: {t['papel']};
+    }}
 
     /* ---- campos ---- */
     QLineEdit {{
@@ -103,6 +111,31 @@ def folha(t: dict[str, str] = CLARO) -> str:
       background: {t['fundo']}; color: {t['ink']}; font-size: 14px;
     }}
     QLineEdit:focus {{ border-color: {t['azul']}; }}
+
+    QComboBox {{
+      border: 1.5px solid {t['borda']}; border-radius: 10px; padding: 7px 10px;
+      background: {t['fundo']}; color: {t['ink']}; font-size: 14px;
+    }}
+    QComboBox:focus {{ border-color: {t['azul']}; }}
+    QComboBox::drop-down {{ border: none; width: 18px; }}
+    QComboBox QAbstractItemView {{
+      background: {t['papel']}; color: {t['ink']};
+      selection-background-color: {t['azul-claro']}; selection-color: {t['ink']};
+      border: 1px solid {t['borda']}; border-radius: 8px; padding: 4px;
+    }}
+
+    /* A caixa de seleção é grande de propósito: quem marca os componentes está
+       escolhendo em que boletim a nota vai cair. Alvo pequeno erra. */
+    QCheckBox {{ font-size: 14px; color: {t['ink']}; spacing: 8px; padding: 2px 0; }}
+    QCheckBox::indicator {{
+      width: 17px; height: 17px; border: 1.5px solid {t['borda']};
+      border-radius: 5px; background: {t['papel']};
+    }}
+    QCheckBox::indicator:hover {{ border-color: {t['azul']}; }}
+    QCheckBox::indicator:checked {{
+      background: {t['azul']}; border-color: {t['azul']};
+      image: none;
+    }}
 
     /* ---- tabelas, como o table do sistema ---- */
     QTableWidget, QTableView {{

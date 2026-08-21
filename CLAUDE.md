@@ -402,6 +402,20 @@ passa e o leitor falha na secretaria.
   papel que ninguém tinha feito. Ao mexer na correção, lembre que são **quatro**
   estados por item, não três — e que `NULO` tem de sair antes da normalização do
   tipo B, que o transformaria num branco por não ter algarismo nenhum.
+- **O TXT do sistema acadêmico é contrato com um programa que já existe.**
+  Vírgula, CRLF, **latin-1** (não UTF-8), conceito com ponto e sem o `.0` do
+  inteiro, uma linha por estudante E por componente. Nada disso se descobriu
+  lendo documentação: veio do arquivo que a escola importou em 2025, e é contra
+  um trecho dele — anonimizado, porque matrícula de estudante não fica
+  versionada — que `testar-academico.py` compara byte a byte. **Esta é a única
+  nota deste projeto que entra na vida acadêmica do estudante**, e por isso a
+  exportação se RECUSA a acontecer enquanto houver marcação na fila de
+  conferência: nota provisória lançada lá ninguém descobre que era provisória.
+- **Regra de QSS que empata, quem vem por último vence.** `QPushButton[papel="rosa"]`
+  e `QPushButton:disabled` têm a mesma especificidade, e o rosa vinha depois: o
+  botão desligado continuava rosa vivo, convidando ao clique exatamente nas telas
+  em que clicar é o que não pode. Ao criar variante de botão, crie também a
+  `:disabled` dela.
 - **A janela é casca; o trabalho mora num lugar só.** O aplicativo local tem
   agora duas frentes — a janela (PySide6, `desktop/src/leitor/ui/`) e a linha de
   comando —, e as duas chamam `lote.ler_lote` e `apuracao.apurar`. Quando a
@@ -426,10 +440,8 @@ passa e o leitor falha na secretaria.
 
 ## A frente que continua aberta
 
-Do leitor óptico falta a **exportação em TXT da Nota Marista** para o sistema
-acadêmico da escola (à espera do arquivo de referência que descreve o formato) e
-falta **gerar e testar o `.exe`**, que tem de ser feito numa
-máquina Windows (`desktop/docs/instalacao.md`); a receita do PyInstaller está
-escrita e não foi executada. Falta também a **importação dos percentuais do
-discursivo**: o leitor os lê e grava em `percentuais.csv`, e o sistema ainda não
-os consome. Ver `desktop/README.md` e `docs/plano-implantacao.md`.
+Do leitor óptico falta a **importação dos percentuais do discursivo**: o leitor os
+lê e grava em `percentuais.csv`, e o sistema on-line ainda não os consome. O resto
+está de pé — o `.exe` foi gerado e rodado numa máquina Windows da escola, e a
+exportação das notas para o sistema acadêmico saiu com o arquivo de referência de
+2025 na mão. Ver `desktop/README.md` e `docs/plano-implantacao.md`.

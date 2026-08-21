@@ -560,15 +560,33 @@ a item, e o quadro de notas com o escore, a Nota Marista e a posição. E na
 conferência, clicar no recorte abre a marcação ampliada com um segundo recorte do
 papel em volta — de que item é, qual coluna, o que o vizinho recebeu.
 
+### A nota volta para a escola
+
+O último passo da janela é a **exportação para o sistema acadêmico**: um TXT com
+uma linha por estudante e por componente curricular, que a secretaria importa. O
+formato veio do arquivo que a escola importou em 2025 — vírgula, CRLF, latin-1,
+conceito com ponto — e é contra um trecho dele, anonimizado, que o teste compara
+byte a byte. O código de nove algarismos da disciplina (unidade + segmento +
+série + componente) sai da planilha de códigos da escola, resolvida série a série
+no `academico.py`.
+
+A tela pergunta só o que o aplicativo não tem como saber: o código da prova no
+calendário da escola (`E3_P3`), o ano, o turno e para quais componentes esta nota
+conta. E **se recusa a exportar enquanto houver marcação na fila de
+conferência**: é a única nota deste projeto que entra na vida acadêmica do
+estudante, e nota provisória lançada lá ninguém descobre que era provisória.
+
 ### O que falta
 
-Uma **exportação em TXT da Nota Marista** no formato que o sistema acadêmico
-importa — combinada com a coordenação, à espera do arquivo de referência que
-descreve o formato.
+O **`.exe`** foi gerado e rodado numa máquina Windows da escola, com o fluxo
+inteiro percorrido — três defeitos que só o Windows mostraria saíram daí e estão
+consertados (o `pyinstaller` fora do PATH numa instalação só para o usuário, o
+executável sem console e portanto mudo, e o `--entrada` que só aceitava pasta
+quando o scanner salva o lote num PDF).
 
-Gerar e testar o **`.exe`** com PyInstaller, o que tem de ser feito numa máquina
-Windows: a receita está em `desktop/empacotar.spec` e o caminho em
-`desktop/docs/instalacao.md`, mas ainda não foi executada.
+Do leitor, resta a **importação dos percentuais do discursivo** pelo sistema
+on-line: o leitor os lê e grava em `percentuais.csv`, e a tela de Correção ainda
+não os consome.
 
 ## Pendências operacionais
 
