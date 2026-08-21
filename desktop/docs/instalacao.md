@@ -34,8 +34,20 @@ ser um programa que se copia e se abre.
 git clone https://github.com/vdeaguasclaras/projeto_pas.git
 cd projeto_pas\desktop
 python -m pip install -r requirements.txt pyinstaller
-pyinstaller empacotar.spec
+python -m PyInstaller empacotar.spec
 ```
+
+**`python -m PyInstaller`, e não `pyinstaller` solto** (com as maiúsculas: é o nome
+do módulo). Quando o Python está instalado só para o usuário — que é o caso numa
+máquina administrativa, e o pip avisa com um *“Defaulting to user installation”* —
+os comandos vão parar em `AppData\Roaming\Python\PythonXXX\Scripts`, que não
+costuma estar no PATH. `pyinstaller empacotar.spec` responde *“não é reconhecido
+como um comando”* mesmo com o PyInstaller instalado e funcionando: o programa
+está lá, o Windows é que não sabe onde. Chamá-lo pelo `python -m` dispensa o PATH,
+como o `python -m pip` que instalou tudo.
+
+A compilação leva alguns minutos e imprime muita coisa. Terminou bem quando a
+última linha diz `Building COLLECT COLLECT-00.toc completed successfully`.
 
 Sai `dist\PAS-Leitor\`. É essa pasta inteira que vai para a secretaria — copiada
 para o disco, para um pendrive, para onde for. Dentro dela, **dois executáveis**:
@@ -73,7 +85,8 @@ Nada é enviado para lugar nenhum: o aplicativo não usa internet.
 
 ## Conferir na primeira geração no Windows
 
-Depois de `pyinstaller empacotar.spec`, dentro de `dist\PAS-Leitor\`:
+A pasta `dist\` nasce onde o comando foi rodado — em
+`…\projeto_pas\desktop\dist\PAS-Leitor\`. Lá dentro:
 
 ```powershell
 # 1. o executável abre e enxerga o pacote da prova?
