@@ -37,12 +37,26 @@ COR_VOCE = "#1d5cff"
 COR_TURMA = "#e5007e"
 
 # As faixas com que o PAS lê a proporção de acertos de um grupo de habilidades.
+# As faixas NÃO ganham cor própria, e é de propósito. Elas chegaram como quatro
+# quadradinhos coloridos numa legenda — e duas dessas cores eram as das barras
+# (o verde da média geral, o azul do estudante), dizendo ali outra coisa. Legenda
+# que aponta para uma cor que nenhuma barra usa não explica nada; pior, empresta
+# significado errado à cor que a barra ao lado está usando. O grau vai escrito
+# por extenso ao lado da SUA barra, e o rodapé diz de que proporção é cada nome.
 FAIXAS = [
-    (0.4, "Modesto", "#b9b1a8"),
-    (0.6, "Mediano", "#ffc224"),
-    (0.8, "Bom", "#0f8f57"),
-    (1.01, "Muito bom", "#1d5cff"),
+    (0.4, "Modesto"),
+    (0.6, "Mediano"),
+    (0.8, "Bom"),
+    (1.01, "Muito bom"),
 ]
+
+
+def _grau(proporcao: float) -> str:
+    """O nome que o PAS dá a este grau de desenvolvimento."""
+    for teto, nome in FAIXAS:
+        if proporcao < teto:
+            return nome
+    return FAIXAS[-1][1]
 
 # O que cada grupo de habilidades avalia, como a Matriz de Objetos de Avaliação
 # do PAS os define. Vai impresso porque o boletim vai para casa: “Criticar 0,60”
@@ -88,11 +102,13 @@ ESTILO = f"""
     font-variant-numeric:tabular-nums;color:#1b2340}}
   .hb.voce u,.hb.voce s{{font-weight:800;color:#0d2f8a}}
   .hb.voce .trilho{{height:12px}}
+  .grau{{font-size:7.5px;font-weight:700;color:#0d2f8a;background:#eef2ff;
+    border-radius:999px;padding:1px 6px;flex:none;width:46px;text-align:center;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .hb .grau.vazio{{background:none}}
   .desc{{font-size:8px;line-height:1.5;color:#5d6685;margin-bottom:8px}}
   .desc b{{color:#1b2340;font-size:8.5px}}
-  .faixas{{display:flex;gap:10px;flex-wrap:wrap;font-size:7.5px;color:#5d6685;margin-top:6px}}
-  .faixas i{{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:3px;
-    vertical-align:-1px}}
+  .faixas{{font-size:7.5px;color:#5d6685;margin-top:6px;line-height:1.5}}
   .legenda-marc{{background:#f6f8ff;border:1px solid #e3e7f4;border-radius:6px;padding:5px 10px;
     font-size:8px;color:#5d6685;margin:14px 0 8px;text-align:center}}
   .tipos{{display:grid;grid-template-columns:1fr 1fr;gap:14px}}
@@ -164,7 +180,9 @@ def _barras(resultado: Resultado, turma: dict[str, float], geral: dict[str, floa
         barras = "".join(
             f'<div class="hb{classe}"><u>{nome}</u><div class="trilho">'
             f'<i style="width:{max(1, round(valor * 100))}%;background:{cor}"></i></div>'
-            f'<s>{_num(valor)}</s></div>'
+            f'<s>{_num(valor)}</s>'
+            f'<span class="grau{"" if classe else " vazio"}">'
+            f'{_grau(valor) if classe else ""}</span></div>'
             for nome, valor, cor, classe in linhas)
         partes.append(f'<div class="grupo"><b>{_esc(grupo)} '
                       f'<span style="font-weight:400;color:#8a8178">({rotulo})</span></b>'
@@ -228,8 +246,9 @@ def html_de(pacote: Pacote, resultado: Resultado, turma: dict[str, float],
         f'<div class="desc"><b>{_esc(grupo)}</b> ({rotulo}) — {_esc(texto)}</div>'
         for grupo, (rotulo, texto) in GRUPOS_DESCRITOS.items()
         if grupo in pacote.escore.grupos)
-    faixas = "".join(f'<span><i style="background:{cor}"></i>{nome}</span>'
-                     for _teto, nome, cor in FAIXAS)
+    faixas = ("<b>Grau de desenvolvimento</b>, pela proporção de acertos do grupo: "
+              "Modesto, até 40% &nbsp;·&nbsp; Mediano, de 40% a 60% &nbsp;·&nbsp; "
+              "Bom, de 60% a 80% &nbsp;·&nbsp; Muito bom, 80% ou mais.")
 
     tabelas = [_tabela_de_tipo(resultado, "A", "A", 22)]
     lado = [_tabela_de_tipo(resultado, "B", "B", 8), _tabela_de_tipo(resultado, "C", "C", 12)]
