@@ -291,10 +291,18 @@ que os PRs entram, e é o push nela que republica sozinho — PR aberto contra o
 branch não chega ao ar.
 
 `main` foi trazida ao mesmo ponto (era só um avanço direto: a produção sempre
-descendeu dela) e as branches antigas foram encerradas. **Falta um clique para
-terminar a unificação**, e ele é no painel da Vercel, não aqui: *Settings → Git →
-Production Branch* → `main`. Depois disso, `main` passa a ser a branch de
-produção em todo lugar, e esta seção pode ser reescrita para dizer só isso.
+descendeu dela). **Faltam dois cliques para terminar a unificação**, e nenhum
+deles é aqui:
+
+1. no GitHub, *Settings → General → Default branch* → `main` — hoje o padrão do
+   repositório ainda é a branch de nome comprido, e é ela que abre ao entrar no
+   repositório e a que os PRs novos escolhem sozinhos;
+2. na Vercel, *Settings → Git → Production Branch* → `main`.
+
+São ajustes separados: mudar um não mexe no outro. Feitos os dois, `main` passa a
+ser a branch de produção em todo lugar, a antiga pode ser apagada (o GitHub não
+deixa apagar a branch padrão — por isso o clique 1 vem antes), e esta seção pode
+ser reescrita para dizer só isso.
 
 Enquanto o clique não acontece, as duas apontam para o mesmo commit — mas quem
 mandar só para `main` **não republica o site**.
