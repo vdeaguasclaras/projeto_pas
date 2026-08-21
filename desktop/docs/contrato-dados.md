@@ -260,11 +260,11 @@ contra o arquivo que a escola importou em 2025.
 
 ```
 ALUNO,DISCIPLINA,TURMA,ANO,PERIODO,PROVA,CONCEITO,COMPARECEU
-225210327,225031001,EM-1ªB-M,2025,0,E3_P3,1.4,S
+225210327,225031001,EM1BM,2025,0,E3_P3,1.4,S
 ```
 
 - Vírgula, **CRLF**, cabeçalho na primeira linha, codificação **ISO-8859-1** —
-  não UTF-8. O `ª` da turma é o único caractere fora do ASCII.
+  não UTF-8.
 - **Uma linha por estudante E por componente.** A mesma prova conta para vários
   componentes curriculares e todos recebem a mesma nota; quem escolhe quais é a
   coordenação, na tela de exportação.
@@ -272,8 +272,11 @@ ALUNO,DISCIPLINA,TURMA,ANO,PERIODO,PROVA,CONCEITO,COMPARECEU
   `03` médio) + série (`9`, `1`, `2`, `3`) + três do componente. A tabela dos três
   últimos veio da planilha de códigos da escola e está resolvida série a série no
   código — no 9º ano existe Ciências e não Biologia; na 1ª série é o contrário.
-- `TURMA` é a nomenclatura oficial (`EM-1ªB-M`), montada a partir da série da
-  prova e da letra da turma do elenco, que é texto livre.
+- `TURMA` é a nomenclatura oficial: `EM1BM` — segmento, série, turma e turno,
+  **sem separador nenhum**. Montada a partir da série da prova e da letra da
+  turma do elenco, que é texto livre (“1ª B”, “1B”). **O arquivo de 2025 traz
+  `EM-1ªB-M`, com hífens e ordinal, e é a única coisa dele que não se copia** —
+  a nomenclatura da escola hoje é a de cima.
 - `CONCEITO` é a **Nota Marista**, com ponto decimal, uma casa, e sem o `.0` do
   inteiro: `2`, `1.4`, `0`. `PERIODO` é sempre `0`. `COMPARECEU` é `S` ou `N` —
   quem não fez a prova entra com `N` e conceito `0`, porque deixá-lo de fora

@@ -7,10 +7,14 @@ documentação dele — descobriu-se lendo o arquivo de 2025 que a coordenação
 mandou. Este roteiro monta o mesmo arquivo pelo nosso caminho e compara
 **byte a byte** com aquele.
 
-`referencia/academico-2025.txt` é um trecho ANONIMIZADO do arquivo real: mesmas
-turmas, mesmos códigos de disciplina, mesma prova e mesmas notas, com duas
-matrículas inventadas no lugar das de verdade. O que precisa ficar versionado é o
-formato; matrícula de estudante, não.
+`referencia/academico-2025.txt` é um trecho ANONIMIZADO do arquivo real: mesmos
+códigos de disciplina, mesma prova e mesmas notas, com duas matrículas inventadas
+no lugar das de verdade. O que precisa ficar versionado é o formato; matrícula de
+estudante, não.
+
+**Um campo difere do arquivo de 2025, de propósito: a TURMA.** Lá ela vem
+`EM-1ªB-M`; a coordenação corrigiu para `EM1BM`, sem separador nenhum, que é a
+nomenclatura oficial da escola. O resto é copiado como está.
 
     python3 desktop/testes/testar-academico.py
 """
@@ -53,9 +57,9 @@ def main() -> int:
     falhas: list[str] = []
     serie = "1ª série EM"
     # A turma do elenco é texto livre, e é assim que a coordenação a digita.
-    # Sair daqui como `EM-1ªA-M` é metade do teste.
+    # Sair daqui como `EM1AM` é metade do teste.
     elenco = [Estudante("225000001", "ESTUDANTE UM", "1ª A", "regular"),
-              Estudante("225000002", "ESTUDANTE DOIS", "1ª C", "adaptada")]
+              Estudante("225000002", "ESTUDANTE DOIS", "1ª C", "adaptada")]  # → EM1AM, EM1CM
     pacote = SimpleNamespace(elenco=elenco,
                              molde=SimpleNamespace(prova={"serie": serie}))
     resultados = [_resultado(elenco[0], 1.4), _resultado(elenco[1], 2.0)]
@@ -86,13 +90,15 @@ def main() -> int:
         # E o que o byte a byte não mostraria se as duas pontas estivessem erradas.
         if b"\r\n" not in saiu:
             falhas.append("o arquivo saiu sem CRLF")
-        if "ª".encode("latin-1") not in saiu:
-            falhas.append("o “ª” da turma não saiu em latin-1")
-        try:
-            saiu.decode("utf-8")
-            falhas.append("o arquivo saiu legível como UTF-8 — a acentuação não é latin-1")
-        except UnicodeDecodeError:
-            pass
+
+        # A codificação não aparece mais no conteúdo — com a turma sem ordinal,
+        # o arquivo inteiro é ASCII. Então se prova onde ela importa: um valor
+        # acentuado tem de sair em latin-1 (0xC7), não nos dois bytes do UTF-8.
+        acentuado = Path(temporario) / "acento.txt"
+        academico.escrever(acentuado, [["225000001", "225031001", "EM1AM", "2025", "0",
+                                        "E3_P3", "1.4", "Ç"]])
+        if b"\xc7" not in acentuado.read_bytes():
+            falhas.append("o arquivo não saiu em latin-1")
 
     # O código de nove algarismos, decomposto — o exemplo que a coordenação deu.
     if disciplinas.get("Língua Portuguesa") != "225031001":
@@ -104,11 +110,18 @@ def main() -> int:
                       f"veio Ciências={nono.get('Ciências')}, Biologia={nono.get('Biologia')}")
 
     # A turma livre, em suas formas conhecidas, e a que já vem pronta.
-    for livre, esperado in (("1ª A", "EM-1ªA-M"), ("1B", "EM-1ªB-M"), ("1 c", "EM-1ªC-M"),
-                            ("EM-1ªB-M", "EM-1ªB-M")):
+    for livre, esperado in (("1ª A", "EM1AM"), ("1B", "EM1BM"), ("1 c", "EM1CM"),
+                            ("1º B", "EM1BM"), ("1BM", "EM1BM"),
+                            # Já no formato oficial, passa direto. E o do arquivo
+                            # de 2025 se converte, em vez de virar EM1MM — o “M”
+                            # de “EM” não pode disputar a letra da turma.
+                            ("EM1BM", "EM1BM"), ("EM-1ªB-M", "EM1BM")):
         veio = academico.turma_oficial(livre, serie, "M")
         if veio != esperado:
             falhas.append(f"turma {livre!r}: esperava {esperado}, veio {veio}")
+    if academico.turma_oficial("9º C", "9º ano", "V") != "EF9CV":
+        falhas.append("no 9º ano vespertino a turma tinha de ser EF9CV, veio "
+                      + academico.turma_oficial("9º C", "9º ano", "V"))
 
     # O conceito, com e sem casa decimal.
     for nota, esperado in ((2.0, "2"), (1.4, "1.4"), (0.0, "0"), (None, "0"), (1.25, "1.2")):
@@ -145,8 +158,8 @@ def main() -> int:
         for f in falhas:
             print(f"  · {f}", file=sys.stderr)
         return 1
-    print(f"{len(escolhidas)} disciplina(s) × {len(elenco)} estudante(s) — "
-          f"igual byte a byte ao arquivo que a escola importou em 2025")
+    print(f"{len(escolhidas)} disciplina(s) × {len(elenco)} estudante(s) — igual byte a byte "
+          f"ao arquivo de 2025, com a turma na nomenclatura corrigida")
     print("\nPASSOU: o TXT sai no formato do sistema acadêmico, e recusa o que não pode lançar.")
     return 0
 

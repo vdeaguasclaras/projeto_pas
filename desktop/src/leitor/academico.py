@@ -11,11 +11,15 @@ aqui, por extenso, e conferido contra o arquivo de referência por
 `desktop/testes/testar-academico.py`:
 
     ALUNO,DISCIPLINA,TURMA,ANO,PERIODO,PROVA,CONCEITO,COMPARECEU
-    225210327,225031001,EM-1ªB-M,2025,0,E3_P3,1.4,S
+    225210327,225031001,EM1BM,2025,0,E3_P3,1.4,S
 
 - separador **vírgula**, fim de linha **CRLF**, e a primeira linha é o cabeçalho;
 - codificação **ISO-8859-1** (latin-1), não UTF-8 — é o que o arquivo de
-  referência traz, e o “ª” da turma é o único caractere que sai do ASCII;
+  referência traz;
+- `TURMA` é `EM1BM`: segmento, série, turma e turno, **sem separador**. O arquivo
+  de 2025 traz `EM-1ªB-M`, com hífens e ordinal, e é a única coisa dele que NÃO
+  se copia — a nomenclatura oficial da escola hoje é a de cima, e quem disse foi
+  a coordenação;
 - `CONCEITO` com **ponto** decimal e uma casa, e sem o `.0` quando é inteiro:
   `2`, `1.4`, `0`. É a Nota Marista — o percentual de acerto na escala de 2
   pontos —, a mesma para todos os componentes escolhidos;
@@ -97,6 +101,11 @@ DISCIPLINAS: list[tuple[str, str, dict[str, str | None]]] = [
                                          "2ª série EM": "018", "3ª série EM": "018"}),
 ]
 
+# `EM1BM`: segmento, série, turma e turno, sem separador nenhum. Quem já vem
+# assim do elenco passa direto.
+PADRAO_DA_TURMA = re.compile(r"^(EF|EM)\d[A-Z][MVN]$")
+TURNOS = "MVN"
+
 # Unidade, segmento e o algarismo da série, para montar o código de nove.
 UNIDADE = "225"
 SEGMENTOS = {"9º ano": ("02", "EF", "9º"), "1ª série EM": ("03", "EM", "1ª"),
@@ -136,20 +145,31 @@ def disciplinas_da_serie(serie: str) -> list[tuple[str, str, str]]:
 
 
 def turma_oficial(turma: str, serie: str, turno: str = "M") -> str:
-    """A turma na nomenclatura do sistema acadêmico: `EM-1ªB-M`.
+    """A turma na nomenclatura do sistema acadêmico: `EM1BM`.
 
-    A turma do elenco é texto livre — a coordenação digita “1ª B”, “1B”, “1 B”.
-    O sistema acadêmico não perdoa nenhuma dessas. Quem já vier no formato dele
+    Segmento (EF/EM), série, turma e turno, **sem separador nenhum** — nem hífen,
+    nem o ordinal. O arquivo de 2025 traz `EM-1ªB-M`; a coordenação corrigiu, e a
+    nomenclatura oficial é esta.
+
+    A turma do elenco é texto livre: a coordenação digita “1ª B”, “1B”, “1 B”. O
+    sistema acadêmico não perdoa nenhuma delas. Quem já vier no formato dele
     passa intacta; do resto se aproveita a LETRA, e o segmento e a série saem da
     prova, que é onde eles estão certos por construção.
     """
-    limpa = (turma or "").strip()
-    if re.match(r"^(EF|EM)-\d[ºª][A-Z]-[A-Z]$", limpa, re.IGNORECASE):
-        return limpa.upper()
+    limpa = re.sub(r"[^0-9A-Z]", "",
+                   (turma or "").upper().replace("ª", "").replace("º", ""))
+    if PADRAO_DA_TURMA.match(limpa):
+        return limpa
     _segmento, sigla, rotulo = SEGMENTOS[serie]
-    letras = re.findall(r"[A-Za-z]", limpa.upper().replace("ª", "").replace("º", ""))
-    letra = letras[-1] if letras else "A"
-    return f"{sigla}-{rotulo}{letra}-{turno.upper()}"
+    # Tira o segmento, se veio junto: senão o “M” de “EM” entra na disputa pela
+    # letra da turma, e “EM-1ªB-M” viraria EM1MM.
+    corpo = limpa[2:] if limpa[:2] in ("EF", "EM") else limpa
+    partes = re.split(r"\d", corpo, maxsplit=1)
+    letras = re.findall(r"[A-Z]", partes[-1] if len(partes) > 1 else corpo)
+    # Turma que já traz o turno colado (“1BM”): o último é o turno, não a turma.
+    if len(letras) >= 2 and letras[-1] in TURNOS:
+        letras = letras[:-1]
+    return f"{sigla}{rotulo[0]}{letras[0] if letras else 'A'}{turno.upper()}"
 
 
 def conceito(nota: float | None) -> str:
