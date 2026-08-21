@@ -65,13 +65,21 @@ escola (nove algarismos começando em `225`), que vem no gabarito junto com a
 geometria. Fora do padrão, a folha vai para a fila de conferência, com as
 marcações já lidas junto.
 
-**3. A pontuação não está escrita aqui.** O aplicativo corrige e monta os
+**3. A pontuação não está escrita aqui, e são duas notas.** O aplicativo corrige e monta os
 boletins, e o sistema on-line também corrige — a mesma prova, duas
 implementações. Quanto vale cada resposta vem da **tabela de pesos que o pacote
 traz**, a mesma que o sistema usa. Regra escrita em dois lugares diverge em
 silêncio, e nota de prova ninguém confere contra uma segunda implementação:
 descobre-se pelo estudante que reclama. Um teste faz os dois lados corrigirem as
 mesmas marcações e compara nota a nota.
+
+O boletim traz **duas notas**, porque são duas perguntas. O **escore do PAS**
+desconta erro e pode ser negativo — é o que prepara para a prova de verdade, e é
+por ele que se ordena a turma. A **Nota Marista** é a fração da prova que o
+estudante acertou, sem desconto, na escala em que a escola lança nota; o
+discursivo entra proporcional à nota recebida, e o que ainda não foi corrigido
+sai da conta em vez de contar como erro. A escala vem no pacote
+(`escore.marista`), como os pesos.
 
 **4. Nada duvidoso vira resposta.** Dupla marcação, alvéolo a meio caminho, tipo
 B com uma coluna vazia, faixa que não fecha: tudo isso sai em
@@ -132,7 +140,7 @@ desktop/
 │   ├── pacote.py              ← o pacote da prova: elenco, notas e pesos
 │   ├── correcao.py            ← escore, desempenho por grupo e posição
 │   ├── apuracao.py            ← das marcações à planilha e aos boletins
-│   ├── boletim.py             ← o boletim individual, no desenho do sistema
+│   ├── boletim.py             ← o boletim individual, no desenho do boletim do PAS
 │   ├── ui/                    ← a janela (PySide6) e o tema vindo do CSS
 │   ├── molde.py               ← a geometria que veio do gabarito v4
 │   ├── imagem.py              ← ingestão de PDF/JPEG/PNG
@@ -154,6 +162,13 @@ Cinco passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
 **Conferência** (o que ficou em dúvida, com o pedaço do papel ao lado e um campo
 para corrigir), **Resultados** (a planilha) e **Boletins**. Um passo só abre
 quando o anterior deu o que ele precisa.
+
+Na conferência, **clicar no recorte abre a marcação ampliada**, e ao lado dela um
+segundo recorte com o pedaço da folha em volta. O recorte justo mostra o alvéolo;
+o de contexto mostra de que item ele é, qual a coluna e o que o vizinho recebeu —
+que é o que a pessoa precisa para decidir sem ir buscar o papel na pilha. No tipo
+B o recorte justo já vem com a coluna dos algarismos, porque o alvéolo sozinho
+não diz nada ali.
 
 O desenho é o do sistema on-line, e as cores vêm de lá **de verdade**:
 `ferramentas/extrair-tema.py` lê o `:root` do `css/estilo.css` e gera
@@ -197,7 +212,7 @@ Sai em `./resultado`:
 | `respostas_conferir.csv` | o que precisa de olho humano, com o motivo |
 | `percentuais.csv` | os percentuais de acerto do discursivo, quando marcados |
 | `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
-| `resultados.csv` | acertos, erros, brancos, escore, redação, posição e desempenho por grupo |
+| `resultados.csv` | acertos, erros, brancos, escore do PAS, % de acerto, Nota Marista, redação, posição e desempenho por grupo |
 | `boletins.html` | o boletim de desempenho de cada estudante, pronto para imprimir |
 | `conferencia.html` | a fila de conferência com a imagem de cada marcação duvidosa |
 | `conferencia/*.png` | os recortes e as miniaturas das folhas que caíram na fila |

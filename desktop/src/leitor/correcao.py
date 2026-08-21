@@ -60,6 +60,34 @@ class Resultado:
     tem_resposta: bool = False
     posicao: int = 0
     de: int = 0
+    # A segunda nota — ver `percentual`. `acertos_marista` é fracionário porque
+    # o discursivo entra proporcional à nota lançada.
+    acertos_marista: float = 0.0
+    itens_avaliaveis: int = 0
+    escala_marista: float = 2.0
+
+    @property
+    def percentual(self) -> float | None:
+        """A fração da prova que o estudante acertou — sem desconto, sem peso.
+
+        Outra pergunta que o escore bruto do PAS: ele desconta erro e pode ser
+        negativo, e nenhuma família já viu isso num boletim. Este número é o que
+        a escola lança, e é o que qualquer pessoa entende sem explicação.
+
+        `None` quando não há item avaliável nenhum — prova sem resposta, ou só
+        com discursivo ainda por corrigir. Zero e “não dá para calcular” são
+        coisas diferentes, e mostrar 0% no lugar de “—” afirmaria uma nota que
+        ninguém apurou.
+        """
+        if not self.itens_avaliaveis:
+            return None
+        return self.acertos_marista / self.itens_avaliaveis
+
+    @property
+    def nota_marista(self) -> float | None:
+        """O percentual convertido para a escala em que a escola lança nota."""
+        proporcao = self.percentual
+        return None if proporcao is None else proporcao * self.escala_marista
 
 
 def nota_da_redacao(redacao: dict | None) -> float | None:
@@ -95,7 +123,8 @@ def corrigir(pacote: Pacote, estudante: Estudante,
     escore = pacote.escore
     notas = pacote.notas.get(estudante.matricula)
     itens = pacote.molde.itens_da_versao(estudante.versao)
-    resultado = Resultado(estudante=estudante, total_itens=len(itens))
+    resultado = Resultado(estudante=estudante, total_itens=len(itens),
+                          escala_marista=escore.escala_marista)
     for grupo in escore.grupos:
         resultado.por_grupo[grupo] = Acertos()
 
@@ -112,6 +141,11 @@ def corrigir(pacote: Pacote, estudante: Estudante,
                 grupo.total += 1
                 grupo.acertos += nota / escala
                 resultado.discursivas_lancadas += 1
+                # Proporcional: 8,5 num item vale 0,85 de um acerto. Discursivo
+                # ainda não corrigido não entra nem como acerto nem como item —
+                # seria virar erro por atraso de quem corrige.
+                resultado.acertos_marista += nota / escala
+                resultado.itens_avaliaveis += 1
             continue
 
         marcada = str(marcacoes.get(item["numero"], "") or "").strip().upper()
@@ -134,6 +168,9 @@ def corrigir(pacote: Pacote, estudante: Estudante,
         grupo.total += 1
         if certa:
             grupo.acertos += 1
+        resultado.itens_avaliaveis += 1
+        if certa:
+            resultado.acertos_marista += 1
         resultado.detalhes.append(
             Detalhe(item["numero"], item["tipo"], esperada, marcada or None, certa))
 

@@ -65,13 +65,19 @@ def apurar(pacote: Pacote, marcacoes: dict, saida_dir: Path):
             r.estudante.matricula, r.estudante.nome, r.estudante.turma, r.estudante.versao,
             r.acertos, r.erros, r.brancos,
             f"{r.escore:.2f}".replace(".", ","),
+            # As duas notas, lado a lado: a do PAS (com desconto) e a da escola
+            # (acertos sobre itens). São perguntas diferentes, e a planilha traz
+            # as duas para ninguém precisar recalcular uma a partir da outra.
+            "" if r.percentual is None else f"{r.percentual * 100:.1f}".replace(".", ","),
+            "" if r.nota_marista is None else f"{r.nota_marista:.2f}".replace(".", ","),
             "" if r.nr is None else f"{r.nr:.1f}".replace(".", ","),
             r.posicao or "", r.de or "",
             *[f"{r.por_grupo[g].proporcao:.2f}".replace(".", ",")
               if g in r.por_grupo and r.por_grupo[g].total else "" for g in pacote.escore.grupos],
         ])
     cabecalho = ["matricula", "nome", "turma", "versao", "certas", "erradas", "brancos",
-                 "escore_bruto", "redacao_nr", "posicao", "de",
+                 "escore_bruto", "percentual_acerto", "nota_marista", "redacao_nr",
+                 "posicao", "de",
                  *[f"grupo_{g.lower()}" for g in pacote.escore.grupos]]
     saida_dir.mkdir(parents=True, exist_ok=True)
     with (saida_dir / "resultados.csv").open("w", encoding="utf-8", newline="") as arquivo:

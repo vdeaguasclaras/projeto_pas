@@ -381,6 +381,16 @@ passa e o leitor falha na secretaria.
   faz os dois corrigirem as mesmas marcações e compara nota a nota; ao mexer na
   pontuação (a fase 5 vai mexer), mexa na tabela e rode esse teste.
 
+- **São DUAS notas, e a segunda não é o escore com outro nome.** O escore do PAS
+  desconta erro e pode ser negativo — certo para preparar para a prova, errado
+  como nota de boletim. Ao lado dele vai a **Nota Marista**: a fração da prova
+  acertada, sem desconto e sem peso por tipo, na escala da escola
+  (`NOTA_MARISTA`, js/dados.js, que viaja no pacote como `escore.marista`). O
+  discursivo entra **proporcional à nota** lançada, e o que ainda não foi
+  corrigido sai da conta inteiro — do numerador **e** do denominador. Contá-lo
+  como erro transformaria atraso de quem corrige em nota baixa do estudante; e
+  mostrar 0% quando não há item avaliável afirmaria uma nota que ninguém apurou,
+  por isso `percentual` devolve `None`, não zero.
 - **A janela é casca; o trabalho mora num lugar só.** O aplicativo local tem
   agora duas frentes — a janela (PySide6, `desktop/src/leitor/ui/`) e a linha de
   comando —, e as duas chamam `lote.ler_lote` e `apuracao.apurar`. Quando a
@@ -388,6 +398,15 @@ passa e o leitor falha na secretaria.
   copiá-lo; copiar regra entre cascas é o mesmo erro do escore escrito duas
   vezes, só que mais fácil de cometer. Se for preciso “só chamar aquela função
   privada da outra casca”, o lugar dela está errado.
+- **Coluna de tabela do Qt: a conta da largura é sua.** `ResizeToContents` em
+  todas as colunas somava mais que a janela e jogava a última — a posição na
+  turma — para trás de uma barra de rolagem; `Stretch` no nome faz o contrário e
+  o espreme a nada quando as outras estouram. Quem decide é
+  `_ajustar_nome()`: sobra = viewport − as outras, com piso e teto, refeita a
+  cada `resizeEvent` e a cada carga. E título de coluna é largura: a coluna se
+  ajusta ao maior entre o cabeçalho e o conteúdo, e aqui o cabeçalho quase sempre
+  ganha — “Escore PAS” custava 25px para dizer o que a dica ao pousar o ponteiro
+  diz de graça.
 - **As cores da janela vêm do CSS do sistema, por ferramenta.**
   `desktop/ferramentas/extrair-tema.py` lê o `:root` do `css/estilo.css` e gera
   `ui/tema.py`. Não acerte cor à mão do lado do Qt: dois azuis quase iguais, e
@@ -396,7 +415,9 @@ passa e o leitor falha na secretaria.
 
 ## A frente que continua aberta
 
-Do leitor óptico falta **gerar e testar o `.exe`**, que tem de ser feito numa
+Do leitor óptico falta a **exportação em TXT da Nota Marista** para o sistema
+acadêmico da escola (à espera do arquivo de referência que descreve o formato) e
+falta **gerar e testar o `.exe`**, que tem de ser feito numa
 máquina Windows (`desktop/docs/instalacao.md`); a receita do PyInstaller está
 escrita e não foi executada. Falta também a **importação dos percentuais do
 discursivo**: o leitor os lê e grava em `percentuais.csv`, e o sistema ainda não

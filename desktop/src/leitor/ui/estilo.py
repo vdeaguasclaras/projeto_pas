@@ -106,10 +106,10 @@ def folha(t: dict[str, str] = CLARO) -> str:
     }}
     QHeaderView::section {{
       background: {t['papel']}; color: {t['ink-2']}; border: none;
-      border-bottom: 2px solid {t['borda']}; padding: 8px 7px;
+      border-bottom: 2px solid {t['borda']}; padding: 7px 5px;
       font-size: 11px; font-weight: 700;
     }}
-    QTableWidget::item {{ border-bottom: 1px solid {t['borda']}; padding: 8px 7px; }}
+    QTableWidget::item {{ border-bottom: 1px solid {t['borda']}; padding: 7px 5px; }}
 
     /* ---- progresso ---- */
     QProgressBar {{
