@@ -14,8 +14,15 @@ Duas escolhas que valem explicação:
   temporário a cada abertura, e com OpenCV dentro isso leva dezenas de segundos
   — quem abre acha que travou. A pasta abre na hora.
 - **sem console.** É um programa de janela; um prompt preto atrás dela assusta
-  quem não é da área. Em compensação, a linha de comando (`ler`, `corrigir`,
-  `conferir`) não mostra saída no `.exe`: para usá-la, rode pelo código-fonte.
+  quem não é da área. Só que, sem console, o Windows não dá saída nenhuma ao
+  processo: `print` cai no vazio, e a linha de comando (`ler`, `corrigir`,
+  `conferir`) fica muda — inclusive na hora de conferir se o pacote saiu inteiro,
+  que é justamente quando se precisa ler o que ele diz. Por isso saem DOIS
+  executáveis da mesma análise, na mesma pasta: `PAS-Leitor.exe`, o de clicar
+  duas vezes, e `PAS-Leitor-terminal.exe`, o mesmo programa com console — para o
+  teste da primeira geração e para o dia em que alguém precisar ver o erro que a
+  janela não mostrou. Custam um executável a mais cada um; o resto da pasta é
+  compartilhado.
 """
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
@@ -46,8 +53,17 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
 )
+# O mesmo programa, com console. Nasce da MESMA análise: mesma biblioteca, mesmo
+# código, só a janelinha preta a mais. Duas análises seriam duas cópias de tudo.
+exe_terminal = EXE(
+    pyz, a.scripts, [],
+    exclude_binaries=True,
+    name='PAS-Leitor-terminal',
+    console=True,
+    disable_windowed_traceback=False,
+)
 coll = COLLECT(
-    exe, a.binaries, a.datas,
+    exe, exe_terminal, a.binaries, a.datas,
     strip=False, upx=False,
     name='PAS-Leitor',
 )
