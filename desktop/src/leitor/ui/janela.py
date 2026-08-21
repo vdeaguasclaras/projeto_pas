@@ -15,18 +15,21 @@ from __future__ import annotations
 
 import csv
 import sys
+from datetime import date
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-    QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSizePolicy,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame, QGridLayout,
+    QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QScrollArea, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
+from .. import academico
 from ..apuracao import apurar, marcacoes_de
 from ..correcao import NULO, Resultado
 from ..imagem import digitalizacoes
@@ -35,7 +38,8 @@ from ..molde import GabaritoIncompativel
 from ..pacote import Pacote, carregar
 from .estilo import folha
 
-PASSOS = ["Prova", "Ler cartões", "Conferência", "Resultados", "Boletins"]
+PASSOS = ["Prova", "Ler cartões", "Conferência", "Resultados", "Boletins",
+          "Exportar notas"]
 
 
 @dataclass
@@ -636,6 +640,169 @@ class PaginaBoletins(QWidget):
         self.abrir.setEnabled(existe)
 
 
+class PaginaExportacao(QWidget):
+    """Passo 6 — o TXT que o sistema acadêmico importa.
+
+    A tela pergunta só o que o aplicativo não tem como saber: qual é a prova no
+    calendário da escola (`E3_P3`), o ano, o turno e para quais componentes esta
+    nota conta. O resto — matrícula, turma, nota, código de nove algarismos —
+    sai do pacote e da correção.
+    """
+
+    def __init__(self, janela: "Janela"):
+        super().__init__()
+        self.janela = janela
+        self.serie: str | None = None
+        self.caixas: list[tuple[str, QCheckBox]] = []
+
+        self.prova = QLineEdit()
+        self.prova.setPlaceholderText("ex.: E3_P3")
+        self.prova.setFixedWidth(120)
+        self.prova.textChanged.connect(self._recontar)
+        self.ano = QLineEdit(str(date.today().year))
+        self.ano.setFixedWidth(80)
+        self.turno = QComboBox()
+        self.turno.addItems(["M", "V", "N"])
+        self.turno.setFixedWidth(70)
+        self.turno.currentTextChanged.connect(self._recontar)
+
+        self.grade = QWidget()
+        self.colunas = QGridLayout(self.grade)
+        self.colunas.setContentsMargins(0, 0, 0, 0)
+        self.colunas.setHorizontalSpacing(18)
+        self.colunas.setVerticalSpacing(4)
+        rolagem = QScrollArea()
+        rolagem.setWidgetResizable(True)
+        rolagem.setWidget(self.grade)
+        rolagem.setMinimumHeight(190)
+
+        self.pendencia = rotulo("", "pendencia")
+        self.pendencia.setVisible(False)
+        self.resumo = rotulo("", "sub")
+        self.botao = botao("Gerar o arquivo…", "rosa", self.gerar)
+        self.botao.setEnabled(False)
+
+        coluna = QVBoxLayout(self)
+        coluna.setContentsMargins(0, 0, 0, 0)
+        coluna.addWidget(quadro(
+            rotulo("Exportar as notas para o sistema acadêmico", "titulo"),
+            rotulo("Um arquivo .txt com uma linha por estudante e por componente. A nota é a "
+                   "Nota Marista — a mesma para todos os componentes escolhidos, porque a prova "
+                   "é uma só. Esta nota vai para o histórico escolar: confira a prova e o ano "
+                   "antes de gerar.", "sub"),
+            self.pendencia,
+            linha(rotulo("Prova", "secao"), self.prova,
+                  rotulo("Ano", "secao"), self.ano,
+                  rotulo("Turno", "secao"), self.turno, None),
+            rotulo("Componentes curriculares que recebem esta nota", "secao"),
+            rolagem, self.resumo, linha(self.botao, None)))
+
+    def mostrar(self, pacote: Pacote | None, resultados: list[Resultado]) -> None:
+        # O que já estava marcado sobrevive à remontagem. Esta tela é redesenhada
+        # a cada “Aplicar e recorrigir”, e resolver a conferência é justamente o
+        # que se faz ANTES de exportar: sem isto, quem marcasse os seis
+        # componentes, fosse resolver uma dúvida e voltasse, encontraria tudo
+        # desmarcado — e o botão desligado, sem dizer por quê.
+        marcadas = {nome for nome, caixa in self.caixas if caixa.isChecked()}
+        while self.colunas.count():
+            item = self.colunas.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.caixas.clear()
+        self.serie = None
+        if pacote is None:
+            return
+        try:
+            self.serie = academico.serie_do_pacote(pacote)
+        except academico.NaoDaParaExportar as erro:
+            self.resumo.setText(str(erro))
+            return
+        # A prova traz a etapa; o número da prova é da escola, não do sistema.
+        etapa = str(pacote.molde.prova.get("etapa") or "")
+        if etapa and etapa[0].isdigit() and not self.prova.text():
+            self.prova.setPlaceholderText(f"ex.: E{etapa[0]}_P3")
+
+        linha_atual, area_anterior = 0, None
+        for area, nome, codigo in academico.disciplinas_da_serie(self.serie):
+            if area != area_anterior:
+                etiqueta = rotulo(area, "secao")
+                self.colunas.addWidget(etiqueta, linha_atual, 0, 1, 2)
+                linha_atual, area_anterior = linha_atual + 1, area
+            caixa = QCheckBox(nome)
+            caixa.setToolTip(f"Código da disciplina nesta série: {codigo}")
+            caixa.setChecked(nome in marcadas)
+            caixa.stateChanged.connect(self._recontar)
+            self.colunas.addWidget(caixa, linha_atual, 0)
+            self.colunas.addWidget(rotulo(codigo, "sub"), linha_atual, 1)
+            self.caixas.append((nome, caixa))
+            linha_atual += 1
+        self.colunas.setRowStretch(linha_atual, 1)
+
+        pendentes = sum(r.pendentes for r in resultados)
+        if pendentes:
+            self.pendencia.setText(
+                f"⚠ {pendentes} marcação(ões) continuam na Conferência, e esta nota vai para o "
+                f"histórico escolar. Resolva o passo 3 antes de exportar — nota provisória "
+                f"lançada no sistema acadêmico ninguém descobre que era provisória.")
+        self.pendencia.setVisible(bool(pendentes))
+        self._recontar()
+
+    def _escolhidas(self) -> list[str]:
+        return [nome for nome, caixa in self.caixas if caixa.isChecked()]
+
+    def _recontar(self) -> None:
+        """Diz de antemão o que vai sair — quantas linhas, e como fica a turma."""
+        resultados = self.janela.sessao.resultados
+        escolhidas = self._escolhidas()
+        pendentes = sum(r.pendentes for r in resultados)
+        valido = bool(escolhidas and self.serie and not pendentes
+                      and academico.PADRAO_DA_PROVA.match(self.prova.text().strip().upper()))
+        self.botao.setEnabled(valido)
+        if not self.serie:
+            return
+        quantos = len(self.janela.sessao.pacote.elenco) if self.janela.sessao.pacote else 0
+        sem_prova = sum(1 for r in resultados if not r.tem_resposta)
+        turmas = sorted({academico.turma_oficial(e.turma, self.serie, self.turno.currentText())
+                         for e in (self.janela.sessao.pacote.elenco if
+                                   self.janela.sessao.pacote else [])})
+        partes = [f"{quantos * len(escolhidas)} linha(s): {quantos} estudante(s) × "
+                  f"{len(escolhidas)} componente(s)"]
+        if turmas:
+            partes.append("turmas " + ", ".join(turmas))
+        if sem_prova:
+            partes.append(f"{sem_prova} sem prova, que saem com 0 e COMPARECEU=N")
+        self.resumo.setText(" · ".join(partes) + ".")
+
+    def gerar(self) -> None:
+        sessao = self.janela.sessao
+        if not (sessao.pacote and self.serie):
+            return
+        prova = self.prova.text().strip().upper()
+        try:
+            ano = int(self.ano.text().strip())
+        except ValueError:
+            QMessageBox.warning(self, "Ano inválido",
+                                "O ano tem de ser um número de quatro algarismos, como 2026.")
+            return
+        try:
+            linhas = academico.linhas_do_arquivo(
+                sessao.pacote, sessao.resultados, prova, ano, self._escolhidas(),
+                turno=self.turno.currentText(), serie=self.serie)
+        except academico.NaoDaParaExportar as erro:
+            QMessageBox.warning(self, "Não dá para exportar", str(erro))
+            return
+        sugerido = (sessao.saida or Path()) / academico.nome_sugerido(prova, self.serie)
+        caminho, _filtro = QFileDialog.getSaveFileName(
+            self, "Salvar o arquivo de notas", str(sugerido), "Arquivo de texto (*.txt)")
+        if not caminho:
+            return
+        alvo = academico.escrever(Path(caminho), linhas)
+        QMessageBox.information(
+            self, "Arquivo gerado",
+            f"{len(linhas)} linha(s) em {alvo.name}.\n\nConfira uma linha antes de importar: "
+            f"matrícula, código da disciplina, turma e nota.")
+
+
 # ------------------------------------------------------------------- a janela
 
 class Janela(QMainWindow):
@@ -646,7 +813,7 @@ class Janela(QMainWindow):
         self.resize(1280, 800)
 
         self.paginas = [PaginaProva(self), PaginaLeitura(self), PaginaConferencia(self),
-                        PaginaResultados(self), PaginaBoletins(self)]
+                        PaginaResultados(self), PaginaBoletins(self), PaginaExportacao(self)]
         self.pilha = QStackedWidget()
         for pagina in self.paginas:
             self.pilha.addWidget(pagina)
@@ -712,6 +879,7 @@ class Janela(QMainWindow):
                   self.sessao.pacote is not None,
                   self.sessao.lote is not None,
                   bool(self.sessao.resultados),
+                  bool(self.sessao.resultados),
                   bool(self.sessao.resultados)]
         for i, aberto in enumerate(pronto):
             item = self.passos.item(i)
@@ -752,6 +920,7 @@ class Janela(QMainWindow):
         sessao.resultados, _, _ = apurar(sessao.pacote, marcacoes, sessao.saida)
         self.paginas[3].mostrar(sessao.resultados)
         self.paginas[4].mostrar(sessao.resultados, sessao.saida)
+        self.paginas[5].mostrar(sessao.pacote, sessao.resultados)
         self._atualizar_passos()
 
 

@@ -1,11 +1,14 @@
 # Instalar o leitor na máquina da secretaria
 
-> **Estado: a receita foi ensaiada duas vezes e o pacote roda; falta gerar no
-> Windows.**
-> O PyInstaller não produz executável de Windows a partir de outro sistema, então
-> o `.exe` em si continua por fazer. O ensaio foi feito em Linux, e serviu para o
-> que ensaio serve: encontrar o que está errado na receita antes de alguém perder
-> a tarde com ela.
+> **Estado: gerado e rodado no Windows.** A coordenação seguiu esta receita numa
+> máquina da escola (Windows, Python 3.14, instalação só para o usuário), gerou o
+> pacote e percorreu o fluxo inteiro — ler, conferir, resultados, boletins.
+>
+> Antes disso a receita foi ensaiada em Linux, e o ensaio serviu para o que ensaio
+> serve: encontrar o que estava errado nela antes de alguém perder a tarde. Três
+> defeitos vieram do Windows mesmo assim, e estão consertados aqui — o
+> `pyinstaller` fora do PATH, o executável mudo e o `--entrada` que só aceitava
+> pasta.
 >
 > **O que o ensaio já provou:** a `empacotar.spec` está correta; o `pypdfium2` e o
 > OpenCV entram no pacote; o executável lê um lote inteiro de 22 folhas, corrige e
