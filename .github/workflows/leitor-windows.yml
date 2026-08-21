@@ -1,0 +1,91 @@
+# Monta o executável do leitor de cartões numa máquina Windows do GitHub, e
+# devolve um .zip pronto para a secretaria.
+#
+# POR QUE ISTO EXISTE: gerar o .exe exigia clonar o repositório, instalar o
+# Python, instalar as dependências e rodar o PyInstaller — quatro comandos num
+# terminal, numa máquina administrativa da escola, e cada um deles com um jeito
+# próprio de falhar (o PATH que não tem o `pyinstaller`, a instalação “só para o
+# usuário”, a pasta que já existia). Aqui isso acontece numa máquina limpa, e
+# quem instala só baixa e descompacta.
+#
+# COMO USAR
+#   · Actions → “Leitor de cartões — executável Windows” → “Run workflow”:
+#     sai um anexo (Artifact) na própria execução, que dura 30 dias.
+#   · Ou publique uma etiqueta `leitor-vX.Y` — aí o .zip vira uma Release, que
+#     não expira. É a que vai para a secretaria.
+#
+# O `.exe` NÃO fica versionado no repositório: são 350 MB de cópia do Python, do
+# OpenCV e do Qt, regeráveis a qualquer momento por este arquivo.
+name: Leitor de cartões — executável Windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['leitor-v*']
+
+permissions:
+  contents: write        # para criar a Release quando vier de uma etiqueta
+
+jobs:
+  empacotar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar as dependências
+        run: python -m pip install --disable-pip-version-check -r desktop/requirements.txt pyinstaller
+
+      - name: Gerar o executável
+        working-directory: desktop
+        run: python -m PyInstaller empacotar.spec
+
+      # O defeito que este passo pega já aconteceu de verdade: o PyInstaller
+      # produziu um executável de 25 MB, sem OpenCV, sem Qt e sem pdfium, que só
+      # falhava ao ABRIR. Uma pasta `_internal` sem essas duas bibliotecas é
+      # exatamente esse pacote vazio, e é melhor descobrir aqui.
+      - name: Conferir que o pacote saiu inteiro
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $interno = 'dist\PAS-Leitor\_internal'
+          foreach ($peca in 'cv2', 'PySide6') {
+            if (-not (Test-Path "$interno\$peca")) {
+              throw "o pacote saiu sem $peca — veja a receita em empacotar.spec"
+            }
+          }
+          foreach ($exe in 'PAS-Leitor.exe', 'PAS-Leitor-terminal.exe') {
+            if (-not (Test-Path "dist\PAS-Leitor\$exe")) { throw "faltou o $exe" }
+          }
+          .\dist\PAS-Leitor\PAS-Leitor-terminal.exe --version
+          .\dist\PAS-Leitor\PAS-Leitor-terminal.exe --help
+          $mb = [math]::Round((Get-ChildItem dist\PAS-Leitor -Recurse |
+                 Measure-Object -Property Length -Sum).Sum / 1MB)
+          Write-Host "pacote de $mb MB"
+          if ($mb -lt 150) { throw "o pacote tem $mb MB — pequeno demais para ter tudo dentro" }
+
+      - name: Compactar
+        shell: pwsh
+        run: Compress-Archive -Path desktop\dist\PAS-Leitor\* -DestinationPath PAS-Leitor-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PAS-Leitor-windows
+          path: PAS-Leitor-windows.zip
+          retention-days: 30
+
+      # Só quando veio de uma etiqueta. Release não expira, e é o que se manda
+      # para a escola. Pelo `gh`, que já vem na máquina do GitHub — uma ação de
+      # terceiro a menos para confiar.
+      - name: Publicar a Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" PAS-Leitor-windows.zip `
+            --title "Leitor de cartões $env:GITHUB_REF_NAME" `
+            --notes "Baixe o PAS-Leitor-windows.zip, descompacte a pasta inteira e abra o PAS-Leitor.exe. Não precisa instalar Python nem nada mais."

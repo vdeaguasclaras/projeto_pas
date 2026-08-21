@@ -3,7 +3,9 @@
 > **Situação: está de pé.** O aplicativo tem janela, lê os cartões, corrige,
 > monta os boletins e exporta as notas para o sistema acadêmico da escola. O
 > `.exe` foi **gerado e rodado numa máquina Windows** da escola, com o fluxo
-> inteiro percorrido ali (ver [`docs/instalacao.md`](docs/instalacao.md)).
+> inteiro percorrido ali, e hoje é montado **por uma máquina do GitHub**: a
+> instalação na secretaria é baixar um `.zip` e descompactar, sem comando nenhum
+> (ver [`docs/instalacao.md`](docs/instalacao.md)).
 >
 > **E o pipeline OMR foi conferido no papel.** Quatro cartões
 > da prova da 2ª série impressos na impressora da escola, dois preenchidos à mão
@@ -135,6 +137,7 @@ desktop/
 │   └── pipeline-omr.md        ← etapas da leitura óptica e casos de erro
 ├── principal.py               ← ponto de entrada do `.exe`
 ├── empacotar.spec             ← receita do PyInstaller
+├── gerar-exe.bat              ← monta o pacote com dois cliques, no Windows
 ├── ferramentas/
 │   └── extrair-tema.py        ← lê as cores do css/estilo.css do sistema
 ├── src/leitor/
