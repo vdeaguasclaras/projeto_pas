@@ -171,7 +171,7 @@ class PaginaLeitura(QWidget):
         super().__init__()
         self.janela = janela
         self.thread: LeituraEmThread | None = None
-        self.pasta = rotulo("Nenhuma pasta escolhida.", "sub")
+        self.pasta = rotulo("Nada escolhido ainda.", "sub")
         self.barra = QProgressBar()
         self.barra.setVisible(False)
         self.registro = QPlainTextEdit()
@@ -183,25 +183,46 @@ class PaginaLeitura(QWidget):
         coluna.setContentsMargins(0, 0, 0, 0)
         coluna.addWidget(quadro(
             rotulo("Ler os cartões digitalizados", "titulo"),
-            rotulo("A pasta com as digitalizações do lote — PDF de várias páginas ou imagens "
-                   "soltas, a 300 dpi. O cartão-gabarito deve estar no topo da pilha.", "sub"),
-            linha(botao("Escolher a pasta…", "fantasma", self.escolher), self.botao_ler, None),
+            rotulo("As digitalizações do lote, a 300 dpi: a pasta que as contém, ou o próprio "
+                   "PDF de várias páginas — que é como o scanner costuma salvar o lote inteiro. "
+                   "O cartão-gabarito deve estar no topo da pilha.", "sub"),
+            linha(botao("Escolher a pasta…", "fantasma", self.escolher),
+                  botao("Escolher um arquivo…", "fantasma", self.escolher_arquivo),
+                  self.botao_ler, None),
             self.pasta, self.barra, self.registro))
         coluna.addStretch(1)
 
     def escolher(self) -> None:
         caminho = QFileDialog.getExistingDirectory(self, "Pasta com as digitalizações")
-        if not caminho:
-            return
-        pasta = Path(caminho)
-        arquivos = digitalizacoes(pasta)
-        self.janela.sessao.entrada = pasta
-        self.janela.sessao.saida = pasta.parent / f"resultado-{pasta.name}"
-        self.pasta.setText(f"{pasta} — {len(arquivos)} arquivo(s). "
-                           f"O resultado vai para {self.janela.sessao.saida.name}.")
+        if caminho:
+            self._usar(Path(caminho))
+
+    def escolher_arquivo(self) -> None:
+        """O lote num arquivo só — o PDF de várias páginas que o scanner salva.
+
+        Escolher a PASTA seria mandar ler tudo o que houver de PDF e de imagem
+        dentro dela, e esse PDF costuma cair em Downloads ou na Área de Trabalho,
+        no meio de centenas de outros arquivos.
+        """
+        caminho, _filtro = QFileDialog.getOpenFileName(
+            self, "Arquivo com as digitalizações", "",
+            "Digitalizações (*.pdf *.jpg *.jpeg *.png *.tif *.tiff *.bmp)")
+        if caminho:
+            self._usar(Path(caminho))
+
+    def _usar(self, escolhido: Path) -> None:
+        arquivos = digitalizacoes(escolhido)
+        # O resultado sai AO LADO do que foi escolhido, com o nome dele — a pessoa
+        # acabou de navegar até ali, e é onde vai procurar o que saiu.
+        nome = escolhido.stem if escolhido.is_file() else escolhido.name
+        self.janela.sessao.entrada = escolhido
+        self.janela.sessao.saida = escolhido.parent / f"resultado-{nome}"
         self.botao_ler.setEnabled(bool(arquivos))
         if not arquivos:
-            self.pasta.setText(f"{pasta} — nenhuma digitalização aqui dentro.")
+            self.pasta.setText(f"{escolhido} — não achei digitalização aqui.")
+            return
+        self.pasta.setText(f"{escolhido} — {len(arquivos)} arquivo(s). "
+                           f"O resultado vai para {self.janela.sessao.saida.name}.")
 
     def ler(self) -> None:
         sessao = self.janela.sessao

@@ -198,6 +198,12 @@ python -m src.leitor.cli conferir --gabarito pas-pacote-pr-2em.json
 python -m src.leitor.cli ler --gabarito pas-pacote-pr-2em.json \
     --entrada ./digitalizacoes --saida ./resultado
 
+# `--entrada` aceita a pasta OU o arquivo: o scanner salva o lote inteiro num PDF
+# de várias páginas, e apontar para a pasta onde ele caiu mandaria ler todo PDF e
+# toda imagem que houver ali dentro
+python -m src.leitor.cli ler --gabarito pas-pacote-pr-2em.json \
+    --entrada ./lote-2em.pdf --saida ./resultado
+
 # depois de resolver a conferência: refaz a correção com o que foi decidido
 python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
     --respostas ./resultado/respostas.csv --respostas ./conferido.csv \

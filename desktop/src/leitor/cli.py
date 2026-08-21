@@ -24,7 +24,7 @@ from pathlib import Path
 import click
 
 from . import __version__
-from .imagem import DPI_PADRAO, contar_paginas, digitalizacoes
+from .imagem import DPI_PADRAO, EXTENSOES, contar_paginas, digitalizacoes
 from .lote import ler_lote
 from .molde import GabaritoIncompativel
 from .apuracao import apurar, marcacoes_de
@@ -61,8 +61,9 @@ def _pacote(caminho: Path) -> Pacote:
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="Arquivo pas-gabarito-<prova>.json exportado pelo sistema web.")
 @click.option("--entrada", "entrada_dir", required=True,
-              type=click.Path(exists=True, file_okay=False, path_type=Path),
-              help="Pasta com as digitalizações (PDF/JPEG/PNG, 300 dpi).")
+              type=click.Path(exists=True, path_type=Path),
+              help="Pasta com as digitalizações, ou o próprio arquivo "
+                   "(PDF/JPEG/PNG, 300 dpi).")
 @click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path),
               help="Pasta de saída para os CSVs e as miniaturas de conferência.")
 @click.option("--dpi", default=DPI_PADRAO, show_default=True,
@@ -74,7 +75,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
 
     arquivos = digitalizacoes(entrada_dir)
     if not arquivos:
-        click.echo(f"ERRO: nenhuma digitalização em {entrada_dir}.", err=True)
+        click.echo(f"ERRO: nenhuma digitalização em {entrada_dir}.\n"
+                   f"Aceito uma pasta ou um arquivo, nestes formatos: "
+                   f"{', '.join(sorted(EXTENSOES))}.", err=True)
         sys.exit(2)
     click.echo(f"Digitalizações: {len(arquivos)} arquivo(s) em {entrada_dir}")
 

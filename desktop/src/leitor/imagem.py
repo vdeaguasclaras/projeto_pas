@@ -29,9 +29,20 @@ class Pagina:
         return f"{self.arquivo.name}:{self.numero}"
 
 
-def digitalizacoes(pasta: Path) -> list[Path]:
-    """Os arquivos de imagem da pasta, em ordem — que é a ordem da pilha."""
-    return sorted(p for p in Path(pasta).iterdir()
+def digitalizacoes(caminho: Path) -> list[Path]:
+    """As digitalizações de uma PASTA ou de um ARQUIVO só, em ordem.
+
+    A pasta é o caso do lote grande, e a ordem dos arquivos é a ordem da pilha.
+    O arquivo único é o caso comum e foi o que faltava: o scanner da secretaria
+    salva o lote inteiro num PDF de várias páginas, e esse PDF vai parar em
+    Downloads ou na Área de Trabalho, no meio de centenas de outros arquivos.
+    Mandar a pasta ali seria mandar ler tudo o que houver de PDF e de imagem
+    dentro dela.
+    """
+    caminho = Path(caminho)
+    if caminho.is_file():
+        return [caminho] if caminho.suffix.lower() in EXTENSOES else []
+    return sorted(p for p in caminho.iterdir()
                   if p.is_file() and p.suffix.lower() in EXTENSOES)
 
 

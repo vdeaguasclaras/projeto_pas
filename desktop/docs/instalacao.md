@@ -93,8 +93,10 @@ A pasta `dist\` nasce onde o comando foi rodado — em
 .\PAS-Leitor-terminal.exe conferir --gabarito C:\caminho\pas-pacote-pr-2em.json
 
 # 2. lê um lote de verdade, do começo ao fim?
+#    `--entrada` aceita a pasta das digitalizações ou o próprio PDF do lote;
+#    caminho com espaço vai entre aspas.
 .\PAS-Leitor-terminal.exe ler --gabarito C:\caminho\pas-pacote-pr-2em.json ^
-    --entrada C:\caminho\digitalizacoes --saida C:\caminho\resultado
+    --entrada "C:\caminho\com espaço\lote.pdf" --saida C:\caminho\resultado
 
 # 3. e a janela abre?
 .\PAS-Leitor.exe
@@ -102,6 +104,11 @@ A pasta `dist\` nasce onde o comando foi rodado — em
 
 Os dois primeiros vão pelo `-terminal`, que é o que mostra o que aconteceu. O
 terceiro é o de verdade: um duplo clique no `PAS-Leitor.exe` faz o mesmo.
+
+**`--gabarito` é do programa todo; `--entrada` e `--saida` são só do `ler`.** O
+`conferir` apenas descreve a prova — ele não lê digitalização nenhuma, e por isso
+recusa as outras duas opções com um `No such option: --entrada` que parece dizer
+que o executável saiu incompleto, e não diz.
 
 O passo 2 é o que importa: é ele que prova que o `pypdfium2` e o OpenCV entraram
 no pacote. Se o executável abrir e só falhar quando alguém escolhe um PDF, é
