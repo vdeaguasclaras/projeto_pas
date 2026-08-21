@@ -86,6 +86,14 @@ B com uma coluna vazia, faixa que não fecha: tudo isso sai em
 `respostas_conferir.csv`, com o motivo. Resposta inventada é o único defeito que
 ninguém descobre a tempo.
 
+E, do outro lado da conferência, **três coisas diferentes que já foram a mesma**:
+a resposta (a letra ou o número), o **item anulado** (`NULO` — o estudante marcou
+duas alternativas; no PAS vale como erro, e o boletim imprime `N`) e o **item em
+branco** (campo vazio; imprime `.`). O que continua na fila não é nenhuma das
+três: não entra em conta nenhuma, imprime `?` e põe um aviso no alto do boletim.
+Boletim com `?` é boletim emitido antes de a conferência estar resolvida — que é
+o que esse aviso existe para impedir.
+
 O preço disso é uma fila para alguém olhar, e ela vem com **a imagem de cada
 marcação**: um recorte da folha, endireitado, com o número do item e a letra da
 opção dentro. Tudo reunido em `conferencia.html`, que abre com dois cliques, sem
@@ -163,6 +171,10 @@ Cinco passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
 para corrigir), **Resultados** (a planilha) e **Boletins**. Um passo só abre
 quando o anterior deu o que ele precisa.
 
+A conferência já chega com a dupla marcação **proposta como `NULO`** — é o que o
+papel diz, e quem confere só precisa concordar. Enquanto sobrar item na fila, a
+tela de Boletins mostra em rosa quantos são e o que eles fazem com as notas.
+
 Na conferência, **clicar no recorte abre a marcação ampliada**, e ao lado dela um
 segundo recorte com o pedaço da folha em volta. O recorte justo mostra o alvéolo;
 o de contexto mostra de que item ele é, qual a coluna e o que o vizinho recebeu —
@@ -198,6 +210,12 @@ python -m src.leitor.cli conferir --gabarito pas-pacote-pr-2em.json
 python -m src.leitor.cli ler --gabarito pas-pacote-pr-2em.json \
     --entrada ./digitalizacoes --saida ./resultado
 
+# `--entrada` aceita a pasta OU o arquivo: o scanner salva o lote inteiro num PDF
+# de várias páginas, e apontar para a pasta onde ele caiu mandaria ler todo PDF e
+# toda imagem que houver ali dentro
+python -m src.leitor.cli ler --gabarito pas-pacote-pr-2em.json \
+    --entrada ./lote-2em.pdf --saida ./resultado
+
 # depois de resolver a conferência: refaz a correção com o que foi decidido
 python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
     --respostas ./resultado/respostas.csv --respostas ./conferido.csv \
@@ -212,7 +230,7 @@ Sai em `./resultado`:
 | `respostas_conferir.csv` | o que precisa de olho humano, com o motivo |
 | `percentuais.csv` | os percentuais de acerto do discursivo, quando marcados |
 | `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
-| `resultados.csv` | acertos, erros, brancos, escore do PAS, % de acerto, Nota Marista, redação, posição e desempenho por grupo |
+| `resultados.csv` | acertos, erros, brancos, anulados, pendentes, escore do PAS, % de acerto, Nota Marista, redação, posição e desempenho por grupo |
 | `boletins.html` | o boletim de desempenho de cada estudante, pronto para imprimir |
 | `conferencia.html` | a fila de conferência com a imagem de cada marcação duvidosa |
 | `conferencia/*.png` | os recortes e as miniaturas das folhas que caíram na fila |
@@ -237,8 +255,14 @@ node desktop/testes/gerar-amostras.mjs --grande   # 42 itens, 32 estudantes
 python3 desktop/testes/testar-leitura.py
 python3 desktop/testes/testar-leitura.py amostras-grande
 python3 desktop/testes/testar-correcao.py
+python3 desktop/testes/testar-anulacao.py
 QT_QPA_PLATFORM=offscreen python3 desktop/testes/testar-janela.py
 ```
+
+`testar-anulacao.py` não precisa de scanner nem de navegador: monta as marcações
+à mão para cobrir os dois casos que já viraram “em branco” por descuido — o item
+anulado e o item que ficou na fila — e confere o que cada um fez com a nota e com
+o que sai impresso.
 
 `testar-correcao.py` é de outra natureza: ele faz o **sistema on-line** e o
 aplicativo local corrigirem exatamente as mesmas marcações — as que o leitor

@@ -36,6 +36,12 @@ def folha(t: dict[str, str] = CLARO) -> str:
     QLabel#sub {{ color: {t['ink-2']}; font-size: 13px; }}
     QLabel#secao {{ font-size: 11px; font-weight: 800; color: {t['ink-2']};
                     letter-spacing: 1px; }}
+    /* O que falta fazer, dito onde a pessoa vai clicar em “abrir os boletins”. */
+    QLabel#pendencia {{ background: {t['rosa-fundo']}; color: {t['rosa']};
+                        border: 1px solid {t['rosa-claro']};
+                        border-left: 4px solid {t['rosa']};
+                        border-radius: 10px; padding: 10px 12px;
+                        font-size: 13px; font-weight: 600; }}
 
     /* ---- o menu lateral, como o .lado do sistema ---- */
     QFrame#lado {{ background: {t['papel']}; border-right: 1px solid {t['borda']}; }}

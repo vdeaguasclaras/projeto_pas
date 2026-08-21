@@ -125,6 +125,15 @@ ESTILO = f"""
   td.certa{{color:{COR_GERAL};font-weight:700}}
   td.errada{{color:#e5484d;font-weight:700}}
   td.branca{{color:#b9b1a8}}
+  /* Anulado é erro, e por isso vermelho; o que o distingue é a marca — o “N” e
+     o traço por baixo —, não uma terceira cor a decorar. */
+  td.nula{{color:#e5484d;font-weight:700;text-decoration:underline;
+    text-underline-offset:2px}}
+  td.pendente{{color:#8a5a00;font-weight:700;background:#fff6e0;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .pendencia{{background:#fff6e0;border:1px solid #f0d8a0;border-left:4px solid #e8a800;
+    border-radius:6px;padding:6px 10px;font-size:8.5px;color:#8a5a00;margin:10px 0;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}}
   .notas{{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}}
   .nota{{border:1px solid #e3e7f4;border-radius:8px;padding:7px 10px;text-align:center;flex:1;
     min-width:78px}}
@@ -190,6 +199,35 @@ def _barras(resultado: Resultado, turma: dict[str, float], geral: dict[str, floa
     return "".join(partes)
 
 
+def _classe(detalhe) -> str:
+    if detalhe.pendente:
+        return "pendente"
+    if detalhe.nulo:
+        return "nula"
+    if detalhe.marcada is None:
+        return "branca"
+    return "certa" if detalhe.certa else "errada"
+
+
+def _marca(detalhe) -> str:
+    """O que sai impresso na linha “Sua marcação”.
+
+    O item anulado NÃO pode sair como branco. São coisas diferentes no papel —
+    quem anulou marcou duas alternativas, e é exatamente isso que precisa ler no
+    boletim para não repetir na prova de verdade — e contam diferente: anulado
+    vale como erro. Sai como `N`, sublinhado.
+
+    O pendente sai como `?`, e é uma confissão: ninguém decidiu ainda o que está
+    no papel. Aparece com fundo, porque boletim entregue com `?` é boletim
+    entregue cedo demais.
+    """
+    if detalhe.pendente:
+        return "?"
+    if detalhe.nulo:
+        return "N"
+    return _esc(detalhe.marcada) if detalhe.marcada is not None else "."
+
+
 def _tabela_de_tipo(resultado: Resultado, tipo: str, titulo: str, por_linha: int = 22) -> str:
     """Item, gabarito e marcação, como no boletim do PAS — em blocos que cabem."""
     detalhes = [d for d in resultado.detalhes if d.tipo == tipo]
@@ -200,9 +238,7 @@ def _tabela_de_tipo(resultado: Resultado, tipo: str, titulo: str, por_linha: int
         pedaco = detalhes[inicio:inicio + por_linha]
         itens = "".join(f"<td>{d.numero}</td>" for d in pedaco)
         gabaritos = "".join(f"<td>{_esc(d.gabarito)}</td>" for d in pedaco)
-        marcadas = "".join(
-            f'<td class="{"branca" if d.marcada is None else ("certa" if d.certa else "errada")}">'
-            f'{_esc(d.marcada) if d.marcada is not None else "."}</td>' for d in pedaco)
+        marcadas = "".join(f'<td class="{_classe(d)}">{_marca(d)}</td>' for d in pedaco)
         blocos.append(f"<tr><th>Item</th>{itens}</tr>"
                       f"<tr><th>Gabarito</th>{gabaritos}</tr>"
                       f"<tr><th>Sua marcação</th>{marcadas}</tr>")
@@ -257,6 +293,15 @@ def html_de(pacote: Pacote, resultado: Resultado, turma: dict[str, float],
     nota_redacao = (f'<div class="nota"><b>{_num(resultado.nr, 1)}</b>'
                     f'<span>Redação (NR)</span></div>') if pacote.tem_redacao else ""
 
+    # O boletim não esconde que foi emitido cedo demais. Item que ficou na fila
+    # de conferência não entrou em nota nenhuma — nem como erro, nem como branco
+    # —, e quem recebe o papel tem de saber disso pelo próprio papel.
+    pendencia = (f'<div class="pendencia"><b>Atenção:</b> {resultado.pendentes} '
+                 f'item(ns) desta prova ainda estavam em conferência quando este boletim foi '
+                 f'gerado, e saem marcados com <b>?</b>. Eles não entram em nenhuma das notas '
+                 f'— nem como acerto, nem como erro. Resolva a conferência e emita o boletim '
+                 f'de novo.</div>') if resultado.pendentes else ""
+
     return f"""
   <div class="bol">
     <div class="faixa"><h1>Boletim de Desempenho Individual &nbsp;|&nbsp;
@@ -290,8 +335,10 @@ def html_de(pacote: Pacote, resultado: Resultado, turma: dict[str, float],
 
     <div class="legenda-marc"><b>Legenda:</b> &nbsp; <b style="color:{COR_GERAL}">verde</b> acertou
       &nbsp;·&nbsp; <b style="color:#e5484d">vermelho</b> errou &nbsp;·&nbsp;
-      <b>.</b> item em branco. Marcação dupla ou duvidosa não entra aqui: ela vai para a
-      conferência e é lançada à mão.</div>
+      <b>.</b> item em branco &nbsp;·&nbsp;
+      <b style="color:#e5484d;text-decoration:underline">N</b> item anulado — você marcou
+      duas alternativas, e no PAS isso vale como erro.</div>
+    {pendencia}
     {"".join(tabelas)}
     <div class="tipos{'' if len(lado) > 1 else ' solo'}" style="margin-top:10px">{"".join(lado)}</div>
     {_discursivos(resultado, pacote, medias_d)}

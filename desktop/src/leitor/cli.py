@@ -24,7 +24,7 @@ from pathlib import Path
 import click
 
 from . import __version__
-from .imagem import DPI_PADRAO, contar_paginas, digitalizacoes
+from .imagem import DPI_PADRAO, EXTENSOES, contar_paginas, digitalizacoes
 from .lote import ler_lote
 from .molde import GabaritoIncompativel
 from .apuracao import apurar, marcacoes_de
@@ -38,9 +38,18 @@ def cli() -> None:
     pass
 
 
-def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path) -> None:
-    _resultados, quantos, boletins = apurar(pacote, marcacoes, saida_dir)
+def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes=()) -> None:
+    resultados, quantos, boletins = apurar(pacote, marcacoes, saida_dir, decisoes)
     click.echo(f"{quantos} estudante(s) em {saida_dir / 'resultados.csv'}")
+    anulados = sum(r.nulos for r in resultados)
+    if anulados:
+        click.echo(f"{anulados} item(ns) anulado(s) por dupla marcação — contam como erro e "
+                   "saem marcados no boletim.")
+    pendentes = sum(r.pendentes for r in resultados)
+    if pendentes:
+        click.echo(f"ATENÇÃO: {pendentes} marcação(ões) continuam na conferência e ficaram FORA "
+                   "das notas. Resolva-as e rode `corrigir` antes de entregar os boletins.",
+                   err=True)
     if boletins:
         click.echo(f"Boletins de desempenho em {boletins}")
 
@@ -61,8 +70,9 @@ def _pacote(caminho: Path) -> Pacote:
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="Arquivo pas-gabarito-<prova>.json exportado pelo sistema web.")
 @click.option("--entrada", "entrada_dir", required=True,
-              type=click.Path(exists=True, file_okay=False, path_type=Path),
-              help="Pasta com as digitalizações (PDF/JPEG/PNG, 300 dpi).")
+              type=click.Path(exists=True, path_type=Path),
+              help="Pasta com as digitalizações, ou o próprio arquivo "
+                   "(PDF/JPEG/PNG, 300 dpi).")
 @click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path),
               help="Pasta de saída para os CSVs e as miniaturas de conferência.")
 @click.option("--dpi", default=DPI_PADRAO, show_default=True,
@@ -74,7 +84,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
 
     arquivos = digitalizacoes(entrada_dir)
     if not arquivos:
-        click.echo(f"ERRO: nenhuma digitalização em {entrada_dir}.", err=True)
+        click.echo(f"ERRO: nenhuma digitalização em {entrada_dir}.\n"
+                   f"Aceito uma pasta ou um arquivo, nestes formatos: "
+                   f"{', '.join(sorted(EXTENSOES))}.", err=True)
         sys.exit(2)
     click.echo(f"Digitalizações: {len(arquivos)} arquivo(s) em {entrada_dir}")
 
@@ -149,7 +161,7 @@ def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Pa
     if fora:
         click.echo(f"{fora} marcação(ões) de estudante fora do elenco desta prova, ignoradas.",
                    err=True)
-    _mostrar_apuracao(pacote, marcacoes, saida_dir)
+    _mostrar_apuracao(pacote, marcacoes, saida_dir, list(respostas_csv))
 
 
 @cli.command(help="Abre a janela do aplicativo.")

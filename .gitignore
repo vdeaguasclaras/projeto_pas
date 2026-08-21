@@ -28,3 +28,8 @@ __pycache__/
 node_modules/
 package.json
 package-lock.json
+
+# O que o PyInstaller produz ao gerar o `.exe`: centenas de megabytes de cópia
+# do Python, do OpenCV e do Qt. Regerável por `pyinstaller empacotar.spec`.
+desktop/build/
+desktop/dist/

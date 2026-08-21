@@ -1,6 +1,7 @@
 # Instalar o leitor na máquina da secretaria
 
-> **Estado: a receita foi ensaiada e o pacote roda; falta gerar no Windows.**
+> **Estado: a receita foi ensaiada duas vezes e o pacote roda; falta gerar no
+> Windows.**
 > O PyInstaller não produz executável de Windows a partir de outro sistema, então
 > o `.exe` em si continua por fazer. O ensaio foi feito em Linux, e serviu para o
 > que ensaio serve: encontrar o que está errado na receita antes de alguém perder
@@ -8,9 +9,10 @@
 >
 > **O que o ensaio já provou:** a `empacotar.spec` está correta; o `pypdfium2` e o
 > OpenCV entram no pacote; o executável lê um lote inteiro de 22 folhas, corrige e
-> monta os boletins; e a janela abre. **O que só o Windows pode dizer:** se o
-> Defender reclama do executável não assinado, se os plugins do Qt para Windows
-> entram sozinhos, e o tamanho final por lá.
+> monta os boletins — com as duas notas e o boletim novo dentro; e a janela abre.
+> **O que só o Windows pode dizer:** se o Defender reclama do executável não
+> assinado, se os plugins do Qt para Windows entram sozinhos, e o tamanho final
+> por lá.
 >
 > **E um defeito que o ensaio pegou**, que teria custado caro: o script de entrada
 > chamava-se `leitor.py`, o mesmo nome do pacote `leitor/`. O PyInstaller resolvia
@@ -32,11 +34,35 @@ ser um programa que se copia e se abre.
 git clone https://github.com/vdeaguasclaras/projeto_pas.git
 cd projeto_pas\desktop
 python -m pip install -r requirements.txt pyinstaller
-pyinstaller empacotar.spec
+python -m PyInstaller empacotar.spec
 ```
 
+**`python -m PyInstaller`, e não `pyinstaller` solto** (com as maiúsculas: é o nome
+do módulo). Quando o Python está instalado só para o usuário — que é o caso numa
+máquina administrativa, e o pip avisa com um *“Defaulting to user installation”* —
+os comandos vão parar em `AppData\Roaming\Python\PythonXXX\Scripts`, que não
+costuma estar no PATH. `pyinstaller empacotar.spec` responde *“não é reconhecido
+como um comando”* mesmo com o PyInstaller instalado e funcionando: o programa
+está lá, o Windows é que não sabe onde. Chamá-lo pelo `python -m` dispensa o PATH,
+como o `python -m pip` que instalou tudo.
+
+A compilação leva alguns minutos e imprime muita coisa. Terminou bem quando a
+última linha diz `Building COLLECT COLLECT-00.toc completed successfully`.
+
 Sai `dist\PAS-Leitor\`. É essa pasta inteira que vai para a secretaria — copiada
-para o disco, para um pendrive, para onde for. Dentro dela, `PAS-Leitor.exe`.
+para o disco, para um pendrive, para onde for. Dentro dela, **dois executáveis**:
+
+| Arquivo | Para quê |
+|---|---|
+| `PAS-Leitor.exe` | o de sempre: clicar duas vezes e usar a janela |
+| `PAS-Leitor-terminal.exe` | o mesmo programa com console — a linha de comando e, sobretudo, o lugar onde dá para LER o erro |
+
+São o mesmo programa, da mesma análise, dividindo a mesma pasta `_internal`: o
+segundo custa uns 5 MB, não o dobro. Ele existe porque, sem console, o Windows
+não dá saída nenhuma ao processo — `PAS-Leitor.exe ler …` roda mudo, e a
+conferência da primeira geração, que é toda ela ler o que o programa diz, não
+teria o que ler. É também para onde ir no dia em que a janela fechar sozinha sem
+explicar por quê.
 
 **Espere uns 350 MB**, e não se assuste: quase tudo é OpenCV (150 MB), Qt (100 MB)
 e NumPy (40 MB). É o preço de a máquina da secretaria não precisar ter Python.
@@ -59,27 +85,44 @@ Nada é enviado para lugar nenhum: o aplicativo não usa internet.
 
 ## Conferir na primeira geração no Windows
 
-Depois de `pyinstaller empacotar.spec`, dentro de `dist\PAS-Leitor\`:
+A pasta `dist\` nasce onde o comando foi rodado — em
+`…\projeto_pas\desktop\dist\PAS-Leitor\`. Lá dentro:
 
 ```powershell
 # 1. o executável abre e enxerga o pacote da prova?
-.\PAS-Leitor.exe conferir --gabarito C:\caminho\pas-pacote-pr-2em.json
+.\PAS-Leitor-terminal.exe conferir --gabarito C:\caminho\pas-pacote-pr-2em.json
 
 # 2. lê um lote de verdade, do começo ao fim?
-.\PAS-Leitor.exe ler --gabarito C:\caminho\pas-pacote-pr-2em.json ^
-    --entrada C:\caminho\digitalizacoes --saida C:\caminho\resultado
+#    `--entrada` aceita a pasta das digitalizações ou o próprio PDF do lote;
+#    caminho com espaço vai entre aspas.
+.\PAS-Leitor-terminal.exe ler --gabarito C:\caminho\pas-pacote-pr-2em.json ^
+    --entrada "C:\caminho\com espaço\lote.pdf" --saida C:\caminho\resultado
 
 # 3. e a janela abre?
 .\PAS-Leitor.exe
 ```
 
+Os dois primeiros vão pelo `-terminal`, que é o que mostra o que aconteceu. O
+terceiro é o de verdade: um duplo clique no `PAS-Leitor.exe` faz o mesmo.
+
+**`--gabarito` é do programa todo; `--entrada` e `--saida` são só do `ler`.** O
+`conferir` apenas descreve a prova — ele não lê digitalização nenhuma, e por isso
+recusa as outras duas opções com um `No such option: --entrada` que parece dizer
+que o executável saiu incompleto, e não diz.
+
 O passo 2 é o que importa: é ele que prova que o `pypdfium2` e o OpenCV entraram
 no pacote. Se o executável abrir e só falhar quando alguém escolhe um PDF, é
 porque o `pypdfium2` ficou de fora — o pior momento para descobrir.
 
+Se algum passo falhar, o que sair do `-terminal` é o diagnóstico: `No module
+named …` é módulo que ficou de fora da spec; erro só ao escolher um PDF é o
+`pypdfium2`; a janela que não abre reclama do Qt pelo nome.
+
 Falta saber, e só o Windows dirá:
 
-- se o **Defender** reclama do executável não assinado (é comum com PyInstaller)
-  e o que a escola prefere fazer a respeito;
+- se o **Defender** ou o **SmartScreen** reclamam do executável não assinado (é
+  comum com PyInstaller — a tela azul de “Windows protegeu o computador” tem um
+  “Mais informações → Executar assim mesmo”) e o que a escola prefere fazer a
+  respeito;
 - se os **plugins do Qt para Windows** entram sozinhos;
 - o tamanho final por lá, e se compensa excluir mais módulos do Qt.

@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..apuracao import apurar, marcacoes_de
-from ..correcao import Resultado
+from ..correcao import NULO, Resultado
 from ..imagem import digitalizacoes
 from ..lote import Lote, ler_lote
 from ..molde import GabaritoIncompativel
@@ -171,7 +171,7 @@ class PaginaLeitura(QWidget):
         super().__init__()
         self.janela = janela
         self.thread: LeituraEmThread | None = None
-        self.pasta = rotulo("Nenhuma pasta escolhida.", "sub")
+        self.pasta = rotulo("Nada escolhido ainda.", "sub")
         self.barra = QProgressBar()
         self.barra.setVisible(False)
         self.registro = QPlainTextEdit()
@@ -183,25 +183,46 @@ class PaginaLeitura(QWidget):
         coluna.setContentsMargins(0, 0, 0, 0)
         coluna.addWidget(quadro(
             rotulo("Ler os cartões digitalizados", "titulo"),
-            rotulo("A pasta com as digitalizações do lote — PDF de várias páginas ou imagens "
-                   "soltas, a 300 dpi. O cartão-gabarito deve estar no topo da pilha.", "sub"),
-            linha(botao("Escolher a pasta…", "fantasma", self.escolher), self.botao_ler, None),
+            rotulo("As digitalizações do lote, a 300 dpi: a pasta que as contém, ou o próprio "
+                   "PDF de várias páginas — que é como o scanner costuma salvar o lote inteiro. "
+                   "O cartão-gabarito deve estar no topo da pilha.", "sub"),
+            linha(botao("Escolher a pasta…", "fantasma", self.escolher),
+                  botao("Escolher um arquivo…", "fantasma", self.escolher_arquivo),
+                  self.botao_ler, None),
             self.pasta, self.barra, self.registro))
         coluna.addStretch(1)
 
     def escolher(self) -> None:
         caminho = QFileDialog.getExistingDirectory(self, "Pasta com as digitalizações")
-        if not caminho:
-            return
-        pasta = Path(caminho)
-        arquivos = digitalizacoes(pasta)
-        self.janela.sessao.entrada = pasta
-        self.janela.sessao.saida = pasta.parent / f"resultado-{pasta.name}"
-        self.pasta.setText(f"{pasta} — {len(arquivos)} arquivo(s). "
-                           f"O resultado vai para {self.janela.sessao.saida.name}.")
+        if caminho:
+            self._usar(Path(caminho))
+
+    def escolher_arquivo(self) -> None:
+        """O lote num arquivo só — o PDF de várias páginas que o scanner salva.
+
+        Escolher a PASTA seria mandar ler tudo o que houver de PDF e de imagem
+        dentro dela, e esse PDF costuma cair em Downloads ou na Área de Trabalho,
+        no meio de centenas de outros arquivos.
+        """
+        caminho, _filtro = QFileDialog.getOpenFileName(
+            self, "Arquivo com as digitalizações", "",
+            "Digitalizações (*.pdf *.jpg *.jpeg *.png *.tif *.tiff *.bmp)")
+        if caminho:
+            self._usar(Path(caminho))
+
+    def _usar(self, escolhido: Path) -> None:
+        arquivos = digitalizacoes(escolhido)
+        # O resultado sai AO LADO do que foi escolhido, com o nome dele — a pessoa
+        # acabou de navegar até ali, e é onde vai procurar o que saiu.
+        nome = escolhido.stem if escolhido.is_file() else escolhido.name
+        self.janela.sessao.entrada = escolhido
+        self.janela.sessao.saida = escolhido.parent / f"resultado-{nome}"
         self.botao_ler.setEnabled(bool(arquivos))
         if not arquivos:
-            self.pasta.setText(f"{pasta} — nenhuma digitalização aqui dentro.")
+            self.pasta.setText(f"{escolhido} — não achei digitalização aqui.")
+            return
+        self.pasta.setText(f"{escolhido} — {len(arquivos)} arquivo(s). "
+                           f"O resultado vai para {self.janela.sessao.saida.name}.")
 
     def ler(self) -> None:
         sessao = self.janela.sessao
@@ -347,7 +368,11 @@ class PaginaConferencia(QWidget):
             rotulo("Conferência", "titulo"),
             rotulo("O leitor recusa o que não é inequívoco. Aqui está cada marcação duvidosa "
                    "com o pedaço do papel onde ela está: confira, corrija o que estiver errado "
-                   "e apague o que estiver em branco no cartão.", "sub"),
+                   "e apague o campo quando no cartão não houver marca nenhuma. "
+                   "<b>Dupla marcação é item ANULADO</b> — deixe <b>NULO</b> no campo: vale como "
+                   "erro e sai marcado no boletim. Resolva tudo aqui antes de entregar os "
+                   "boletins: o que ficar pendente não entra em nota nenhuma e sai impresso "
+                   "com “?”.", "sub"),
             self.aviso, rolagem, linha(None, self.botao_aplicar)))
 
     def mostrar(self, achados: list[dict], saida: Path) -> None:
@@ -394,7 +419,11 @@ class PaginaConferencia(QWidget):
         texto.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         faixa.addWidget(texto, 1)
 
-        campo = QLineEdit(achado["resposta"])
+        # Dupla marcação já chega proposta como ANULADA: é o que o papel diz, e
+        # quem confere só precisa concordar. O leitor não devolve resposta nesse
+        # caso — o campo viria vazio, que aqui significa “em branco no cartão”, o
+        # oposto do que aconteceu.
+        campo = QLineEdit(NULO if "dupla_marcacao" in achado["motivo"] else achado["resposta"])
         campo.setFixedWidth(110)
         campo.setAlignment(Qt.AlignCenter)
         faixa.addWidget(campo)
@@ -540,8 +569,14 @@ class PaginaResultados(QWidget):
                 if j == 1:
                     celula.setToolTip(r.estudante.nome)
                 if j == 4:
-                    celula.setToolTip(f"{r.acertos} certas · {r.erros} erradas · "
-                                      f"{r.brancos} em branco")
+                    detalhe = [f"{r.acertos} certas", f"{r.erros} erradas",
+                               f"{r.brancos} em branco"]
+                    if r.nulos:
+                        detalhe.append(f"{r.nulos} anulado(s) por dupla marcação, "
+                                       f"contados entre as erradas")
+                    if r.pendentes:
+                        detalhe.append(f"{r.pendentes} ainda na conferência, fora das notas")
+                    celula.setToolTip(" · ".join(detalhe))
                 self.tabela.setItem(i, j, celula)
         self._ajustar_nome()
 
@@ -553,6 +588,8 @@ class PaginaBoletins(QWidget):
         super().__init__()
         self.janela = janela
         self.resumo = rotulo("", "sub")
+        self.pendencia = rotulo("", "pendencia")
+        self.pendencia.setVisible(False)
         self.abrir = botao("Abrir os boletins para imprimir", "rosa", self.abrir_boletins)
         self.abrir.setEnabled(False)
         coluna = QVBoxLayout(self)
@@ -563,7 +600,7 @@ class PaginaBoletins(QWidget):
                    "grupo de habilidades comparada à média da turma, escore, redação, posição e "
                    "o gabarito ao lado das marcações. Abre no navegador — escolha “Salvar como "
                    "PDF” na impressão.", "sub"),
-            self.resumo, linha(self.abrir, None)))
+            self.pendencia, self.resumo, linha(self.abrir, None)))
         coluna.addStretch(1)
 
     def abrir_boletins(self) -> None:
@@ -574,8 +611,28 @@ class PaginaBoletins(QWidget):
     def mostrar(self, resultados: list[Resultado], saida: Path) -> None:
         quantos = sum(1 for r in resultados if r.tem_resposta)
         existe = (saida / "boletins.html").exists()
-        self.resumo.setText(f"{quantos} boletim(ns) prontos em boletins.html"
-                            if existe else "Nenhum boletim gerado ainda.")
+        pendentes = sum(r.pendentes for r in resultados)
+        anulados = sum(r.nulos for r in resultados)
+        if not existe:
+            self.resumo.setText("Nenhum boletim gerado ainda.")
+        else:
+            partes = [f"{quantos} boletim(ns) prontos em boletins.html"]
+            if anulados:
+                partes.append(f"{anulados} item(ns) anulado(s) por dupla marcação — contam como "
+                              f"erro e saem marcados com “N”")
+            self.resumo.setText(" · ".join(partes) + ".")
+        # A pendência é o que separa “boletim pronto” de “boletim pronto para
+        # entregar”: item que ficou na conferência não entrou em nota nenhuma.
+        # Fica em vermelho, e não some sozinho — some quando o trabalho é feito.
+        if pendentes:
+            self.pendencia.setText(
+                f"⚠ {pendentes} marcação(ões) continuam na Conferência. Esses itens saem no "
+                f"boletim com “?” e NÃO entram em nenhuma nota. Volte ao passo 3, resolva-os e "
+                f"clique em “Aplicar e recorrigir” — aí sim os boletins estão prontos para "
+                f"entregar.")
+        else:
+            self.pendencia.setText("")
+        self.pendencia.setVisible(bool(pendentes))
         self.abrir.setEnabled(existe)
 
 
