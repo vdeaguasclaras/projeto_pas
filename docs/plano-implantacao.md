@@ -576,6 +576,15 @@ conta. E **se recusa a exportar enquanto houver marcação na fila de
 conferência**: é a única nota deste projeto que entra na vida acadêmica do
 estudante, e nota provisória lançada lá ninguém descobre que era provisória.
 
+### Instalar sem terminal
+
+Gerar o `.exe` exigia quatro comandos num terminal da máquina administrativa, e
+cada um com um jeito próprio de falhar — o PATH sem o `pyinstaller`, a instalação
+“só para o usuário”, a pasta que já existia. Hoje quem monta é uma **máquina do
+GitHub**, numa instalação limpa do Windows, e o que chega à secretaria é um
+`.zip`: baixar, descompactar, abrir. Uma etiqueta `leitor-vX` publica a versão
+como Release, com endereço fixo.
+
 ### O que falta
 
 O **`.exe`** foi gerado e rodado numa máquina Windows da escola, com o fluxo

@@ -1,0 +1,4 @@
+# O .bat do Windows precisa de CRLF: com fim de linha do Unix, o `goto` do
+# cmd.exe pode pular para o lugar errado ou não encontrar o rótulo — e o defeito
+# aparece só na máquina da escola, que é onde o arquivo serve para alguma coisa.
+*.bat text eol=crlf

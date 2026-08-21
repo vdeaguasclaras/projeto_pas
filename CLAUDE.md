@@ -432,6 +432,13 @@ passa e o leitor falha na secretaria.
   ajusta ao maior entre o cabeçalho e o conteúdo, e aqui o cabeçalho quase sempre
   ganha — “Escore PAS” custava 25px para dizer o que a dica ao pousar o ponteiro
   diz de graça.
+- **O `.exe` é montado por uma máquina do GitHub, e não fica versionado.**
+  `.github/workflows/leitor-windows.yml` roda o PyInstaller num Windows limpo e
+  devolve um `.zip`; etiqueta `leitor-vX` vira Release, que é o que a secretaria
+  baixa. São 350 MB de cópia do Python, do OpenCV e do Qt — commitá-los seria
+  guardar no repositório o que uma linha regenera. O passo de conferência não é
+  enfeite: ele procura `cv2` e `PySide6` dentro do `_internal` porque o pacote
+  vazio de 25 MB já aconteceu, e falhava só ao abrir.
 - **As cores da janela vêm do CSS do sistema, por ferramenta.**
   `desktop/ferramentas/extrair-tema.py` lê o `:root` do `css/estilo.css` e gera
   `ui/tema.py`. Não acerte cor à mão do lado do Qt: dois azuis quase iguais, e

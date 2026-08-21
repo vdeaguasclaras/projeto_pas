@@ -4,6 +4,11 @@
 > máquina da escola (Windows, Python 3.14, instalação só para o usuário), gerou o
 > pacote e percorreu o fluxo inteiro — ler, conferir, resultados, boletins.
 >
+> Depois disso o empacotamento virou automático: uma máquina do GitHub monta o
+> `.exe` e devolve um `.zip`, e a instalação na secretaria passou a ser baixar e
+> descompactar. Os quatro comandos abaixo continuam valendo, e viraram o caminho
+> de quem mexe no código.
+>
 > Antes disso a receita foi ensaiada em Linux, e o ensaio serviu para o que ensaio
 > serve: encontrar o que estava errado nela antes de alguém perder a tarde. Três
 > defeitos vieram do Windows mesmo assim, e estão consertados aqui — o
@@ -31,7 +36,50 @@ A máquina da secretaria não tem Python, e pedir para instalar Python numa
 máquina administrativa da escola é um pedido que não passa. O aplicativo tem de
 ser um programa que se copia e se abre.
 
-## Gerar o pacote (numa máquina Windows, uma vez por versão)
+## Os três caminhos, do mais fácil ao mais trabalhoso
+
+| | Precisa de | Quando usar |
+|---|---|---|
+| **1. Baixar o .zip pronto** | um navegador | é o caminho normal, e o único que a secretaria precisa conhecer |
+| **2. Clicar no `gerar-exe.bat`** | Python e uma cópia do repositório | quando você mexeu no código e quer o pacote na hora |
+| **3. Comando a comando** | idem | quando algo deu errado no 2 e você quer ver cada passo |
+
+### 1. Baixar o `.zip` pronto (sem comando nenhum)
+
+O `.exe` é montado **por uma máquina do GitHub**, numa instalação limpa do
+Windows, pela receita em
+[`.github/workflows/leitor-windows.yml`](../../.github/workflows/leitor-windows.yml).
+Ninguém precisa ter Python, nem clonar o repositório, nem abrir terminal.
+
+Para publicar uma versão nova, no repositório:
+
+- **Actions** → *“Leitor de cartões — executável Windows”* → **Run workflow**.
+  Ao fim, a própria execução traz o `PAS-Leitor-windows.zip` como anexo, e ele
+  dura 30 dias. Serve para conferir.
+- Para a versão que vai para a escola, publique uma **etiqueta** `leitor-v1`,
+  `leitor-v2`… O mesmo `.zip` vira uma **Release**, que não expira e tem
+  endereço fixo para mandar por e-mail.
+
+Na máquina da secretaria:
+
+1. Baixar o `PAS-Leitor-windows.zip` da aba **Releases**.
+2. Clicar com o botão direito → **Extrair tudo**. **A pasta inteira** é o
+   programa; não adianta copiar só o `.exe` de dentro dela.
+3. Abrir o `PAS-Leitor.exe`. Na primeira vez o Windows mostra a tela azul do
+   SmartScreen — *Mais informações → Executar assim mesmo*.
+4. Botão direito no `PAS-Leitor.exe` → **Enviar para → Área de trabalho (criar
+   atalho)**, e daí em diante é um ícone como qualquer outro.
+
+Guarde a pasta num lugar estável (`C:\PAS-Leitor`, por exemplo) antes de criar o
+atalho: atalho para dentro de `Downloads` quebra quando alguém limpa a pasta.
+
+### 2. Clicar no `gerar-exe.bat`
+
+Numa máquina que já tenha Python e uma cópia do repositório, um duplo clique em
+`desktop\gerar-exe.bat` instala as dependências, monta o pacote e diz onde ele
+ficou. A janela **não fecha sozinha** — se der errado, o erro fica na tela.
+
+### 3. Comando a comando
 
 ```powershell
 git clone https://github.com/vdeaguasclaras/projeto_pas.git
