@@ -80,12 +80,23 @@ jobs:
       # Só quando veio de uma etiqueta. Release não expira, e é o que se manda
       # para a escola. Pelo `gh`, que já vem na máquina do GitHub — uma ação de
       # terceiro a menos para confiar.
+      #
+      # Anexa a uma Release que já exista, em vez de tentar criá-la sempre: quem
+      # publica pela tela do GitHub (“Draft a new release”) cria a etiqueta E a
+      # Release de uma vez, e a etiqueta dispara este workflow — que então
+      # falharia no `create`, com o pacote pronto e nenhum lugar para pô-lo.
       - name: Publicar a Release
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$env:GITHUB_REF_NAME" PAS-Leitor-windows.zip `
-            --title "Leitor de cartões $env:GITHUB_REF_NAME" `
-            --notes "Baixe o PAS-Leitor-windows.zip, descompacte a pasta inteira e abra o PAS-Leitor.exe. Não precisa instalar Python nem nada mais."
+          $etiqueta = $env:GITHUB_REF_NAME
+          $recado = "Baixe o PAS-Leitor-windows.zip, descompacte a pasta inteira e abra o PAS-Leitor.exe. Não precisa instalar Python nem nada mais."
+          gh release view $etiqueta 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $etiqueta PAS-Leitor-windows.zip --clobber
+          } else {
+            gh release create $etiqueta PAS-Leitor-windows.zip `
+              --title "Leitor de cartões $etiqueta" --notes $recado
+          }
