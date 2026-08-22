@@ -1,5 +1,10 @@
 # Instalar o leitor na máquina da secretaria
 
+> Este documento é de quem **gera** o pacote e mantém o projeto. Quem vai
+> **usar** o programa na secretaria tem um manual próprio, escrito para ser
+> enviado à equipe: [`docs/manual-do-leitor.md`](../../docs/manual-do-leitor.md)
+> — instalação, os seis passos e o que fazer quando algo não sai como esperado.
+
 > **Estado: gerado e rodado no Windows.** A coordenação seguiu esta receita numa
 > máquina da escola (Windows, Python 3.14, instalação só para o usuário), gerou o
 > pacote e percorreu o fluxo inteiro — ler, conferir, resultados, boletins.

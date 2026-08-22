@@ -36,6 +36,9 @@ Sistema web (on-line)                      App local (Windows)
    “Correção e boletins”                    com miniatura da folha)
 ```
 
+O manual de quem **usa** o programa na secretaria está em
+[`docs/manual-do-leitor.md`](../docs/manual-do-leitor.md).
+
 O contrato de dados entre as duas pontas está em
 [`docs/contrato-dados.md`](docs/contrato-dados.md); o caminho da imagem à
 resposta, em [`docs/pipeline-omr.md`](docs/pipeline-omr.md).
