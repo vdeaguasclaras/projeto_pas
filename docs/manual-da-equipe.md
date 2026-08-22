@@ -1,5 +1,9 @@
 # Manual rápido — Sistema PAS Marista
 
+> Este manual é do **sistema on-line**. Quem digitaliza os cartões e emite os
+> boletins usa o aplicativo da secretaria, que tem manual próprio:
+> [Leitor de Cartões PAS](manual-do-leitor.md).
+
 ## Primeiro acesso
 
 Abra o endereço do sistema e entre com o seu e-mail e a **senha provisória** que

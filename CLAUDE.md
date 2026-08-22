@@ -286,33 +286,19 @@ Isso dispensa credencial e cobre toda a lógica de papel e de tela.
 
 Vercel (projeto `projeto-pas`), conectada ao GitHub.
 
-**A branch que a Vercel publica é `claude/locate-created-files-xzeih0`.** É nela
-que os PRs entram, e é o push nela que republica sozinho — PR aberto contra outra
-branch não chega ao ar.
-
-`main` foi trazida ao mesmo ponto (era só um avanço direto: a produção sempre
-descendeu dela). **Faltam dois cliques para terminar a unificação**, e nenhum
-deles é aqui:
-
-1. no GitHub, *Settings → General → Default branch* → `main` — hoje o padrão do
-   repositório ainda é a branch de nome comprido, e é ela que abre ao entrar no
-   repositório e a que os PRs novos escolhem sozinhos;
-2. na Vercel, *Settings → Git → Production Branch* → `main`.
-
-São ajustes separados: mudar um não mexe no outro. Feitos os dois, `main` passa a
-ser a branch de produção em todo lugar, a antiga pode ser apagada (o GitHub não
-deixa apagar a branch padrão — por isso o clique 1 vem antes), e esta seção pode
-ser reescrita para dizer só isso.
-
-Enquanto o clique não acontece, as duas apontam para o mesmo commit — mas quem
-mandar só para `main` **não republica o site**.
+**A branch é `main`** — padrão do repositório no GitHub e branch de produção na
+Vercel. É nela que os PRs entram, e é o push nela que republica o site sozinho.
+(Até agosto de 2026 a produção morava numa branch de nome comprido, herdada da
+primeira sessão; as duas foram unificadas e as antigas, encerradas.)
 
 Duas coisas que o ambiente desta sessão NÃO deixa fazer, e por isso ficam para
 quem tem o repositório aberto no navegador: **apagar branch e publicar etiqueta**.
 As duas levam 403 do proxy (`git push --delete`, `git push --tags`), e a
 ferramenta do GitHub disponível aqui só cria branch, não apaga. Branch de PR
 fechada se apaga na tela de *Branches*; o histórico dela continua alcançável por
-`refs/pull/<n>/head`, que o GitHub guarda para sempre.
+`refs/pull/<n>/head`, que o GitHub guarda para sempre. Etiqueta se publica pela
+tela de *Releases* — e é o que faz sair uma versão nova do leitor
+(`leitor-vX`).
 
 ## Ambiente de desenvolvimento remoto
 
