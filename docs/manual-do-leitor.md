@@ -15,18 +15,23 @@ passos.
 
 <https://github.com/vdeaguasclaras/projeto_pas/releases>
 
-Na versão mais recente, clique em **`PAS-Leitor-windows.zip`**. São cerca de
-100 MB.
+Na versão mais recente, na lista de **Assets**, clique em
+**`PAS-Leitor-windows.zip`** — cerca de 100 MB.
+
+> ⚠️ **Não baixe o “Source code (zip)”.** O GitHub sempre oferece esses dois
+> arquivos logo abaixo dos anexos; eles são o código-fonte do projeto e **não
+> têm o programa dentro**. Se você extraiu e não achou nenhum `.exe`, foi este o
+> arquivo que veio. Baixe o `PAS-Leitor-windows.zip`, que é o de 100 MB.
 
 **2. Extrair.** Na pasta de downloads, clique com o botão direito no arquivo →
-**Extrair tudo…** → **Extrair**.
+**Extrair tudo…** → **Extrair**. Sai uma pasta com o `PAS-Leitor.exe` dentro.
 
 > ⚠️ **A pasta inteira é o programa.** Não adianta copiar só o `PAS-Leitor.exe`
 > de dentro dela: ele não funciona sozinho.
 
-**3. Guardar num lugar fixo.** Mova a pasta `PAS-Leitor` para algum lugar
-estável — `C:\PAS-Leitor` é uma boa escolha. Deixá-la em *Downloads* dá
-problema no dia em que alguém limpar a pasta.
+**3. Guardar num lugar fixo.** Mova essa pasta para algum lugar estável —
+`C:\PAS-Leitor` é uma boa escolha. Deixá-la em *Downloads* dá problema no dia em
+que alguém limpar a pasta.
 
 **4. Abrir e criar o atalho.** Dê dois cliques em **`PAS-Leitor.exe`**.
 
@@ -178,6 +183,7 @@ digitalizações**.
 
 | O que aconteceu | O que fazer |
 |---|---|
+| **Não achei o `.exe`** depois de extrair | você baixou o *Source code (zip)*. Volte à página de versões e clique no `PAS-Leitor-windows.zip`, o de 100 MB, na lista de *Assets*. |
 | **A tela azul do Windows** ao abrir | *Mais informações → Executar assim mesmo*. É por não ter certificado comprado. |
 | **“Não achei digitalização aqui”** | você apontou para uma pasta sem imagens. Aponte para a pasta certa, ou direto para o PDF do lote. |
 | **Muitas folhas na conferência** | quase sempre o cartão-gabarito ficou de fora da digitalização. Digitalize o lote de novo com ele na frente. |

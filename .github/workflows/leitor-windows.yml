@@ -67,9 +67,12 @@ jobs:
           Write-Host "pacote de $mb MB"
           if ($mb -lt 150) { throw "o pacote tem $mb MB — pequeno demais para ter tudo dentro" }
 
+      # A PASTA vai dentro do .zip, não o conteúdo dela solto: assim, extraindo
+      # em qualquer lugar, sai uma pasta `PAS-Leitor` com o programa dentro. Com
+      # o conteúdo solto, o nome da pasta dependia de quem extraiu.
       - name: Compactar
         shell: pwsh
-        run: Compress-Archive -Path desktop\dist\PAS-Leitor\* -DestinationPath PAS-Leitor-windows.zip
+        run: Compress-Archive -Path desktop\dist\PAS-Leitor -DestinationPath PAS-Leitor-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
@@ -92,7 +95,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $etiqueta = $env:GITHUB_REF_NAME
-          $recado = "Baixe o PAS-Leitor-windows.zip, descompacte a pasta inteira e abra o PAS-Leitor.exe. Não precisa instalar Python nem nada mais."
+          # O recado começa dizendo o que NÃO baixar. O GitHub sempre oferece
+          # “Source code (zip)” abaixo dos anexos, e ele não tem programa nenhum
+          # dentro — foi o que a coordenação baixou na primeira vez, no minuto e
+          # meio entre publicar a Release e o pacote ficar pronto.
+          #
+          # Sem crase no texto: aqui dentro ela é o caractere de escape do
+          # PowerShell, e `n é a quebra de linha.
+          $recado = "**Baixe o PAS-Leitor-windows.zip**, na lista de _Assets_ aqui embaixo — cerca de 100 MB.`n`nOs dois **Source code** logo abaixo dele são o código-fonte do projeto: NÃO têm o programa dentro.`n`nDepois: botão direito no arquivo → Extrair tudo → abra o PAS-Leitor.exe da pasta que sair. Não precisa instalar Python nem nada mais.`n`nO passo a passo completo está em docs/manual-do-leitor.md."
           gh release view $etiqueta 2>$null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $etiqueta PAS-Leitor-windows.zip --clobber
