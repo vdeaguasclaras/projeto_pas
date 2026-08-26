@@ -14,6 +14,8 @@ O que está escrito aqui é a FORMA da conta, não os números dela:
   mesmo em todo tipo — no tipo B, errar não desconta;
 - o discursivo não tem certo nem errado: a nota lançada de 0 a 10 entra como
   `nota / escala`;
+- item anulado pela coordenação (`pacote.anulados`) vale como acerto para
+  TODOS, e o que cada estudante marcou nele deixa de contar;
 - a redação vem da planilha oficial, `NR = NC − 2·NE/TL`, com piso em zero. A
   fórmula pode passar do zero; a nota, não.
 """
@@ -56,8 +58,13 @@ class Detalhe:
     gabarito: str
     marcada: str | None
     certa: bool
-    # Anulado: marcou duas. Conta como erro, e aparece com marca própria.
+    # Dupla marcação: o ESTUDANTE marcou duas. Conta como erro, sai com “N”.
     nulo: bool = False
+    # Item anulado pela COORDENAÇÃO — vale para a prova inteira, conta como
+    # acerto para todo mundo e sai com “*”. Não confundir com o de cima: são
+    # duas coisas que já se chamaram “anulado” neste aplicativo, e a diferença é
+    # quem anulou. Ver `anulacao.py`.
+    anulado: bool = False
     # Ainda na fila de conferência quando o boletim foi gerado. NÃO conta como
     # nada — nem acerto, nem erro, nem branco: ninguém decidiu ainda, e afirmar
     # qualquer das três seria inventar. Sai do numerador E do denominador, como o
@@ -77,10 +84,14 @@ class Resultado:
     detalhes: list[Detalhe] = field(default_factory=list)
     discursivas_lancadas: int = 0
     discursivas_total: int = 0
-    # Anulados por dupla marcação. Estão DENTRO de `erros` — contam como erro,
-    # com o peso de erro do tipo —, e são contados à parte só para poderem
-    # aparecer com marca própria no boletim e na planilha.
+    # Dupla marcação. Estão DENTRO de `erros` — contam como erro, com o peso de
+    # erro do tipo —, e são contados à parte só para poderem aparecer com marca
+    # própria no boletim e na planilha.
     nulos: int = 0
+    # Itens anulados pela coordenação, creditados a este estudante. Estão DENTRO
+    # de `acertos` (e do escore, e da Nota Marista): item anulado vale para todos
+    # como se todos o tivessem acertado.
+    anulados: int = 0
     # Itens que continuavam na fila de conferência na hora de corrigir.
     pendentes: int = 0
     total_itens: int = 0
@@ -144,6 +155,34 @@ def _chave_esperada(item: dict) -> str:
     return bruta.upper()
 
 
+def _creditar_anulado(resultado: Resultado, grupo: Acertos, item: dict, escore) -> None:
+    """O item anulado, creditado como acerto — para este e para todos.
+
+    Item com defeito de formulação, ou sem alternativa correta, não pode custar
+    nota a quem o respondeu de boa-fé: a pontuação dele é concedida ao elenco
+    inteiro. O que o estudante marcou ali deixa de importar, e por isso esta
+    conta vem ANTES de tudo — antes da pendência, inclusive: marcação que não
+    conta não precisa ser conferida por ninguém.
+
+    No discursivo o equivalente a acertar é a nota cheia (`nota/escala` = 1), e
+    a nota que porventura já tenha sido lançada não entra: ela mediria um item
+    que a prova deixou de ter.
+    """
+    if item["tipo"] == "D":
+        resultado.discursivas_total += 1
+        resultado.escore += 1.0
+    else:
+        resultado.acertos += 1
+        resultado.escore += float(escore.peso(item["tipo"]).get("certo", 0))
+        resultado.detalhes.append(Detalhe(item["numero"], item["tipo"], _chave_esperada(item),
+                                          None, True, anulado=True))
+    resultado.anulados += 1
+    grupo.total += 1
+    grupo.acertos += 1
+    resultado.itens_avaliaveis += 1
+    resultado.acertos_marista += 1
+
+
 def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
              pendentes: set[int] | frozenset = frozenset()) -> Resultado:
     """Corrige um estudante. `marcacoes` é {número do item: resposta lida}.
@@ -151,6 +190,11 @@ def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
     `pendentes` são os itens que ainda estavam na fila de conferência. Eles não
     entram em conta nenhuma: quem decide o que está no papel é quem confere, e
     até lá não há acerto, erro nem branco a afirmar.
+
+    Os itens anulados (`pacote.anulados`) saem antes de qualquer conta: valem
+    como acerto para todo mundo, tenha o estudante marcado o que tiver marcado.
+    A anulação é por `(versão, número)`, porque cada versão numera os seus itens
+    de 1 a N — o nº 12 da regular pode ser o nº 10 da adaptada.
     """
     escore = pacote.escore
     notas = pacote.notas.get(estudante.matricula)
@@ -162,6 +206,10 @@ def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
 
     for item in itens:
         grupo = resultado.por_grupo.setdefault(item["grupo"] or "—", Acertos())
+
+        if pacote.anulado(item["versao"], item["numero"]):
+            _creditar_anulado(resultado, grupo, item, escore)
+            continue
 
         if item["tipo"] == "D":
             resultado.discursivas_total += 1

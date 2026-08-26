@@ -382,6 +382,21 @@ dialog::backdrop{background:rgba(13,20,45,.55);backdrop-filter:blur(3px)}
 .lanc-item.certa{background:color-mix(in srgb,var(--ok) 9%,transparent)}
 .lanc-item.errada{background:color-mix(in srgb,var(--erro) 8%,transparent)}
 
+/* ---------- itens anulados (Correção) ---------- */
+/* A lista pode ter 110 linhas: rola dentro do cartão em vez de empurrar o resto
+   da tela para baixo. */
+.anul-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;
+  max-height:330px;overflow:auto;padding:2px}
+.anul-item{border:1px solid var(--borda);border-radius:10px;padding:7px 9px;display:flex;
+  align-items:flex-start;gap:8px;font-size:12.5px;cursor:pointer;min-width:0}
+.anul-item input{margin-top:2px;flex:none}
+.anul-item b{font-family:var(--mono);color:var(--azul-esc);white-space:nowrap}
+.anul-item span{color:var(--ink-2);display:block;font-size:11.5px}
+.anul-item i{display:block;font-size:10.5px;color:var(--azul);font-style:normal;margin-top:2px}
+.anul-item.marcado{background:color-mix(in srgb,var(--azul) 9%,transparent);border-color:var(--azul)}
+:root[data-theme="dark"] .anul-item b{color:#9db8ff}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .anul-item b{color:#9db8ff} }
+
 /* ---------- documentos (sempre papel) ---------- */
 .papelaria{background:#e9e4de;padding:26px;display:flex;justify-content:center;gap:26px;flex-wrap:wrap}
 .folha{background:#fff;color:#111;width:430px;max-width:100%;box-shadow:0 3px 10px rgba(0,0,0,.28);font-family:Arial,Helvetica,sans-serif;position:relative}

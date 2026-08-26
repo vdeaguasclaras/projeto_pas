@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Passa a janela pelos seis passos, sem ninguém clicando.
+"""Passa a janela pelos sete passos, sem ninguém clicando.
 
 Interface é o que mais apodrece sem ninguém olhar: um campo renomeado no leitor,
 e a tela que o mostrava fica vazia sem quebrar nada — nenhum teste de leitura
@@ -15,6 +15,7 @@ pela secretaria que a tabela de resultados ficou em branco.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -56,12 +57,16 @@ def main() -> int:
         base = Path(temporario)
         entrada, saida = base / "digitalizacoes", base / "resultado"
         amostrar.digitalizar(cartoes, entrada)
+        # O pacote é aberto de uma CÓPIA: a anulação fica lembrada num arquivo ao
+        # lado dele, e teste não deixa arquivo solto na pasta das amostras.
+        copia = base / pacote.name
+        shutil.copy(pacote, copia)
 
         janela = Janela()
         janela.show()
 
         # 1 · a prova
-        janela.carregar_pacote(pacote)
+        janela.carregar_pacote(copia)
         if janela.sessao.pacote is None:
             print("a janela não carregou o pacote", file=sys.stderr)
             return 1
@@ -72,23 +77,61 @@ def main() -> int:
         aberto = lambda i: bool(janela.passos.item(i).flags() & Qt.ItemIsEnabled)
         if len(janela.paginas) != janela.passos.count():
             falhas.append("o menu lateral e as telas discordam de quantos passos existem")
-        if not aberto(1):
-            falhas.append("com o pacote carregado, o passo de ler continuou fechado")
-        if aberto(2) or aberto(3):
+        if not (aberto(1) and aberto(2)):
+            falhas.append("com o pacote carregado, anular e ler continuaram fechados")
+        if aberto(3) or aberto(4):
             falhas.append("conferência ou resultados abriram antes de haver leitura")
 
-        # 2 · a leitura (direta, sem thread: o teste não tem laço de eventos vivo)
+        # 2 · os itens anulados — uma linha por ITEM, não por número: o mesmo item
+        # tem números diferentes na regular e na adaptada, e quem os junta é o
+        # `id` que vem no pacote.
+        anulacao_pagina = janela.pag_anulacao
+        pct = janela.sessao.pacote
+        itens_distintos = {(i.get("id") or f"{v}:{n}")
+                           for (v, n), i in pct.molde.itens.items()}
+        if anulacao_pagina.lista.count() != len(itens_distintos):
+            falhas.append(f"a tela de anulação listou {anulacao_pagina.lista.count()} linha(s) "
+                          f"para {len(itens_distintos)} item(ns) da prova")
+        cruzados = [g for g in anulacao_pagina.grupos if len(g["numeros"]) > 1]
+        if not cruzados:
+            falhas.append("nenhuma linha juntou as duas versões — o `id` do pacote não chegou")
+
+        # 3 · a leitura (direta, sem thread: o teste não tem laço de eventos vivo)
         lote = ler_lote(janela.sessao.pacote, digitalizacoes(entrada), saida)
         janela.sessao.entrada, janela.sessao.saida = entrada, saida
-        janela.paginas[1].terminou(lote)
+        janela.pag_leitura.terminou(lote)
         aplicacao.processEvents()
-        if not (aberto(2) and aberto(3)):
+        if not (aberto(3) and aberto(4)):
             falhas.append("depois de ler, a conferência e os resultados continuaram fechados")
         if lote.lidas == 0:
             falhas.append("a leitura não devolveu folha lida nenhuma")
 
-        # 3 · a conferência mostra uma linha por marcação duvidosa, com imagem
-        conferencia = janela.paginas[2]
+        # Marcar um item na tela de anulação refaz as notas na hora, e a escolha
+        # fica lembrada ao lado do pacote — sem botão de aplicar pelo caminho.
+        alvo = anulacao_pagina.grupos[0]["chaves"]
+        antes = {r.estudante.matricula: r.escore for r in janela.sessao.resultados}
+        anulacao_pagina.lista.item(0).setCheckState(Qt.Checked)
+        aplicacao.processEvents()
+        if janela.sessao.pacote.anulados != alvo:
+            falhas.append(f"marcar a caixa não anulou o item nas duas versões: esperava {alvo}, "
+                          f"veio {janela.sessao.pacote.anulados}")
+        from leitor import anulacao as _anulacao
+        lembrado = _anulacao.caminho_de(copia, janela.sessao.pacote.molde.prova)
+        if not lembrado.exists():
+            falhas.append(f"a escolha não ficou lembrada em {lembrado.name}")
+        depois = {r.estudante.matricula: r.escore for r in janela.sessao.resultados}
+        if depois == antes:
+            falhas.append("anular um item não mexeu em nota nenhuma")
+        # E desmarcar volta tudo ao que era — inclusive apagando o arquivo.
+        anulacao_pagina.lista.item(0).setCheckState(Qt.Unchecked)
+        aplicacao.processEvents()
+        if janela.sessao.pacote.anulados or lembrado.exists():
+            falhas.append("desmarcar não desfez a anulação")
+        if {r.estudante.matricula: r.escore for r in janela.sessao.resultados} != antes:
+            falhas.append("desfeita a anulação, as notas não voltaram ao que eram")
+
+        # 4 · a conferência mostra uma linha por marcação duvidosa, com imagem
+        conferencia = janela.pag_conferencia
         if len(conferencia.campos) != len(lote.achados):
             falhas.append(f"a conferência mostrou {len(conferencia.campos)} linha(s) "
                           f"para {len(lote.achados)} marcação(ões) duvidosa(s)")
@@ -97,8 +140,8 @@ def main() -> int:
         if sem_imagem:
             falhas.append(f"{len(sem_imagem)} marcação(ões) sem o recorte da folha")
 
-        # 4 · os resultados enchem a tabela
-        tabela = janela.paginas[3].tabela
+        # 5 · os resultados enchem a tabela
+        tabela = janela.pag_resultados.tabela
         com_resposta = sum(1 for r in janela.sessao.resultados if r.tem_resposta)
         if tabela.rowCount() != com_resposta:
             falhas.append(f"a tabela mostrou {tabela.rowCount()} linha(s) para "
@@ -106,10 +149,10 @@ def main() -> int:
         if com_resposta and not (tabela.item(0, 1) and tabela.item(0, 1).text().strip()):
             falhas.append("a coluna do nome saiu vazia na tabela de resultados")
 
-        # 5 · e os boletins existem em disco
+        # 6 · e os boletins existem em disco
         if not (saida / "boletins.html").exists():
             falhas.append("os boletins não foram gerados")
-        if not janela.paginas[4].abrir.isEnabled():
+        if not janela.pag_boletins.abrir.isEnabled():
             falhas.append("o botão de abrir os boletins ficou desligado")
 
         # a conferência, aplicada, tem de mudar a correção
@@ -126,8 +169,8 @@ def main() -> int:
                 falhas.append("o que foi decidido na conferência não entrou na correção "
                               f"(item {achado['item']} ficou {marcada!r})")
 
-        # 6 · a exportação para o sistema acadêmico
-        exportacao = janela.paginas[5]
+        # 7 · a exportação para o sistema acadêmico
+        exportacao = janela.pag_exportacao
         if not exportacao.caixas:
             falhas.append("a tela de exportação não listou componente nenhum")
         # Com marcação em conferência, exportar tem de estar TRAVADO: essa nota
@@ -161,7 +204,7 @@ def main() -> int:
             if b"\r\n" not in bruto or not bruto.startswith(b"ALUNO,DISCIPLINA"):
                 falhas.append("o TXT não saiu no formato do sistema acadêmico")
 
-        print(f"6 passos percorridos · {lote.lidas} folha(s) lida(s) · "
+        print(f"7 passos percorridos · {lote.lidas} folha(s) lida(s) · "
               f"{len(conferencia.campos)} na conferência · {tabela.rowCount()} no resultado")
 
     if falhas:
@@ -169,7 +212,7 @@ def main() -> int:
         for f in falhas:
             print(f"  · {f}", file=sys.stderr)
         return 1
-    print("\nPASSOU: a janela percorreu os seis passos e cada tela mostrou o que devia.")
+    print("\nPASSOU: a janela percorreu os sete passos e cada tela mostrou o que devia.")
     return 0
 
 

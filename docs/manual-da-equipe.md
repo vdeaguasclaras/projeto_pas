@@ -575,6 +575,32 @@ impressão dos boletins por turma.
 - Cada **docente** vê apenas as notas dos próprios itens discursivos.
 - A **coordenação** vê tudo.
 
+### Anular um item
+
+Item com defeito de formulação, ou sem alternativa correta, é **anulado** depois
+da aplicação: a pontuação dele é concedida a **todos os estudantes**, como se
+todos o tivessem acertado. No boletim ele sai com **`*`**, e um aviso diz quais
+foram — o estudante precisa saber que aquele ponto não veio da resposta dele.
+
+Fica na tela de Correção, no bloco **“Itens anulados”**: marque a caixa do item e
+pronto — as notas se refazem na hora, não há botão de confirmar. Desmarcar
+desfaz. Só a **coordenação pedagógica** anula (a nota muda para a série inteira,
+e é esta tela que mostra as notas).
+
+- A marca é do **item**, e vale nas duas versões. Cada versão numera os seus
+  itens de 1 a N, então o mesmo item pode ser o nº 12 na regular e o nº 10 na
+  adaptada — por isso cada linha mostra os dois números (**A1 nº 12 · A2 nº 10**)
+  e uma marcação só resolve as duas provas.
+- O item continua na prova e no caderno impresso: anular é sobre a **nota**, não
+  sobre o papel, que já foi aplicado.
+- Fica registrado no **histórico do item** (quem anulou e quando), e o item
+  anulado avisa isso a quem o abrir, inclusive a quem o escreveu.
+- **Se você já exportou o pacote da prova para o leitor, exporte-o de novo**: é
+  ele que leva a anulação para o aplicativo da secretaria, que é quem emite os
+  boletins. O aplicativo também deixa marcar itens anulados por lá, para quando
+  a decisão vem depois — e o que veio do sistema aparece travado lá, porque
+  desanular é aqui.
+
 No lançamento da redação você digita três coisas — **NC** (nota de conteúdo, de
 0 a 10), **NE** (número de erros) e **TL** (total de linhas escritas) — e a nota
 sai da planilha oficial: **NR = NC − 2·NE/TL**. A coluna **“como a nota se

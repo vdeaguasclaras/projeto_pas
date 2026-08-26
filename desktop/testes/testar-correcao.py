@@ -14,6 +14,13 @@ duas vezes. Este teste é o que fecha essa brecha.
 Ele faz os dois lados corrigirem EXATAMENTE as mesmas marcações — as que o
 leitor tirou dos cartões impressos — e compara nota a nota.
 
+E corrige DUAS vezes: uma como o lote chega, e outra com um item anulado. A
+anulação é a segunda regra escrita dos dois lados (item anulado vale como acerto
+para todos), e escrever a mesma regra duas vezes é o que este roteiro existe para
+vigiar. O item é escolhido pelo `id` que o pacote traz, e não pelo número: cada
+versão numera os seus de 1 a N, e o nº 12 da regular pode ser o nº 10 da
+adaptada.
+
     python3 desktop/testes/testar-correcao.py [amostras]
 """
 from __future__ import annotations
@@ -72,65 +79,103 @@ def main() -> int:
             print("o leitor não gerou respostas.csv", file=sys.stderr)
             return 1
 
-        # 2. O sistema on-line corrige as mesmas marcações, num navegador.
-        notas_sistema = base / "notas-do-sistema.csv"
-        processo = subprocess.run(
-            ["node", str(Path(__file__).resolve().parent / "notas-do-sistema.mjs"),
-             str(respostas), str(notas_sistema)],
-            capture_output=True, text=True)
-        if processo.returncode != 0 or not notas_sistema.exists():
-            print("não deu para obter as notas do sistema on-line:\n"
-                  + processo.stdout + processo.stderr, file=sys.stderr)
+        # 2. O item que será anulado na segunda rodada. Escolhido pelo `id`, e
+        # entre os que aparecem NAS DUAS versões: é aí que anular por número
+        # daria errado, e é isso que interessa vigiar.
+        pct = pacote_mod.carregar(caminho_pacote)
+        porId: dict[str, list] = {}
+        for chave, item in pct.molde.itens.items():
+            if item.get("id") and item["tipo"] != "D":
+                porId.setdefault(item["id"], []).append(chave)
+        nasDuas = sorted((i for i, chaves in porId.items() if len(chaves) > 1),
+                         key=lambda i: sorted(porId[i]))
+        anulado = nasDuas[0] if nasDuas else (sorted(porId)[0] if porId else "")
+        if not anulado:
+            print("o pacote de exemplo não traz `id` de item — regere as amostras",
+                  file=sys.stderr)
             return 2
 
-        # 3. E o aplicativo local corrige as mesmas marcações.
-        pct = pacote_mod.carregar(caminho_pacote)
+        # 3. As marcações, iguais para os dois lados.
         marcacoes: dict[str, dict[int, str]] = {}
         with respostas.open(encoding="utf-8") as arquivo:
             for linha in csv.DictReader(arquivo, delimiter=";"):
                 estudante = pct.casar(linha["matricula"])
                 if estudante:
                     marcacoes.setdefault(estudante.matricula, {})[int(linha["item"])] = linha["resposta"]
-        daqui = {r.estudante.matricula: r for r in corrigir_todos(pct, marcacoes)}
 
-        with notas_sistema.open(encoding="utf-8-sig") as arquivo:
-            de_la = list(csv.DictReader(arquivo, delimiter=";"))
+        # 4. E as duas rodadas: sem anulação e com o mesmo item anulado dos dois
+        #    lados.
+        rodadas = []
+        for rotulo, anular in (("sem anulação", ""), (f"com o item {anulado} anulado", anulado)):
+            notas_sistema = base / f"notas-do-sistema{'-anulado' if anular else ''}.csv"
+            comando = ["node", str(Path(__file__).resolve().parent / "notas-do-sistema.mjs"),
+                       str(respostas), str(notas_sistema)]
+            if anular:
+                comando.append(f"--anular={anular}")
+            processo = subprocess.run(comando, capture_output=True, text=True)
+            if processo.returncode != 0 or not notas_sistema.exists():
+                print(f"não deu para obter as notas do sistema on-line ({rotulo}):\n"
+                      + processo.stdout + processo.stderr, file=sys.stderr)
+                return 2
 
-    falhas = []
-    for linha in de_la:
-        matricula = linha["matricula"]
-        aqui = daqui.get(matricula)
-        if aqui is None:
-            falhas.append(f"{matricula}: o sistema corrigiu e o aplicativo não conhece este estudante")
-            continue
-        comparar = [
-            ("certas", float(linha["certas"]), float(aqui.acertos)),
-            ("erradas", float(linha["erradas"]), float(aqui.erros)),
-            ("brancos", float(linha["brancos"]), float(aqui.brancos)),
-            ("escore_bruto", _numero(linha["escore_bruto"]), round(aqui.escore, 2)),
-        ]
-        nr_la, nr_aqui = _numero(linha["redacao_nr"]), aqui.nr
-        if (nr_la is None) != (nr_aqui is None):
-            falhas.append(f"{matricula} redação: sistema {linha['redacao_nr']!r}, aplicativo {nr_aqui!r}")
-        elif nr_la is not None and abs(nr_la - round(nr_aqui, 1)) > 0.05:
-            falhas.append(f"{matricula} redação: sistema {nr_la}, aplicativo {round(nr_aqui, 1)}")
-        for nome, la, aq in comparar:
-            if la is None or abs(la - aq) > 0.005:
-                falhas.append(f"{matricula} {nome}: sistema {la}, aplicativo {aq}")
+            pct = pacote_mod.carregar(caminho_pacote)
+            if anular:
+                pct.anulados = {chave for chave, item in pct.molde.itens.items()
+                                if item.get("id") == anular}
+            daqui = {r.estudante.matricula: r for r in corrigir_todos(pct, marcacoes)}
+            with notas_sistema.open(encoding="utf-8-sig") as arquivo:
+                rodadas.append((rotulo, daqui, list(csv.DictReader(arquivo, delimiter=";"))))
 
-    lidos = {r for r in daqui if daqui[r].tem_resposta}
-    sistema = {l["matricula"] for l in de_la}
-    for sobrando in sorted(lidos - sistema):
-        falhas.append(f"{sobrando}: o aplicativo corrigiu e o sistema não trouxe na planilha")
+    falhas, comparados = [], 0
+    for rotulo, daqui, de_la in rodadas:
+        for linha in de_la:
+            matricula = linha["matricula"]
+            aqui = daqui.get(matricula)
+            if aqui is None:
+                falhas.append(f"[{rotulo}] {matricula}: o sistema corrigiu e o aplicativo não "
+                              "conhece este estudante")
+                continue
+            comparar = [
+                ("certas", float(linha["certas"]), float(aqui.acertos)),
+                ("erradas", float(linha["erradas"]), float(aqui.erros)),
+                ("brancos", float(linha["brancos"]), float(aqui.brancos)),
+                ("anulados", float(linha["anulados"]), float(aqui.anulados)),
+                ("escore_bruto", _numero(linha["escore_bruto"]), round(aqui.escore, 2)),
+            ]
+            comparados = len(comparar) + 1
+            nr_la, nr_aqui = _numero(linha["redacao_nr"]), aqui.nr
+            if (nr_la is None) != (nr_aqui is None):
+                falhas.append(f"[{rotulo}] {matricula} redação: sistema {linha['redacao_nr']!r}, "
+                              f"aplicativo {nr_aqui!r}")
+            elif nr_la is not None and abs(nr_la - round(nr_aqui, 1)) > 0.05:
+                falhas.append(f"[{rotulo}] {matricula} redação: sistema {nr_la}, "
+                              f"aplicativo {round(nr_aqui, 1)}")
+            for nome, la, aq in comparar:
+                if la is None or abs(la - aq) > 0.005:
+                    falhas.append(f"[{rotulo}] {matricula} {nome}: sistema {la}, aplicativo {aq}")
 
-    print(f"{len(de_la)} estudante(s) corrigidos dos dois lados, {len(comparar) + 1} número(s) "
-          "comparados em cada")
+        lidos = {r for r in daqui if daqui[r].tem_resposta}
+        sistema = {l["matricula"] for l in de_la}
+        for sobrando in sorted(lidos - sistema):
+            falhas.append(f"[{rotulo}] {sobrando}: o aplicativo corrigiu e o sistema não trouxe "
+                          "na planilha")
+
+    # E a anulação tem de ter MUDADO alguma coisa: se as duas rodadas derem o
+    # mesmo, o teste passaria comparando nada com nada.
+    sem, com = rodadas[0][1], rodadas[1][1]
+    if not any(abs(sem[m].escore - com[m].escore) > 0.005 for m in sem if m in com):
+        falhas.append("anular um item não mudou nota nenhuma — as duas rodadas ficaram iguais, "
+                      "e a comparação não provou nada")
+
+    print(f"{len(rodadas[0][2])} estudante(s) corrigidos dos dois lados, {comparados} número(s) "
+          f"comparados em cada, em 2 rodadas (sem anulação e com o item {anulado} anulado)")
     if falhas:
         print("\nFALHOU — as duas correções discordam:", file=sys.stderr)
         for f in falhas:
             print(f"  · {f}", file=sys.stderr)
         return 1
-    print("\nPASSOU: o sistema on-line e o aplicativo local dão a mesma nota.")
+    print("\nPASSOU: o sistema on-line e o aplicativo local dão a mesma nota, com item anulado "
+          "e sem.")
     return 0
 
 

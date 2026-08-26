@@ -194,6 +194,14 @@ def carregar(caminho: Path) -> Molde:
                     "gabarito": item.get("gabarito"),
                     "grupo": item.get("grupo") or "",
                     "componente": item.get("componente") or "",
+                    # O `id` do item no sistema. É o que diz que o nº 12 da
+                    # regular e o nº 10 da adaptada são o MESMO item: cada versão
+                    # numera os seus de 1 a N, e sem ele as duas listas não se
+                    # cruzam. Pacote exportado antes disso não o traz — daí o "".
+                    "id": str(item.get("id") or ""),
+                    # Anulado pela coordenação, no sistema on-line: a pontuação
+                    # vale para todos. Ver `anulacao.py`.
+                    "anulado": bool(item.get("anulado")),
                 }
 
     cod = layout.get("codigo") or {}

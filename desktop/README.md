@@ -87,12 +87,12 @@ B com uma coluna vazia, faixa que não fecha: tudo isso sai em
 ninguém descobre a tempo.
 
 E, do outro lado da conferência, **três coisas diferentes que já foram a mesma**:
-a resposta (a letra ou o número), o **item anulado** (`NULO` — o estudante marcou
-duas alternativas; no PAS vale como erro, e o boletim imprime `N`) e o **item em
-branco** (campo vazio; imprime `.`). O que continua na fila não é nenhuma das
-três: não entra em conta nenhuma, imprime `?` e põe um aviso no alto do boletim.
-Boletim com `?` é boletim emitido antes de a conferência estar resolvida — que é
-o que esse aviso existe para impedir.
+a resposta (a letra ou o número), a **dupla marcação** (`NULO` — o estudante
+marcou duas alternativas e assim anulou o item dele; no PAS vale como erro, e o
+boletim imprime `N`) e o **item em branco** (campo vazio; imprime `.`). O que
+continua na fila não é nenhuma das três: não entra em conta nenhuma, imprime `?`
+e põe um aviso no alto do boletim. Boletim com `?` é boletim emitido antes de a
+conferência estar resolvida — que é o que esse aviso existe para impedir.
 
 O preço disso é uma fila para alguém olhar, e ela vem com **a imagem de cada
 marcação**: um recorte da folha, endireitado, com o número do item e a letra da
@@ -148,6 +148,7 @@ desktop/
 │   ├── lote.py                ← a leitura de um lote (a janela e o CLI usam esta)
 │   ├── pacote.py              ← o pacote da prova: elenco, notas e pesos
 │   ├── correcao.py            ← escore, desempenho por grupo e posição
+│   ├── anulacao.py            ← os itens anulados, e onde eles ficam lembrados
 │   ├── apuracao.py            ← das marcações à planilha e aos boletins
 │   ├── boletim.py             ← o boletim individual, no desenho do boletim do PAS
 │   ├── academico.py           ← o TXT de notas do sistema acadêmico da escola
@@ -162,20 +163,73 @@ desktop/
     ├── gerar-amostras.mjs     ← imprime cartões DE VERDADE, pelo sistema web
     ├── testar-leitura.py      ← digitaliza-os torto e cobra o resultado
     ├── testar-correcao.py     ← o sistema e o app corrigem o mesmo, e se comparam
-    ├── testar-anulacao.py     ← anulado e pendente não são “em branco”
+    ├── testar-dupla-marcacao.py ← dupla marcação e pendente não são “em branco”
+    ├── testar-item-anulado.py ← o item anulado vale como acerto para todos
     ├── testar-academico.py    ← o TXT, byte a byte, contra o arquivo de 2025
-    ├── testar-janela.py       ← percorre os seis passos da janela
+    ├── testar-janela.py       ← percorre os sete passos da janela
     └── referencia/            ← o trecho anonimizado do arquivo de 2025
 ```
 
+## O item anulado
+
+Item com defeito de formulação, ou sem alternativa correta, é **anulado**: a
+pontuação dele é concedida a todos os estudantes, como se todos o tivessem
+acertado.
+
+**Ela nasce no sistema on-line**, na tela de Correção, e viaja DENTRO do pacote
+(`anulado: true` em cada item de `versoes`). Tem de ser assim: o sistema também
+corrige, e as duas correções precisam dizer a mesma coisa —
+`testar-correcao.py` compara as duas, com item anulado e sem.
+
+**E também se marca aqui**, no passo **Itens anulados**, porque a decisão
+costuma vir depois: com a prova aplicada, às vezes com o lote já digitalizado e o
+pacote já exportado. Quem está com o boletim para emitir não pode depender de
+alguém reexportar o arquivo. O que se marca deste lado soma-se ao que veio do
+pacote e fica lembrado em `pas-anulados-<prova>.json`, ao lado dele; o que veio
+do pacote aparece **travado** — desanular é decisão do sistema, e desfazê-la de
+um lado só faria a mesma prova valer notas diferentes conforme quem a corrigiu.
+
+**São duas coisas que já se chamaram “anulado” aqui, e a diferença é quem
+anulou.** Vale para o código e para a tela:
+
+| | quem anulou | vale para | conta como | sai impresso |
+|---|---|---|---|---|
+| **item anulado** | a coordenação | a prova inteira | acerto, para todos | `*` |
+| **dupla marcação** | o estudante | só ele, naquele item | erro | `N` |
+
+**A chave é `(versão, número)` — nunca o número sozinho.** Cada versão numera os
+seus itens de 1 a N: o nº 12 da regular pode ser o nº 10 da adaptada, e anular “o
+item 12” nas duas anularia coisas diferentes. Quem sabe que dois números são o
+mesmo item é o **`id`** que o pacote passou a trazer — é por ele que a tela junta
+as duas versões numa linha só, e que `--anular 12` marca o item nas duas provas.
+
+Três consequências que não são óbvias:
+
+- **a marcação do estudante no item anulado deixa de importar** — e, com ela, a
+  conferência daquele item: marcação que não muda nota nenhuma ninguém precisa
+  decidir, e a fila a mostra desligada, com o motivo;
+- **o boletim diz o que houve.** O número do item leva `*`, o gabarito vira `—`
+  (anular é a escola retirando aquele item; reimprimir a chave dele seria
+  afirmar de novo o que ela acabou de retirar) e um aviso no alto lista os itens
+  anulados. A identidade é o ASTERISCO, não a cor — este boletim é impresso, e
+  muita gente o imprime em preto e branco;
+- **o discursivo anulado vale a nota cheia**, e a nota lançada nele sai da conta
+  e do gráfico: ela mede um item que a prova não tem mais.
+
+Na linha de comando, `--anular 12` usa o número da prova **regular** e marca o
+item nas duas versões; `--anular A2:7` alcança um item que só existe na
+adaptada. Nenhum dos dois grava nada — quem decide e guarda é o sistema, ou a
+janela.
+
 ## A janela
 
-Seis passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
-**Ler cartões** (a pasta das digitalizações, ou o PDF do lote, com barra de
-progresso), **Conferência** (o que ficou em dúvida, com o pedaço do papel ao lado
-e um campo para corrigir), **Resultados** (a planilha), **Boletins** e **Exportar
-notas** (o TXT do sistema acadêmico). Um passo só abre quando o anterior deu o
-que ele precisa.
+Sete passos, na ordem do trabalho na secretaria: **Prova** (escolher o pacote),
+**Itens anulados** (os que a coordenação anulou, se houver), **Ler cartões** (a
+pasta das digitalizações, ou o PDF do lote, com barra de progresso),
+**Conferência** (o que ficou em dúvida, com o pedaço do papel ao lado e um campo
+para corrigir), **Resultados** (a planilha), **Boletins** e **Exportar notas** (o
+TXT do sistema acadêmico). Um passo só abre quando o anterior deu o que ele
+precisa.
 
 A **exportação** pergunta só o que o aplicativo não tem como saber: o código da
 prova no calendário da escola (`E3_P3`), o ano, o turno e para quais componentes
@@ -235,6 +289,13 @@ python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
     --respostas ./resultado/respostas.csv --respostas ./conferido.csv \
     --saida ./resultado
 
+# item anulado nesta rodada: a pontuação dele vai para todos. O número é o da
+# prova regular, e o item é marcado nas duas versões; `A2:7` alcança um item que
+# só existe na adaptada. Vale em `ler`, `corrigir` e `exportar`
+python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
+    --respostas ./resultado/respostas.csv --saida ./resultado \
+    --anular 12 --anular A2:7
+
 # as notas no formato do sistema acadêmico. Sem `--componente`, ele lista os
 # componentes daquela série, com o código de cada um, e para
 python -m src.leitor.cli exportar --gabarito pas-pacote-pr-2em.json \
@@ -251,7 +312,7 @@ Sai em `./resultado`:
 | `respostas_conferir.csv` | o que precisa de olho humano, com o motivo |
 | `percentuais.csv` | os percentuais de acerto do discursivo, quando marcados |
 | `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
-| `resultados.csv` | acertos, erros, brancos, anulados, pendentes, escore do PAS, % de acerto, Nota Marista, redação, posição e desempenho por grupo |
+| `resultados.csv` | acertos, erros, brancos, duplas marcações, itens anulados, pendentes, escore do PAS, % de acerto, Nota Marista, redação, posição e desempenho por grupo |
 | `boletins.html` | o boletim de desempenho de cada estudante, pronto para imprimir |
 | `conferencia.html` | a fila de conferência com a imagem de cada marcação duvidosa |
 | `conferencia/*.png` | os recortes e as miniaturas das folhas que caíram na fila |
@@ -277,15 +338,17 @@ node desktop/testes/gerar-amostras.mjs --grande   # 42 itens, 32 estudantes
 python3 desktop/testes/testar-leitura.py
 python3 desktop/testes/testar-leitura.py amostras-grande
 python3 desktop/testes/testar-correcao.py
-python3 desktop/testes/testar-anulacao.py
+python3 desktop/testes/testar-dupla-marcacao.py
+python3 desktop/testes/testar-item-anulado.py
 python3 desktop/testes/testar-academico.py
 QT_QPA_PLATFORM=offscreen python3 desktop/testes/testar-janela.py
 ```
 
-`testar-anulacao.py` não precisa de scanner nem de navegador: monta as marcações
-à mão para cobrir os dois casos que já viraram “em branco” por descuido — o item
-anulado e o item que ficou na fila — e confere o que cada um fez com a nota e com
-o que sai impresso.
+`testar-dupla-marcacao.py` e `testar-item-anulado.py` não precisam de scanner nem
+de navegador: montam as marcações à mão. O primeiro cobre os dois casos que já
+viraram “em branco” por descuido — a dupla marcação e o item que ficou na fila. O
+segundo cobre a anulação de item, inclusive a pergunta que impede o estrago
+silencioso: **sem anulação nenhuma, tudo continua exatamente como era**.
 
 `testar-academico.py` compara o TXT gerado, **byte a byte**, com um trecho
 anonimizado do arquivo que a escola importou em 2025. Formato de importação é
@@ -295,7 +358,10 @@ vírgula mudar de lugar.
 `testar-correcao.py` é de outra natureza: ele faz o **sistema on-line** e o
 aplicativo local corrigirem exatamente as mesmas marcações — as que o leitor
 tirou dos cartões impressos — e compara nota a nota. É o que impede as duas
-implementações do escore de divergirem.
+implementações do escore de divergirem. Ele corrige **duas vezes**: uma como o
+lote chega e outra com um item anulado dos dois lados, porque a anulação é a
+segunda regra que passou a existir em duplicata. E confere que a anulação mudou
+alguma nota — senão a comparação estaria comparando nada com nada.
 
 Se o Chromium já estiver instalado em outro lugar, `CHROMIUM=/caminho/do/chrome`
 dispensa o download; e `PLAYWRIGHT_BROWSERS_PATH`, se estiver definido, é

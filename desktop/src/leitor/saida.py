@@ -217,8 +217,8 @@ def conferencia(pasta: Path, molde_prova: dict, achados: list[dict]) -> Path | N
   <h1>Conferência da leitura óptica — {_esc(molde_prova.get('serie', ''))}</h1>
   <p>{len(achados)} marcação(ões) que o leitor não leu com certeza. Confira no recorte,
      corrija o que estiver errado e apague o campo quando no papel não houver marca nenhuma.
-     <b>Dupla marcação é item anulado</b> — deixe <b>{NULO}</b> no campo: vale como erro e sai
-     marcado no boletim. O que ficar sem decisão não entra em nota nenhuma.</p>
+     <b>Duas alternativas marcadas</b> — deixe <b>{NULO}</b> no campo: no PAS o estudante
+     anulou o item, e isso vale como erro. O que ficar sem decisão não entra em nota nenhuma.</p>
 </header>
 <main>
 <table><thead><tr><th>Marcação no papel</th><th>Matrícula</th><th>Item</th>

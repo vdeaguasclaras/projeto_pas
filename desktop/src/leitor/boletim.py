@@ -125,11 +125,19 @@ ESTILO = f"""
   td.certa{{color:{COR_GERAL};font-weight:700}}
   td.errada{{color:#e5484d;font-weight:700}}
   td.branca{{color:#b9b1a8}}
-  /* Anulado é erro, e por isso vermelho; o que o distingue é a marca — o “N” e
-     o traço por baixo —, não uma terceira cor a decorar. */
+  /* Dupla marcação é erro, e por isso vermelho; o que a distingue é a marca —
+     o “N” e o traço por baixo —, não uma terceira cor a decorar. */
   td.nula{{color:#e5484d;font-weight:700;text-decoration:underline;
     text-underline-offset:2px}}
   td.pendente{{color:#8a5a00;font-weight:700;background:#fff6e0;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  /* Item anulado: a coluna inteira sai em azul, com asterisco no número e na
+     marcação. A identidade é o ASTERISCO, não a cor — muita gente imprime este
+     boletim em preto e branco, e aí a cor não separa nada. */
+  td.anulado{{color:{COR_VOCE};font-weight:700;background:#eef2ff;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .anulacao{{background:#eef2ff;border:1px solid #ccd8ff;border-left:4px solid {COR_VOCE};
+    border-radius:6px;padding:6px 10px;font-size:8.5px;color:#0d2f8a;margin:10px 0;
     -webkit-print-color-adjust:exact;print-color-adjust:exact}}
   .pendencia{{background:#fff6e0;border:1px solid #f0d8a0;border-left:4px solid #e8a800;
     border-radius:6px;padding:6px 10px;font-size:8.5px;color:#8a5a00;margin:10px 0;
@@ -200,6 +208,8 @@ def _barras(resultado: Resultado, turma: dict[str, float], geral: dict[str, floa
 
 
 def _classe(detalhe) -> str:
+    if detalhe.anulado:
+        return "anulado"
     if detalhe.pendente:
         return "pendente"
     if detalhe.nulo:
@@ -212,20 +222,36 @@ def _classe(detalhe) -> str:
 def _marca(detalhe) -> str:
     """O que sai impresso na linha “Sua marcação”.
 
-    O item anulado NÃO pode sair como branco. São coisas diferentes no papel —
-    quem anulou marcou duas alternativas, e é exatamente isso que precisa ler no
-    boletim para não repetir na prova de verdade — e contam diferente: anulado
-    vale como erro. Sai como `N`, sublinhado.
+    Quatro coisas que já foram uma só, e nenhuma é “em branco”:
 
-    O pendente sai como `?`, e é uma confissão: ninguém decidiu ainda o que está
-    no papel. Aparece com fundo, porque boletim entregue com `?` é boletim
-    entregue cedo demais.
+    - **`*`, item anulado** — a coordenação anulou o item, e a pontuação foi
+      concedida a todos. O que este estudante marcou ali não conta mais, e por
+      isso não sai impresso: sai o asterisco, e o número do item leva outro;
+    - **`N`, dupla marcação** — o estudante marcou duas alternativas. É
+      exatamente isso que ele precisa ler no boletim para não repetir na prova de
+      verdade, e vale como erro;
+    - **`?`, pendente** — ninguém decidiu ainda o que está no papel. Aparece com
+      fundo, porque boletim entregue com `?` é boletim entregue cedo demais;
+    - **`.`, em branco** — não havia marca nenhuma no cartão.
     """
+    if detalhe.anulado:
+        return "*"
     if detalhe.pendente:
         return "?"
     if detalhe.nulo:
         return "N"
     return _esc(detalhe.marcada) if detalhe.marcada is not None else "."
+
+
+def _gabarito(detalhe) -> str:
+    """A resposta certa — menos quando não há uma.
+
+    No item anulado sai um traço, e não a chave que estava exportada. Anular é a
+    escola dizendo que aquele item não avalia o que devia; reimprimir a chave
+    dele ao lado seria afirmar de novo, no papel que vai para casa, exatamente o
+    que ela acabou de retirar.
+    """
+    return "—" if detalhe.anulado else _esc(detalhe.gabarito)
 
 
 def _tabela_de_tipo(resultado: Resultado, tipo: str, titulo: str, por_linha: int = 22) -> str:
@@ -236,8 +262,10 @@ def _tabela_de_tipo(resultado: Resultado, tipo: str, titulo: str, por_linha: int
     blocos = []
     for inicio in range(0, len(detalhes), por_linha):
         pedaco = detalhes[inicio:inicio + por_linha]
-        itens = "".join(f"<td>{d.numero}</td>" for d in pedaco)
-        gabaritos = "".join(f"<td>{_esc(d.gabarito)}</td>" for d in pedaco)
+        itens = "".join(f'<td class="{_classe(d)}">{d.numero}*</td>' if d.anulado
+                        else f"<td>{d.numero}</td>" for d in pedaco)
+        gabaritos = "".join(f'<td class="{_classe(d)}">{_gabarito(d)}</td>' if d.anulado
+                            else f"<td>{_gabarito(d)}</td>" for d in pedaco)
         marcadas = "".join(f'<td class="{_classe(d)}">{_marca(d)}</td>' for d in pedaco)
         blocos.append(f"<tr><th>Item</th>{itens}</tr>"
                       f"<tr><th>Gabarito</th>{gabaritos}</tr>"
@@ -250,7 +278,11 @@ def _discursivos(resultado: Resultado, pacote: Pacote,
                  medias_d: dict[int, float]) -> str:
     """As notas dos discursivos, comparadas à média geral, item a item."""
     notas = pacote.notas.get(resultado.estudante.matricula)
-    lancadas = notas.discursivas if notas else {}
+    # O discursivo ANULADO sai do gráfico: a nota lançada nele mede um item que a
+    # prova deixou de ter, e a correção já não a usa. Deixá-lo desenhado seria o
+    # boletim comparando o estudante à turma num item que não vale mais nada.
+    lancadas = {n: v for n, v in (notas.discursivas if notas else {}).items()
+                if not pacote.anulado(resultado.estudante.versao, n)}
     if not lancadas:
         return ""
     escala = pacote.escore.escala_do_discursivo
@@ -302,6 +334,19 @@ def html_de(pacote: Pacote, resultado: Resultado, turma: dict[str, float],
                  f'— nem como acerto, nem como erro. Resolva a conferência e emita o boletim '
                  f'de novo.</div>') if resultado.pendentes else ""
 
+    # E os itens que a coordenação anulou. O aviso é por boletim porque a lista
+    # é da VERSÃO: item anulado que só existe na regular não tem por que aparecer
+    # no boletim de quem fez a adaptada.
+    anulados = [i["numero"] for i in pacote.molde.itens_da_versao(est.versao)
+                if pacote.anulado(est.versao, i["numero"])]
+    anulacao = (f'<div class="anulacao"><b>Item(ns) anulado(s):</b> '
+                f'{", ".join(f"{n}*" for n in anulados)}. '
+                f'{"Ele foi anulado" if len(anulados) == 1 else "Eles foram anulados"} '
+                f'depois da aplicação da prova, e a pontuação '
+                f'{"dele" if len(anulados) == 1 else "deles"} foi concedida a todos os '
+                f'estudantes — conta como acerto no seu escore e na sua nota, tenha você '
+                f'marcado o que tiver marcado.</div>') if anulados else ""
+
     return f"""
   <div class="bol">
     <div class="faixa"><h1>Boletim de Desempenho Individual &nbsp;|&nbsp;
@@ -336,9 +381,12 @@ def html_de(pacote: Pacote, resultado: Resultado, turma: dict[str, float],
     <div class="legenda-marc"><b>Legenda:</b> &nbsp; <b style="color:{COR_GERAL}">verde</b> acertou
       &nbsp;·&nbsp; <b style="color:#e5484d">vermelho</b> errou &nbsp;·&nbsp;
       <b>.</b> item em branco &nbsp;·&nbsp;
-      <b style="color:#e5484d;text-decoration:underline">N</b> item anulado — você marcou
-      duas alternativas, e no PAS isso vale como erro.</div>
+      <b style="color:#e5484d;text-decoration:underline">N</b> dupla marcação — você marcou
+      duas alternativas, e no PAS isso vale como erro &nbsp;·&nbsp;
+      <b style="color:{COR_VOCE}">*</b> item anulado — a pontuação foi concedida a
+      todos.</div>
     {pendencia}
+    {anulacao}
     {"".join(tabelas)}
     <div class="tipos{'' if len(lado) > 1 else ' solo'}" style="margin-top:10px">{"".join(lado)}</div>
     {_discursivos(resultado, pacote, medias_d)}

@@ -546,7 +546,7 @@ de quem corrige. A escala viaja no pacote (`escore.marista`), como os pesos, pel
 mesma razão: mudá-la é mudar a exportação, não o aplicativo.
 
 No fluxo da secretaria, a conferência vem ANTES dos boletins, e o boletim passou a
-mostrar isso. Dupla marcação é item **anulado** — o estudante marcou duas
+mostrar isso. **Dupla marcação** é o estudante anulando o item dele — marcou duas
 alternativas, o que no PAS vale como erro —, e sai impresso com `N`, não como
 branco: é informação que o estudante precisa ler para não repetir na prova de
 verdade. Item que continua na fila de conferência sai como `?`, fora de toda
@@ -584,6 +584,49 @@ cada um com um jeito próprio de falhar — o PATH sem o `pyinstaller`, a instal
 GitHub**, numa instalação limpa do Windows, e o que chega à secretaria é um
 `.zip`: baixar, descompactar, abrir. Uma etiqueta `leitor-vX` publica a versão
 como Release, com endereço fixo.
+
+### O item anulado, que não estava previsto
+
+Item com defeito de formulação, ou sem alternativa correta, é anulado depois da
+aplicação: a pontuação vai para **todos**, como se todos o tivessem acertado, e o
+boletim tem de dizer quais foram. Nada disso existia — nem no sistema on-line,
+nem no aplicativo local —, e sem isso a saída era editar o gabarito depois de os
+cartões estarem impressos, que é exatamente o que o cartão-gabarito existe para
+denunciar.
+
+A decisão nasce no **sistema**, na tela de Correção, para a coordenação
+pedagógica (`anular_item`, migração 0018 — função, e não política: ela toca só o
+campo `anulado` sobre a linha gravada, e o cliente reapresentaria o item inteiro,
+desfazendo em silêncio uma correção da leitura final). De lá ela viaja **dentro
+do pacote** e chega ao aplicativo local, que corrige igual.
+
+E também se marca no **aplicativo local**, num passo entre abrir o pacote e ler
+os cartões: a anulação costuma ser decidida com a prova aplicada, às vezes com o
+lote já digitalizado e o pacote já exportado, e quem tem o boletim para emitir
+não pode depender de alguém reexportar o arquivo. O que se marca ali soma-se ao
+que veio no pacote, fica lembrado ao lado dele (`pas-anulados-<prova>.json`) e
+volta sozinho na próxima vez — anulação esquecida no meio do caminho é nota
+errada que ninguém confere. O que veio do sistema aparece **travado**: desanular
+é decisão do sistema.
+
+Três coisas que o trabalho obrigou a arrumar antes:
+
+- **cada versão numera os seus itens de 1 a N.** O nº 12 da regular pode ser o
+  nº 10 da adaptada, e a primeira versão desta mudança anulava “o item 12” nas
+  duas — coisas diferentes. Hoje a chave é `(versão, número)`, e quem cruza as
+  duas é o `id` do item, que o pacote passou a exportar;
+
+- **“anulado” eram duas coisas.** A dupla marcação (o estudante anulando o item
+  dele, que vale como erro) já se chamava assim, na tela, na planilha e no
+  código. Hoje `anulado` é o item anulado pela coordenação e `nulo` é a dupla
+  marcação, e a coluna `anulados` da planilha virou `dupla_marcacao` + `anulados`;
+- **item anulado sai da fila de conferência.** Marcação que não muda nota nenhuma
+  não precisa que alguém a decida, e a fila passou a dizer isso na linha.
+
+E o roteiro que fecha a brecha: `testar-correcao.py` passou a corrigir **duas
+vezes** — sem anulação e com um item anulado dos dois lados —, porque a anulação
+é a segunda regra que agora existe em duplicata, e regra escrita duas vezes
+diverge em silêncio.
 
 ### O que falta
 

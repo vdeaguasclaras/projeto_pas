@@ -285,6 +285,58 @@ ALUNO,DISCIPLINA,TURMA,ANO,PERIODO,PROVA,CONCEITO,COMPARECEU
   Nota provisória lançada no sistema acadêmico ninguém descobre que era
   provisória.
 
+## 5.2. O item anulado
+
+Item com defeito de formulação, ou sem alternativa correta, é anulado depois da
+aplicação: a pontuação dele vale como acerto **para todos**. A decisão nasce no
+sistema on-line (`anular_item`, migração 0018) e viaja **dentro do pacote**, em
+cada item de `versoes`:
+
+```json
+{ "numero": 12, "id": "it-3f9a", "tipo": "C", "gabarito": "B",
+  "grupo": "Executar", "componente": "Biologia", "anulado": true }
+```
+
+- **`anulado` só aparece quando é `true`.** Ausência é o normal.
+- **`id` é o item no sistema, e é ele que cruza as versões.** Cada versão numera
+  os seus itens de 1 a N — o nº 12 da regular pode ser o nº 10 da adaptada —, e
+  sem o `id` as duas listas não se cruzam. Pacote exportado antes disso não o
+  traz; o leitor então trata cada `(versão, número)` isoladamente, que marca de
+  menos mas nunca marca o item errado.
+- **O formato continua `pas-marista/pacote-v1`.** Os dois campos são
+  acréscimos: um leitor antigo os ignora e corrige como corrigia (sem a
+  anulação), em vez de recusar o arquivo.
+
+### O que a secretaria anula por lá (`pas-anulados-<prova>.json`)
+
+A anulação decidida **depois** de o pacote ser exportado — com a prova aplicada e
+às vezes com o lote já digitalizado — se marca no aplicativo local e fica num
+arquivo ao lado do pacote:
+
+```json
+{
+  "formato": "pas-marista/anulados-v1",
+  "prova": { "id": "pr-2em", "serie": "2ª série EM", "etapa": "1ª Etapa" },
+  "itens": [ { "versao": "regular", "numero": 12 },
+             { "versao": "adaptada", "numero": 10 } ],
+  "em": "2026-08-26"
+}
+```
+
+- **Ele SOMA-SE ao que veio no pacote, e não o substitui.** O que veio do
+  sistema não se desmarca do lado de cá: desanular é decisão do sistema, e
+  desfazê-la de um lado só faria a mesma prova valer notas diferentes conforme
+  quem a corrigiu. Por isso o arquivo guarda apenas o que foi marcado ali.
+- **Por prova, e no nome do arquivo.** A secretaria roda mais de uma série no
+  mesmo dia, da mesma pasta de downloads; um arquivo só levaria a anulação da 2ª
+  série para a prova da 3ª.
+- **A chave é `(versão, número)`**, pelo mesmo motivo do `id` acima. Item
+  lembrado que não existe mais na prova sai da lista **com aviso** — some calado
+  seria a pessoa achar que anulou o que não anulou.
+- **Quem lê é `pacote.carregar()`**, não cada casca: a janela e a linha de
+  comando têm de corrigir igual. `--anular 12` acrescenta itens a uma rodada da
+  linha de comando, sem gravar.
+
 ## 6. A geometria (`layout`)
 
 Medida pelo navegador no ato da exportação, em **pontos**, na folha de 595×842pt,

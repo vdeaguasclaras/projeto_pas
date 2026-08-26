@@ -100,6 +100,17 @@ async function confirmarLeituraFinal(itemId) {
   checar(await sb.rpc('confirmar_leitura_final', { alvo: itemId }));
 }
 
+// Anular um item — a pontuação dele passa a valer para todos (migração 0018).
+// Função do banco, e não gravação do item, por duas razões: ela toca SÓ o campo
+// `anulado`, sobre a linha que está gravada (o cliente reapresentaria o item
+// inteiro, com a cópia que tem na tela, e desfaria em silêncio uma correção da
+// leitura final feita nesse meio-tempo), e é ela que assina quem anulou e
+// quando. Devolve o item inteiro, já com o histórico atualizado.
+async function anularItem(itemId, anular) {
+  const { data } = checar(await sb.rpc('anular_item', { alvo: itemId, anular: !!anular }));
+  return data;
+}
+
 // Criação/edição de contas passa pela Edge Function `equipe`, única a
 // conhecer a chave de serviço. O navegador só envia o próprio JWT.
 async function chamarEquipe(corpo) {
@@ -286,5 +297,5 @@ export const nuvem = {
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
   marcarSenhaTrocada, marcarTutorialVisto, comentarItem,
-  ajustarNaLeituraFinal, confirmarLeituraFinal
+  ajustarNaLeituraFinal, confirmarLeituraFinal, anularItem
 };

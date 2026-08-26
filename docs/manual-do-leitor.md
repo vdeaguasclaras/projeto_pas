@@ -79,9 +79,9 @@ Tenha em mãos:
 
 ---
 
-## Parte 3 · Usar — os seis passos
+## Parte 3 · Usar — os sete passos
 
-A janela tem seis passos no menu à esquerda, na ordem do trabalho. **Cada um só
+A janela tem sete passos no menu à esquerda, na ordem do trabalho. **Cada um só
 abre quando o anterior deu o que ele precisa.**
 
 ### 1 · Prova
@@ -90,7 +90,32 @@ abre quando o anterior deu o que ele precisa.**
 prova, quantos itens e quantos estudantes, para você conferir que é a prova
 certa.
 
-### 2 · Ler cartões
+### 2 · Itens anulados
+
+Item que a coordenação **anulou** — porque estava mal formulado, ou porque não
+tinha alternativa correta — tem a pontuação concedida a **todos os estudantes**,
+como se todos o tivessem acertado, e sai no boletim com **`*`**.
+
+**O que a coordenação anulou no sistema já vem marcado aqui**, e travado: para
+desanular, é lá, na tela de Correção — e depois exporte o pacote de novo.
+
+Marque nesta tela o que foi anulado **depois** de o pacote ser exportado, que é o
+caso comum: a decisão costuma vir com a prova já aplicada.
+
+- cada linha é um **item**, com o número que ele tem em cada versão
+  (**A1 nº 12 · A2 nº 10**) — as duas provas numeram os seus itens de 1 a N, e
+  uma marcação resolve as duas;
+- **não precisa de botão**: marcar a caixa já vale, e as notas se refazem na
+  hora se o lote já tiver sido lido;
+- o que você marcar aqui fica **guardado ao lado do arquivo do pacote** e volta
+  sozinho quando você abrir esta prova de novo;
+- item anulado **sai da conferência**: o que o estudante marcou nele não muda
+  mais nota nenhuma, e a linha dele aparece desligada.
+
+> Nenhum item anulado? É o caso mais comum — clique em **Continuar para a
+> leitura**.
+
+### 3 · Ler cartões
 
 Escolha **a pasta** das digitalizações ou **o arquivo** direto (o PDF do lote) e
 clique em **Ler os cartões**. A barra mostra o andamento; um lote grande leva
@@ -99,7 +124,7 @@ alguns minutos.
 Ao terminar, o programa diz quantas folhas leu, quantas eram cartão-gabarito e
 quantas marcações ficaram em dúvida.
 
-### 3 · Conferência
+### 4 · Conferência
 
 Aqui aparece **tudo o que o programa não leu com certeza** — nunca um palpite.
 Cada linha traz o **pedaço do papel** onde está a marcação. **Clique na imagem**
@@ -111,11 +136,14 @@ No campo à direita, escreva o que está no papel:
 |---|---|
 | há uma marcação clara | a letra (ou o número, no tipo B) |
 | **não há marca nenhuma** | deixe o campo **vazio** |
-| há **duas alternativas marcadas** | **`NULO`** — o item foi anulado |
+| há **duas alternativas marcadas** | **`NULO`** — o estudante anulou o item |
 
 > Marcação dupla já chega proposta como `NULO`: é o que o papel diz, e você só
-> precisa concordar. No PAS, item anulado **vale como erro**, e sai marcado com
-> **N** no boletim.
+> precisa concordar. No PAS, quem marca duas alternativas **anula o item dele**,
+> e isso vale como erro — sai marcado com **N** no boletim.
+>
+> Não confunda com o **item anulado** do passo 2, que é a coordenação anulando o
+> item para a prova inteira: esse vale como **acerto para todos** e sai com `*`.
 
 Clique em **Aplicar e recorrigir**. Os resultados e os boletins se refazem na
 hora.
@@ -125,7 +153,7 @@ hora.
 > **?** e leva um aviso no alto do boletim. O programa avisa em rosa quantas
 > marcações ainda faltam.
 
-### 4 · Resultados
+### 5 · Resultados
 
 A planilha de quem fez quanto: acertos, erros, brancos, as **duas notas** e a
 posição na turma.
@@ -136,7 +164,7 @@ posição na turma.
 
 O botão *Abrir a pasta do resultado* mostra os arquivos no Explorador.
 
-### 5 · Boletins
+### 6 · Boletins
 
 Um boletim por estudante, com o desempenho por grupo de habilidades comparado à
 turma e ao geral, as respostas item a item e as notas. Abre no navegador:
@@ -145,7 +173,12 @@ para virar PDF, use **Imprimir → Salvar como PDF**.
 > Na hora de imprimir, marque **Gráficos de plano de fundo** — sem isso o
 > Chrome não imprime as barras coloridas.
 
-### 6 · Exportar notas
+No gabarito item a item, cada marca quer dizer uma coisa: **verde** acertou ·
+**vermelho** errou · **`.`** deixou em branco · **`N`** marcou duas alternativas
+(vale como erro) · **`*`** o item foi anulado, e a pontuação foi para todos. Se
+houver item anulado, o boletim traz um aviso dizendo quais foram.
+
+### 7 · Exportar notas
 
 Gera o `.txt` que a secretaria importa no sistema acadêmico. Preencha:
 
@@ -177,6 +210,11 @@ digitalizações**.
 | `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
 | `E3_P3-1serie.txt` | as notas para o sistema acadêmico (quando você pede) |
 
+Um arquivo fica **fora** dessa pasta: `pas-anulados-<prova>.json`, ao lado do
+pacote da prova. É ele que guarda os itens que **você** anulou no passo 2 (os que
+vieram do sistema já estão dentro do pacote), e é por isso que eles voltam
+sozinhos quando você abre a mesma prova de novo.
+
 ---
 
 ## Parte 5 · Quando alguma coisa não sai como esperado
@@ -189,6 +227,7 @@ digitalizações**.
 | **Muitas folhas na conferência** | quase sempre o cartão-gabarito ficou de fora da digitalização. Digitalize o lote de novo com ele na frente. |
 | **Uma folha veio como “sem âncoras”** | a folha saiu cortada ou dobrada demais. Digitalize aquela folha de novo. |
 | **“Matrícula fora do padrão”** | acontece nos cartões extras, em que o estudante preenche a matrícula à mão. Confira no papel e corrija na conferência. |
+| **Um item saiu com `*` e ninguém anulou nada** | alguém anulou esse item — no sistema, ou nesta máquina antes. Veja o passo 2: o que veio do sistema aparece travado, com a marca “anulado no sistema”; o resto você desmarca aí mesmo. |
 | **Aviso de que o cartão-gabarito divergiu** | **pare.** Quer dizer que os itens mudaram depois de os cartões serem impressos. Fale com a coordenação antes de lançar o lote. |
 | **A janela abriu e fechou sozinha** | abra o `PAS-Leitor-terminal.exe`, na mesma pasta: é o mesmo programa, com uma janela preta que **mostra o erro**. Mande a mensagem para quem cuida do sistema. |
 
@@ -197,8 +236,10 @@ digitalizações**.
 ## Em resumo
 
 1. Digitalize o lote a 300 dpi, com o cartão-gabarito na frente.
-2. Abra o programa, escolha o pacote da prova e mande ler.
-3. **Resolva a conferência inteira.**
-4. Imprima os boletins e exporte as notas.
+2. Abra o programa e escolha o pacote da prova.
+3. Marque os **itens anulados**, se a coordenação tiver anulado algum.
+4. Mande ler.
+5. **Resolva a conferência inteira.**
+6. Imprima os boletins e exporte as notas.
 
 Nada disso usa internet, e nada sai do computador da secretaria.
