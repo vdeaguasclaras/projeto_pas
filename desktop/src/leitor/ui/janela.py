@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .. import academico
+from .. import academico, anulacao
 from ..apuracao import apurar, marcacoes_de
 from ..correcao import NULO, Resultado
 from ..imagem import digitalizacoes
@@ -38,8 +38,8 @@ from ..molde import GabaritoIncompativel
 from ..pacote import Pacote, carregar
 from .estilo import folha
 
-PASSOS = ["Prova", "Ler cartões", "Conferência", "Resultados", "Boletins",
-          "Exportar notas"]
+PASSOS = ["Prova", "Itens anulados", "Ler cartões", "Conferência", "Resultados",
+          "Boletins", "Exportar notas"]
 
 
 @dataclass
@@ -168,8 +168,119 @@ class PaginaProva(QWidget):
         self.detalhe.setText("<br>".join(partes))
 
 
+class PaginaAnulacao(QWidget):
+    """Passo 2 — os itens que a coordenação anulou.
+
+    Fica aqui, entre escolher a prova e ler os cartões, porque é aqui que a
+    decisão cabe no trabalho: depois de o pacote estar aberto (é dele que sai a
+    lista de itens) e antes de a leitura começar. Mexer nela mais tarde continua
+    valendo — a anulação não muda o que o leitor enxerga no papel, só o que a
+    correção faz com isso, e a tela refaz as notas na hora.
+
+    O que se escolhe aqui não vai para o sistema on-line: a tela de Correção de
+    lá segue corrigindo sem a anulação, e é este aplicativo que emite o boletim.
+    """
+
+    def __init__(self, janela: "Janela"):
+        super().__init__()
+        self.janela = janela
+        self.lista = QListWidget()
+        self.lista.setMinimumHeight(260)
+        self.lista.itemChanged.connect(self._mudou)
+        self._montando = False
+        self.resumo = rotulo("Nenhum item anulado.", "sub")
+        self.onde = rotulo("", "sub")
+        self.seguir = botao("Continuar para a leitura →", "rosa",
+                            lambda: self.janela.ir_para(2))
+        coluna = QVBoxLayout(self)
+        coluna.setContentsMargins(0, 0, 0, 0)
+        coluna.addWidget(quadro(
+            rotulo("Itens anulados", "titulo"),
+            rotulo("Item com defeito de formulação, ou sem alternativa correta, é anulado: a "
+                   "pontuação dele é concedida a <b>todos</b> os estudantes, como se todos o "
+                   "tivessem acertado, e o boletim o mostra com <b>*</b>. Marque abaixo os itens "
+                   "que a coordenação anulou — vale para as duas versões da prova. Se nenhum "
+                   "item foi anulado, siga em frente.", "sub"),
+            self.lista, self.resumo, self.onde,
+            linha(self.seguir, None)))
+
+    def mostrar(self, pacote: Pacote | None) -> None:
+        self._montando = True
+        self.lista.clear()
+        if pacote is None:
+            self._montando = False
+            return
+        # A lista é por NÚMERO de item, não por versão: item 12 é o item 12 nas
+        # duas provas, e anular “o 12 da regular e não o da adaptada” não é uma
+        # coisa que a coordenação diga — ela anula o item.
+        por_numero: dict[int, dict] = {}
+        versoes: dict[int, list[str]] = {}
+        for versao in ("regular", "adaptada"):
+            for item in pacote.molde.itens_da_versao(versao):
+                por_numero.setdefault(item["numero"], item)
+                versoes.setdefault(item["numero"], []).append(
+                    "A2" if versao == "adaptada" else "A1")
+        for numero in sorted(por_numero):
+            item = por_numero[numero]
+            partes = [f"Item {numero}", f"tipo {item['tipo']}"]
+            if item.get("componente"):
+                partes.append(str(item["componente"]))
+            if item.get("grupo"):
+                partes.append(str(item["grupo"]))
+            partes.append(" + ".join(versoes[numero]))
+            linha_lista = QListWidgetItem(" · ".join(partes))
+            linha_lista.setFlags(linha_lista.flags() | Qt.ItemIsUserCheckable)
+            linha_lista.setCheckState(Qt.Checked if pacote.anulado(numero) else Qt.Unchecked)
+            linha_lista.setData(Qt.UserRole, numero)
+            self.lista.addItem(linha_lista)
+        self._montando = False
+        self._resumir(pacote)
+
+    def _escolhidos(self) -> set[int]:
+        return {self.lista.item(i).data(Qt.UserRole)
+                for i in range(self.lista.count())
+                if self.lista.item(i).checkState() == Qt.Checked}
+
+    def _resumir(self, pacote: Pacote) -> None:
+        if pacote.anulados:
+            self.resumo.setText(
+                f"<b>{len(pacote.anulados)} item(ns) anulado(s):</b> "
+                f"{anulacao.em_texto(pacote.anulados)}. A pontuação vale para todos os "
+                f"estudantes e o boletim os marca com <b>*</b>.")
+        else:
+            self.resumo.setText("Nenhum item anulado — a prova vale como foi aplicada.")
+        caminho = self.janela.sessao.caminho_pacote
+        if caminho:
+            alvo = anulacao.caminho_de(caminho, pacote.molde.prova)
+            self.onde.setText(
+                f"A escolha fica guardada em <b>{alvo.name}</b>, ao lado do pacote — e volta "
+                f"sozinha quando você abrir esta prova de novo."
+                if pacote.anulados else "")
+
+    def _mudou(self, _item) -> None:
+        """Marcou ou desmarcou: guarda, e refaz as notas se já houver notas.
+
+        Não há botão de “aplicar” aqui de propósito. Anulação esquecida no meio
+        do caminho — marcada na tela e nunca gravada — é nota errada que ninguém
+        confere, e o clique na caixa já é a decisão.
+        """
+        if self._montando:
+            return
+        sessao = self.janela.sessao
+        if not (sessao.pacote and sessao.caminho_pacote):
+            return
+        sessao.pacote.anulados = self._escolhidos()
+        anulacao.lembrar(sessao.caminho_pacote, sessao.pacote.molde.prova,
+                         sessao.pacote.anulados)
+        self._resumir(sessao.pacote)
+        if sessao.resultados:
+            self.janela.recorrigir()
+        if sessao.lote is not None and sessao.saida:
+            self.janela.pag_conferencia.mostrar(sessao.lote.achados, sessao.saida)
+
+
 class PaginaLeitura(QWidget):
-    """Passo 2 — a pasta das digitalizações e a barra de progresso."""
+    """Passo 3 — a pasta das digitalizações e a barra de progresso."""
 
     def __init__(self, janela: "Janela"):
         super().__init__()
@@ -351,7 +462,7 @@ class DialogoMarcacao(QDialog):
 
 
 class PaginaConferencia(QWidget):
-    """Passo 3 — o que o leitor não leu com certeza, com a imagem da marcação."""
+    """Passo 4 — o que o leitor não leu com certeza, com a imagem da marcação."""
 
     def __init__(self, janela: "Janela"):
         super().__init__()
@@ -373,10 +484,10 @@ class PaginaConferencia(QWidget):
             rotulo("O leitor recusa o que não é inequívoco. Aqui está cada marcação duvidosa "
                    "com o pedaço do papel onde ela está: confira, corrija o que estiver errado "
                    "e apague o campo quando no cartão não houver marca nenhuma. "
-                   "<b>Dupla marcação é item ANULADO</b> — deixe <b>NULO</b> no campo: vale como "
-                   "erro e sai marcado no boletim. Resolva tudo aqui antes de entregar os "
-                   "boletins: o que ficar pendente não entra em nota nenhuma e sai impresso "
-                   "com “?”.", "sub"),
+                   "<b>Duas alternativas marcadas</b> — deixe <b>NULO</b> no campo: no PAS o "
+                   "estudante anulou o item, e isso vale como erro. Resolva tudo aqui antes de "
+                   "entregar os boletins: o que ficar pendente não entra em nota nenhuma e sai "
+                   "impresso com “?”.", "sub"),
             self.aviso, rolagem, linha(None, self.botao_aplicar)))
 
     def mostrar(self, achados: list[dict], saida: Path) -> None:
@@ -432,6 +543,18 @@ class PaginaConferencia(QWidget):
         campo.setAlignment(Qt.AlignCenter)
         faixa.addWidget(campo)
 
+        # Item anulado não precisa de decisão nenhuma: a pontuação já foi para
+        # todos, e o que está no papel não muda mais nota nenhuma. Dizer isso
+        # aqui poupa a conferência mais cara que existe — a que não servia para
+        # nada. O campo fica desligado, e não como pendência: a correção já não
+        # olha para ele.
+        pacote = self.janela.sessao.pacote
+        if pacote and pacote.anulado(achado["item"]):
+            campo.setEnabled(False)
+            texto.setText(f"<b>{achado['matricula'] or '—'}</b> · item {achado['item']}"
+                          f"<br><span style='color:#1d5cff'>item anulado — não precisa "
+                          f"conferir</span>")
+
         lupa = botao("Ampliar", "fantasma")
         lupa.setFixedWidth(96)
         faixa.addWidget(lupa)
@@ -448,11 +571,16 @@ class PaginaConferencia(QWidget):
         if not sessao.saida:
             return
         conferido = sessao.saida / "conferido.csv"
+        anulado = (sessao.pacote.anulado if sessao.pacote else lambda _n: False)
         with conferido.open("w", encoding="utf-8", newline="") as arquivo:
             escritor = csv.writer(arquivo, delimiter=";", lineterminator="\n")
             escritor.writerow(["matricula", "item", "resposta"])
             for achado, campo in self.campos:
-                if achado["matricula"]:
+                # Item anulado não gera decisão: ninguém olhou o papel dele, e o
+                # campo trazia o palpite do leitor. Gravá-lo seria transformar
+                # palpite em decisão humana — e ela ressurgiria como resposta se
+                # a anulação fosse desfeita depois.
+                if achado["matricula"] and not anulado(achado["item"]):
                     escritor.writerow([achado["matricula"], achado["item"],
                                        campo.text().strip().upper()])
         self.janela.recorrigir()
@@ -463,7 +591,7 @@ class PaginaConferencia(QWidget):
 
 
 class PaginaResultados(QWidget):
-    """Passo 4 — a planilha de quem fez quanto."""
+    """Passo 5 — a planilha de quem fez quanto."""
 
     # Certas, erradas e brancos numa coluna só. Como três, empurravam a posição e
     # a redação para fora da janela — e são o detalhe, não a resposta: quem abre
@@ -575,9 +703,10 @@ class PaginaResultados(QWidget):
                 if j == 4:
                     detalhe = [f"{r.acertos} certas", f"{r.erros} erradas",
                                f"{r.brancos} em branco"]
+                    if r.anulados:
+                        detalhe.append(f"{r.anulados} de item anulado, contados entre as certas")
                     if r.nulos:
-                        detalhe.append(f"{r.nulos} anulado(s) por dupla marcação, "
-                                       f"contados entre as erradas")
+                        detalhe.append(f"{r.nulos} com dupla marcação, contados entre as erradas")
                     if r.pendentes:
                         detalhe.append(f"{r.pendentes} ainda na conferência, fora das notas")
                     celula.setToolTip(" · ".join(detalhe))
@@ -586,7 +715,7 @@ class PaginaResultados(QWidget):
 
 
 class PaginaBoletins(QWidget):
-    """Passo 5 — o boletim de cada estudante."""
+    """Passo 6 — o boletim de cada estudante."""
 
     def __init__(self, janela: "Janela"):
         super().__init__()
@@ -612,18 +741,22 @@ class PaginaBoletins(QWidget):
         if alvo.exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(alvo)))
 
-    def mostrar(self, resultados: list[Resultado], saida: Path) -> None:
+    def mostrar(self, resultados: list[Resultado], saida: Path,
+                pacote: Pacote | None = None) -> None:
         quantos = sum(1 for r in resultados if r.tem_resposta)
         existe = (saida / "boletins.html").exists()
         pendentes = sum(r.pendentes for r in resultados)
-        anulados = sum(r.nulos for r in resultados)
+        duplas = sum(r.nulos for r in resultados)
         if not existe:
             self.resumo.setText("Nenhum boletim gerado ainda.")
         else:
             partes = [f"{quantos} boletim(ns) prontos em boletins.html"]
-            if anulados:
-                partes.append(f"{anulados} item(ns) anulado(s) por dupla marcação — contam como "
-                              f"erro e saem marcados com “N”")
+            if duplas:
+                partes.append(f"{duplas} item(ns) com dupla marcação — contam como erro e saem "
+                              f"marcados com “N”")
+            if pacote and pacote.anulados:
+                partes.append(f"item(ns) {anulacao.em_texto(pacote.anulados)} anulado(s) — "
+                              f"contam como acerto para todos e saem marcados com “*”")
             self.resumo.setText(" · ".join(partes) + ".")
         # A pendência é o que separa “boletim pronto” de “boletim pronto para
         # entregar”: item que ficou na conferência não entrou em nota nenhuma.
@@ -641,7 +774,7 @@ class PaginaBoletins(QWidget):
 
 
 class PaginaExportacao(QWidget):
-    """Passo 6 — o TXT que o sistema acadêmico importa.
+    """Passo 7 — o TXT que o sistema acadêmico importa.
 
     A tela pergunta só o que o aplicativo não tem como saber: qual é a prova no
     calendário da escola (`E3_P3`), o ano, o turno e para quais componentes esta
@@ -812,8 +945,19 @@ class Janela(QMainWindow):
         self.setWindowTitle("PAS Marista — Leitor de Cartões")
         self.resize(1280, 800)
 
-        self.paginas = [PaginaProva(self), PaginaLeitura(self), PaginaConferencia(self),
-                        PaginaResultados(self), PaginaBoletins(self), PaginaExportacao(self)]
+        # Cada tela tem nome, e a lista vem dos nomes. Com `paginas[3]` espalhado
+        # pelo arquivo, acrescentar um passo no meio — que é o que a anulação
+        # fez — trocaria silenciosamente as telas umas pelas outras.
+        self.pag_prova = PaginaProva(self)
+        self.pag_anulacao = PaginaAnulacao(self)
+        self.pag_leitura = PaginaLeitura(self)
+        self.pag_conferencia = PaginaConferencia(self)
+        self.pag_resultados = PaginaResultados(self)
+        self.pag_boletins = PaginaBoletins(self)
+        self.pag_exportacao = PaginaExportacao(self)
+        self.paginas = [self.pag_prova, self.pag_anulacao, self.pag_leitura,
+                        self.pag_conferencia, self.pag_resultados, self.pag_boletins,
+                        self.pag_exportacao]
         self.pilha = QStackedWidget()
         for pagina in self.paginas:
             self.pilha.addWidget(pagina)
@@ -877,6 +1021,7 @@ class Janela(QMainWindow):
         """Um passo só abre quando o anterior deu o que ele precisa."""
         pronto = [True,
                   self.sessao.pacote is not None,
+                  self.sessao.pacote is not None,
                   self.sessao.lote is not None,
                   bool(self.sessao.resultados),
                   bool(self.sessao.resultados),
@@ -896,18 +1041,23 @@ class Janela(QMainWindow):
             QMessageBox.critical(self, "Não deu para abrir o pacote", str(erro))
             return
         self.sessao = Sessao(pacote=pacote, caminho_pacote=caminho)
-        self.paginas[0].mostrar(pacote, caminho)
+        self.pag_prova.mostrar(pacote, caminho)
+        self.pag_anulacao.mostrar(pacote)
         self.prova_atual.setText(f"{pacote.molde.prova.get('serie', '')} — "
                                  f"{pacote.molde.prova.get('etapa', '')}")
         self._atualizar_passos()
+        # O que ficou lembrado da última vez não pode chegar calado: quem abre a
+        # prova de novo tem de VER que há item anulado antes de emitir boletim.
+        if pacote.avisos:
+            QMessageBox.warning(self, "Itens anulados", "\n\n".join(pacote.avisos))
         self.ir_para(1)
 
     def leitura_pronta(self, lote: Lote) -> None:
         self.sessao.lote = lote
-        self.paginas[2].mostrar(lote.achados, self.sessao.saida)
+        self.pag_conferencia.mostrar(lote.achados, self.sessao.saida)
         self._atualizar_passos()
         self.recorrigir()
-        self.ir_para(2 if lote.achados else 3)
+        self.ir_para(3 if lote.achados else 4)
 
     def recorrigir(self) -> None:
         """Corrige com tudo o que existe hoje: o que se leu e o que se conferiu."""
@@ -918,9 +1068,9 @@ class Janela(QMainWindow):
             sessao.pacote, [sessao.saida / "respostas.csv", sessao.saida / "conferido.csv"])
         sessao.marcacoes = marcacoes
         sessao.resultados, _, _ = apurar(sessao.pacote, marcacoes, sessao.saida)
-        self.paginas[3].mostrar(sessao.resultados)
-        self.paginas[4].mostrar(sessao.resultados, sessao.saida)
-        self.paginas[5].mostrar(sessao.pacote, sessao.resultados)
+        self.pag_resultados.mostrar(sessao.resultados)
+        self.pag_boletins.mostrar(sessao.resultados, sessao.saida, sessao.pacote)
+        self.pag_exportacao.mostrar(sessao.pacote, sessao.resultados)
         self._atualizar_passos()
 
 

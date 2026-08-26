@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""O item anulado e o item pendente: duas coisas que NÃO são “em branco”.
+"""A dupla marcação e o item pendente: duas coisas que NÃO são “em branco”.
 
-Dupla marcação é item anulado — no PAS o estudante marcou duas alternativas e
-isso vale como erro. Item que continua na fila de conferência não vale nada:
+Dupla marcação é o ESTUDANTE anulando o item — marcou duas alternativas, e no
+PAS isso vale como erro. Item que continua na fila de conferência não vale nada:
 ninguém decidiu ainda o que está no papel. Antes, os dois viravam a mesma coisa
 — ausência de marcação — e saíam do boletim como branco, com nota e posição na
 turma calculadas em cima disso.
 
+(Não confundir com o item anulado pela COORDENAÇÃO, que vale como acerto para
+todos e tem roteiro próprio em `testar-item-anulado.py`.)
+
 Este roteiro não precisa de scanner nem de navegador: monta as marcações à mão,
 apura, e confere o que cada caso fez com a nota e com o que sai impresso.
 
-    python3 desktop/testes/testar-anulacao.py [amostras]
+    python3 desktop/testes/testar-dupla-marcacao.py [amostras]
 """
 from __future__ import annotations
 
@@ -33,7 +36,7 @@ def _escrever(caminho: Path, cabecalho: list[str], linhas: list[list]) -> None:
 
 
 def _discursivos_de(pacote, estudante) -> float:
-    """O que o discursivo já lançado soma ao escore — que o anulado não mexe."""
+    """O que o discursivo já lançado soma ao escore — que a dupla marcação não mexe."""
     notas = pacote.notas.get(estudante.matricula)
     if not notas:
         return 0.0
@@ -61,8 +64,8 @@ def main() -> int:
     if len(itens) < 3:
         print("a prova de exemplo tem poucos itens objetivos para este teste", file=sys.stderr)
         return 2
-    acertado, anulado, pendente = itens[0], itens[1], itens[2]
-    peso_do_anulado = float(pacote.escore.peso(anulado["tipo"]).get("errado", 0))
+    acertado, duplo, pendente = itens[0], itens[1], itens[2]
+    peso_da_dupla = float(pacote.escore.peso(duplo["tipo"]).get("errado", 0))
     falhas: list[str] = []
 
     with tempfile.TemporaryDirectory() as temporario:
@@ -72,11 +75,11 @@ def main() -> int:
                   [[estudante.matricula, acertado["numero"], acertado["gabarito"]]])
         _escrever(saida / "respostas_conferir.csv",
                   ["matricula", "item", "resposta", "motivo", "folha"],
-                  [[estudante.matricula, anulado["numero"], "", "dupla_marcacao", "f:1"],
+                  [[estudante.matricula, duplo["numero"], "", "dupla_marcacao", "f:1"],
                    [estudante.matricula, pendente["numero"], "", "leitura_duvidosa", "f:1"]])
         # E quem conferiu resolveu UM deles: confirmou a dupla marcação.
         _escrever(saida / "conferido.csv", ["matricula", "item", "resposta"],
-                  [[estudante.matricula, anulado["numero"], NULO]])
+                  [[estudante.matricula, duplo["numero"], NULO]])
 
         marcacoes, _, _ = marcacoes_de(
             pacote, [saida / "respostas.csv", saida / "conferido.csv"])
@@ -84,9 +87,9 @@ def main() -> int:
         r = next(x for x in resultados if x.estudante.matricula == estudante.matricula)
 
         if r.nulos != 1:
-            falhas.append(f"anulados: esperava 1, veio {r.nulos}")
+            falhas.append(f"duplas marcações: esperava 1, veio {r.nulos}")
         if r.erros != 1:
-            falhas.append(f"o anulado tem de contar como erro — erradas veio {r.erros}")
+            falhas.append(f"a dupla marcação tem de contar como erro — erradas veio {r.erros}")
         if r.pendentes != 1:
             falhas.append(f"pendentes: esperava 1, veio {r.pendentes}")
         # O pendente sai da conta inteiro: nem acerto, nem erro, nem branco.
@@ -96,23 +99,23 @@ def main() -> int:
         if r.itens_avaliaveis != r.acertos + r.erros + r.brancos + r.discursivas_lancadas:
             falhas.append("o pendente entrou no denominador da Nota Marista")
         esperado = (float(pacote.escore.peso(acertado["tipo"]).get("certo", 0))
-                    + peso_do_anulado + _discursivos_de(pacote, estudante))
+                    + peso_da_dupla + _discursivos_de(pacote, estudante))
         if abs(r.escore - esperado) > 0.005:
-            falhas.append(f"escore: esperava {round(esperado, 2)} (1 certo + 1 anulado como "
-                          f"erro + o discursivo já lançado), veio {round(r.escore, 2)}")
+            falhas.append(f"escore: esperava {round(esperado, 2)} (1 certo + 1 dupla marcação "
+                          f"como erro + o discursivo já lançado), veio {round(r.escore, 2)}")
 
         detalhes = {d.numero: d for d in r.detalhes}
-        if not detalhes[anulado["numero"]].nulo:
-            falhas.append("o item anulado não saiu marcado como anulado no detalhe")
+        if not detalhes[duplo["numero"]].nulo:
+            falhas.append("a dupla marcação não saiu marcada como tal no detalhe")
         if not detalhes[pendente["numero"]].pendente:
             falhas.append("o item pendente não saiu marcado como pendente no detalhe")
 
         # E o que chega ao papel: o N, o ?, e o aviso de que o boletim saiu cedo.
         html = Path(boletins).read_text(encoding="utf-8") if boletins else ""
-        for pedaco, o_que in (('class="nula">N<', "o “N” do item anulado"),
+        for pedaco, o_que in (('class="nula">N<', "o “N” da dupla marcação"),
                               ('class="pendente">?<', "o “?” do item pendente"),
                               ('class="pendencia"', "o aviso de que há item em conferência"),
-                              ("item anulado", "a legenda do item anulado")):
+                              ("dupla marcação", "a legenda da dupla marcação")):
             if pedaco not in html:
                 falhas.append(f"o boletim não trouxe {o_que}")
         if "não entra aqui" in html:
@@ -122,8 +125,8 @@ def main() -> int:
         with (saida / "resultados.csv").open(encoding="utf-8") as arquivo:
             linha = next(l for l in csv.DictReader(arquivo, delimiter=";")
                          if l["matricula"] == estudante.matricula)
-        if linha.get("anulados") != "1" or linha.get("pendentes") != "1":
-            falhas.append(f"resultados.csv: anulados={linha.get('anulados')!r}, "
+        if linha.get("dupla_marcacao") != "1" or linha.get("pendentes") != "1":
+            falhas.append(f"resultados.csv: dupla_marcacao={linha.get('dupla_marcacao')!r}, "
                           f"pendentes={linha.get('pendentes')!r}")
 
     if falhas:
@@ -131,9 +134,9 @@ def main() -> int:
         for f in falhas:
             print(f"  · {f}", file=sys.stderr)
         return 1
-    print(f"item {anulado['numero']} anulado (conta como erro, sai “N”) · "
+    print(f"item {duplo['numero']} com dupla marcação (conta como erro, sai “N”) · "
           f"item {pendente['numero']} pendente (fora de toda conta, sai “?”)")
-    print("\nPASSOU: anulado e pendente não viraram branco, e o boletim diz o que são.")
+    print("\nPASSOU: dupla marcação e pendente não viraram branco, e o boletim diz o que são.")
     return 0
 
 

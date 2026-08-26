@@ -27,6 +27,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import anulacao
 from .molde import GabaritoIncompativel, Molde, carregar as carregar_molde
 
 
@@ -75,6 +76,24 @@ class Pacote:
     elenco: list[Estudante]
     notas: dict[str, Notas]
     escore: Escore
+    # Os itens anulados pela coordenação — ver `anulacao.py`. NÃO vêm dentro do
+    # arquivo exportado: a anulação é decidida depois de a prova ter sido
+    # aplicada, aqui, e fica lembrada ao lado do pacote. É o único dado deste
+    # objeto que o sistema on-line não conhece.
+    anulados: set[int] = field(default_factory=set)
+    # O que deu errado ao abrir o pacote sem impedir de abri-lo — hoje, o arquivo
+    # de itens anulados ilegível ou com item que não existe mais nesta prova.
+    # Quem mostra é a casca; o que não pode é sumir.
+    avisos: list[str] = field(default_factory=list)
+
+    def anulado(self, numero: int) -> bool:
+        """Este item foi anulado? Vale para todos os estudantes, nas duas versões."""
+        return numero in self.anulados
+
+    @property
+    def numeros_dos_itens(self) -> set[int]:
+        """Os números de item que existem nesta prova, em qualquer versão."""
+        return {numero for _versao, numero in self.molde.itens}
 
     @property
     def tem_redacao(self) -> bool:
@@ -133,7 +152,15 @@ def carregar(caminho: Path) -> Pacote:
     bruto = dados.get("escore") or {}
     escore = Escore(pesos=bruto.get("pesos") or {}, grupos=list(bruto.get("grupos") or []),
                     marista=bruto.get("marista") or {})
-    return Pacote(molde=molde, elenco=elenco, notas=notas, escore=escore)
+    pacote = Pacote(molde=molde, elenco=elenco, notas=notas, escore=escore)
+
+    # E os itens anulados que ficaram lembrados ao lado do arquivo. É aqui, e não
+    # em cada casca, porque casca esquece: a janela lembraria e a linha de comando
+    # não, e a mesma prova valeria notas diferentes conforme quem a corrigiu.
+    pacote.anulados, pacote.avisos = anulacao.lembrados(
+        Path(caminho), molde.prova, pacote.numeros_dos_itens)
+    return pacote
 
 
-__all__ = ["Pacote", "Estudante", "Notas", "Escore", "carregar", "GabaritoIncompativel"]
+__all__ = ["Pacote", "Estudante", "Notas", "Escore", "carregar", "GabaritoIncompativel",
+           "anulacao"]

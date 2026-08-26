@@ -546,7 +546,7 @@ de quem corrige. A escala viaja no pacote (`escore.marista`), como os pesos, pel
 mesma razão: mudá-la é mudar a exportação, não o aplicativo.
 
 No fluxo da secretaria, a conferência vem ANTES dos boletins, e o boletim passou a
-mostrar isso. Dupla marcação é item **anulado** — o estudante marcou duas
+mostrar isso. **Dupla marcação** é o estudante anulando o item dele — marcou duas
 alternativas, o que no PAS vale como erro —, e sai impresso com `N`, não como
 branco: é informação que o estudante precisa ler para não repetir na prova de
 verdade. Item que continua na fila de conferência sai como `?`, fora de toda
@@ -585,6 +585,36 @@ GitHub**, numa instalação limpa do Windows, e o que chega à secretaria é um
 `.zip`: baixar, descompactar, abrir. Uma etiqueta `leitor-vX` publica a versão
 como Release, com endereço fixo.
 
+### O item anulado, que não estava previsto
+
+Item com defeito de formulação, ou sem alternativa correta, é anulado depois da
+aplicação: a pontuação vai para **todos**, como se todos o tivessem acertado, e o
+boletim tem de dizer quais foram. Nada disso existia — nem no sistema on-line,
+nem no aplicativo local —, e sem isso a saída era editar o gabarito depois de os
+cartões estarem impressos, que é exatamente o que o cartão-gabarito existe para
+denunciar.
+
+A escolha ficou no **aplicativo local**, num passo entre abrir o pacote e ler os
+cartões: é depois da aplicação que a anulação se decide, às vezes com o lote já
+digitalizado, e é este aplicativo que emite o boletim e lança a nota no sistema
+acadêmico. Ela fica lembrada ao lado do pacote (`pas-anulados-<prova>.json`) e
+volta sozinha na próxima vez que a prova for aberta — anulação esquecida no meio
+do caminho é nota errada que ninguém confere.
+
+Duas coisas que o trabalho obrigou a arrumar antes:
+
+- **“anulado” eram duas coisas.** A dupla marcação (o estudante anulando o item
+  dele, que vale como erro) já se chamava assim, na tela, na planilha e no
+  código. Hoje `anulado` é o item anulado pela coordenação e `nulo` é a dupla
+  marcação, e a coluna `anulados` da planilha virou `dupla_marcacao` + `anulados`;
+- **item anulado sai da fila de conferência.** Marcação que não muda nota nenhuma
+  não precisa que alguém a decida, e a fila passou a dizer isso na linha.
+
+Fica em aberto, para quando fizer sentido: a anulação **não viaja** ao sistema
+on-line, e a tela de Correção de lá segue corrigindo sem ela. Levá-la para o
+banco é mudança de esquema e de exportação, e o boletim que a escola entrega sai
+do aplicativo local.
+
 ### O que falta
 
 O **`.exe`** foi gerado e rodado numa máquina Windows da escola, com o fluxo
@@ -595,7 +625,8 @@ quando o scanner salva o lote num PDF).
 
 Do leitor, resta a **importação dos percentuais do discursivo** pelo sistema
 on-line: o leitor os lê e grava em `percentuais.csv`, e a tela de Correção ainda
-não os consome.
+não os consome. E, do lado do sistema, a **anulação de item**, que hoje só existe
+no aplicativo local (acima).
 
 ## Pendências operacionais
 

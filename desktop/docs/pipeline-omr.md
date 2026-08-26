@@ -94,7 +94,9 @@ semanas depois.
    - exatamente 1 marcado, e nenhum a meio caminho → resposta;
    - 0 marcados → item em branco, e não sai linha nenhuma;
    - 2+ marcados → `dupla_marcacao` — que a conferência já recebe proposto como
-     `NULO`, o item anulado: é o que o papel diz, e quem confere só concorda;
+     `NULO`, o estudante anulando o item dele: é o que o papel diz, e quem
+     confere só concorda. (Não é o *item anulado* pela coordenação, que vale
+     como acerto para todos — ver `anulacao.py`.);
    - marcado + borrão ao lado, ou só borrão → `leitura_duvidosa`, com o palpite
      junto para quem confere;
    - tipo B com 1 ou 2 colunas resolvidas → `tipo_b_incompleto`. Número pela

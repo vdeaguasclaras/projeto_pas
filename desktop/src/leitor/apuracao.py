@@ -112,7 +112,7 @@ def apurar(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes=()):
             continue
         linhas.append([
             r.estudante.matricula, r.estudante.nome, r.estudante.turma, r.estudante.versao,
-            r.acertos, r.erros, r.brancos, r.nulos, r.pendentes,
+            r.acertos, r.erros, r.brancos, r.nulos, r.anulados, r.pendentes,
             f"{r.escore:.2f}".replace(".", ","),
             # As duas notas, lado a lado: a do PAS (com desconto) e a da escola
             # (acertos sobre itens). São perguntas diferentes, e a planilha traz
@@ -124,12 +124,15 @@ def apurar(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes=()):
             *[f"{r.por_grupo[g].proporcao:.2f}".replace(".", ",")
               if g in r.por_grupo and r.por_grupo[g].total else "" for g in pacote.escore.grupos],
         ])
-    # `anulados` está DENTRO de `erradas` (dupla marcação vale como erro), e
-    # `pendentes` está fora de tudo — são os itens que continuavam na fila de
-    # conferência na hora de corrigir. Coluna com número diferente de zero ali é
-    # trabalho por fazer, não característica da prova.
+    # Três colunas que são subconjuntos de outras, e uma que não é de ninguém:
+    # `dupla_marcacao` está DENTRO de `erradas` (o estudante marcou duas, e no
+    # PAS isso vale como erro); `anulados` está DENTRO de `certas` (a coordenação
+    # anulou o item, e a pontuação foi para todos); `pendentes` está fora de tudo
+    # — são os itens que continuavam na fila de conferência na hora de corrigir.
+    # Coluna com número diferente de zero ali é trabalho por fazer, não
+    # característica da prova.
     cabecalho = ["matricula", "nome", "turma", "versao", "certas", "erradas", "brancos",
-                 "anulados", "pendentes",
+                 "dupla_marcacao", "anulados", "pendentes",
                  "escore_bruto", "percentual_acerto", "nota_marista", "redacao_nr",
                  "posicao", "de",
                  *[f"grupo_{g.lower()}" for g in pacote.escore.grupos]]

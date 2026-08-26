@@ -285,6 +285,38 @@ ALUNO,DISCIPLINA,TURMA,ANO,PERIODO,PROVA,CONCEITO,COMPARECEU
   Nota provisória lançada no sistema acadêmico ninguém descobre que era
   provisória.
 
+## 5.2. Os itens anulados (`pas-anulados-<prova>.json`)
+
+O único dado deste fluxo que **não vem do sistema on-line e não volta para ele**.
+Item anulado pela coordenação — mal formulado, ou sem alternativa correta — vale
+como acerto para todos, e essa decisão é tomada depois de a prova ter sido
+aplicada, às vezes depois de os cartões já estarem digitalizados. Ela nasce aqui,
+na tela **Itens anulados**, e fica lembrada num arquivo ao lado do pacote:
+
+```json
+{
+  "formato": "pas-marista/anulados-v1",
+  "prova": { "id": "pr-2em", "serie": "2ª série EM", "etapa": "1ª Etapa" },
+  "itens": [12, 47],
+  "em": "2026-08-26"
+}
+```
+
+- **Por prova, e no nome do arquivo.** A secretaria roda mais de uma série no
+  mesmo dia, da mesma pasta de downloads; um arquivo só levaria a anulação da 2ª
+  série para a prova da 3ª.
+- **`itens` são números de item**, e valem nas duas versões: o item 12 é o item
+  12 na regular e na adaptada. Item lembrado que não existe mais na prova sai da
+  lista **com aviso** — some calado seria a pessoa achar que anulou o que não
+  anulou.
+- **Quem lê é `pacote.carregar()`**, não cada casca: a janela e a linha de
+  comando têm de corrigir igual. `--anular` acrescenta itens a uma rodada da
+  linha de comando, sem gravar.
+- **O sistema on-line não sabe desta lista.** A tela de Correção de lá segue
+  corrigindo sem a anulação; quem emite o boletim e lança a nota no sistema
+  acadêmico é o aplicativo local. Se um dia a anulação passar a viajar dentro do
+  pacote, é este arquivo que deixa de existir — não os dois ao mesmo tempo.
+
 ## 6. A geometria (`layout`)
 
 Medida pelo navegador no ato da exportação, em **pontos**, na folha de 595×842pt,

@@ -408,9 +408,26 @@ passa e o leitor falha na secretaria.
   da Nota Marista, média do grupo), imprime `?` e põe um aviso no alto do
   boletim. Enquanto os dois viravam ausência de marcação, o boletim dava nota,
   posição na turma e grau de desenvolvimento a partir de uma afirmação sobre o
-  papel que ninguém tinha feito. Ao mexer na correção, lembre que são **quatro**
-  estados por item, não três — e que `NULO` tem de sair antes da normalização do
-  tipo B, que o transformaria num branco por não ter algarismo nenhum.
+  papel que ninguém tinha feito. Ao mexer na correção, lembre que são **cinco**
+  estados por item, não três — os quatro daqui mais o item anulado, logo abaixo —
+  e que `NULO` tem de sair antes da normalização do tipo B, que o transformaria
+  num branco por não ter algarismo nenhum.
+- **“Anulado” são DUAS coisas, e a diferença é quem anulou.** O **item anulado**
+  é decisão da coordenação, vale para a prova inteira, conta como **acerto para
+  todos** e sai com `*`; a **dupla marcação** é o estudante marcando duas
+  alternativas, vale só para ele, conta como **erro** e sai com `N` (é o `NULO`
+  de `correcao.py`). Enquanto as duas se chamavam a mesma coisa, a coluna
+  `anulados` da planilha e a legenda do boletim diziam uma pela outra. No código:
+  `Detalhe.anulado`/`Resultado.anulados` para a primeira, `nulo`/`nulos` para a
+  segunda.
+- **A anulação é o único dado da correção que não vem do pacote** — ela é tomada
+  depois da aplicação da prova, na tela “Itens anulados”, e fica lembrada em
+  `pas-anulados-<prova>.json`, ao lado do arquivo. Quem a lê é
+  `pacote.carregar()`, não cada casca: a janela e a linha de comando têm de
+  corrigir igual, e casca esquece. **O sistema on-line não a conhece** — a tela
+  de Correção de lá segue sem ela, e quem emite boletim é o aplicativo local. Ao
+  mexer na correção, lembre que o item anulado sai **antes** de tudo, inclusive
+  da pendência: marcação que não conta ninguém precisa conferir.
 - **O TXT do sistema acadêmico é contrato com um programa que já existe.**
   Vírgula, CRLF, **latin-1** (não UTF-8), conceito com ponto e sem o `.0` do
   inteiro, uma linha por estudante E por componente. Nada disso se descobriu

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import click
 
-from . import __version__
+from . import __version__, anulacao
 from .imagem import DPI_PADRAO, EXTENSOES, contar_paginas, digitalizacoes
 from .lote import ler_lote
 from .molde import GabaritoIncompativel
@@ -41,10 +41,14 @@ def cli() -> None:
 def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes=()) -> None:
     resultados, quantos, boletins = apurar(pacote, marcacoes, saida_dir, decisoes)
     click.echo(f"{quantos} estudante(s) em {saida_dir / 'resultados.csv'}")
-    anulados = sum(r.nulos for r in resultados)
-    if anulados:
-        click.echo(f"{anulados} item(ns) anulado(s) por dupla marcação — contam como erro e "
-                   "saem marcados no boletim.")
+    duplas = sum(r.nulos for r in resultados)
+    if duplas:
+        click.echo(f"{duplas} item(ns) com dupla marcação — contam como erro e saem marcados "
+                   "com “N” no boletim.")
+    if pacote.anulados:
+        click.echo(f"{len(pacote.anulados)} item(ns) anulado(s) "
+                   f"({anulacao.em_texto(pacote.anulados)}) — contam como acerto para todos "
+                   f"e saem marcados com “*”.")
     pendentes = sum(r.pendentes for r in resultados)
     if pendentes:
         click.echo(f"ATENÇÃO: {pendentes} marcação(ões) continuam na conferência e ficaram FORA "
@@ -54,12 +58,41 @@ def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes
         click.echo(f"Boletins de desempenho em {boletins}")
 
 
-def _pacote(caminho: Path) -> Pacote:
+def _pacote(caminho: Path, anular: tuple[int, ...] = ()) -> Pacote:
+    """Abre o pacote e resolve os itens anulados desta rodada.
+
+    A anulação que ficou lembrada ao lado do arquivo já vem com ele (`pacote.py`);
+    `--anular` acrescenta a desta rodada, sem gravar nada — quem decide e guarda
+    é a janela, e a linha de comando não pode mudar em silêncio o que a janela
+    vai mostrar amanhã. Ela é ECOADA sempre: anulação é a única coisa que muda a
+    nota sem estar no papel nem no pacote, e passar calada seria pedir que
+    alguém a descubra pela nota.
+    """
     try:
-        return carregar(caminho)
+        pacote = carregar(caminho)
     except GabaritoIncompativel as erro:
         click.echo(f"ERRO: {erro}", err=True)
         sys.exit(2)
+    for aviso in pacote.avisos:
+        click.echo(f"ATENÇÃO — {aviso}", err=True)
+    fora = sorted(set(anular) - pacote.numeros_dos_itens)
+    if fora:
+        click.echo(f"ERRO: o(s) item(ns) {anulacao.em_texto(fora)} não existe(m) nesta prova.",
+                   err=True)
+        sys.exit(2)
+    pacote.anulados |= set(anular)
+    if pacote.anulados:
+        click.echo(f"Itens anulados: {anulacao.em_texto(pacote.anulados)} — a pontuação vale "
+                   f"para TODOS os estudantes, e sai marcada com * no boletim.")
+    return pacote
+
+
+def _opcao_anular(comando):
+    """`--anular 12 --anular 47` — o mesmo em todo comando que corrige."""
+    return click.option(
+        "--anular", "anular", multiple=True, type=int, metavar="ITEM",
+        help="Número de item anulado: a pontuação dele é concedida a todos os "
+             "estudantes. Pode repetir.")(comando)
 
 
 
@@ -77,8 +110,10 @@ def _pacote(caminho: Path) -> Pacote:
               help="Pasta de saída para os CSVs e as miniaturas de conferência.")
 @click.option("--dpi", default=DPI_PADRAO, show_default=True,
               help="Resolução com que as páginas de PDF são rasterizadas.")
-def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> None:
-    pacote = _pacote(gabarito_path)
+@_opcao_anular
+def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int,
+        anular: tuple[int, ...]) -> None:
+    pacote = _pacote(gabarito_path, anular)
     click.echo(f"Simulado: {pacote.molde.simulado} · {pacote.molde.etapa}")
     click.echo(f"Prova: {pacote.molde.prova.get('serie')} ({pacote.molde.prova.get('id')})")
 
@@ -141,7 +176,9 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int) -> No
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="CSV de marcações. Pode repetir: o último vale sobre os anteriores.")
 @click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path))
-def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Path) -> None:
+@_opcao_anular
+def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Path,
+             anular: tuple[int, ...]) -> None:
     """Refaz a correção depois de a conferência ter sido resolvida.
 
     O caminho normal é `ler`, que já corrige. Este comando existe para o depois:
@@ -149,7 +186,7 @@ def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Pa
     recorte, e agora quer os boletins com o que ele decidiu — sem digitalizar o
     lote de novo.
     """
-    pacote = _pacote(gabarito_path)
+    pacote = _pacote(gabarito_path, anular)
     if not pacote.tem_boletim:
         click.echo("ERRO: este arquivo é o gabarito sozinho, sem elenco. Exporte o PACOTE da "
                    "prova em Cartões-resposta para gerar resultados e boletins.", err=True)
@@ -183,9 +220,10 @@ def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Pa
               help="A pasta do resultado — é dela que sai a fila de conferência.")
 @click.option("--arquivo", "arquivo_txt", default=None, type=click.Path(path_type=Path),
               help="O TXT a gerar. Sem isto, um nome derivado da prova, dentro da saída.")
+@_opcao_anular
 def exportar(gabarito_path: Path, respostas_csv: tuple[Path, ...], prova: str,
              componentes: tuple[str, ...], ano: int, turno: str,
-             saida_dir: Path, arquivo_txt: Path | None) -> None:
+             saida_dir: Path, arquivo_txt: Path | None, anular: tuple[int, ...]) -> None:
     """O arquivo que a secretaria importa no sistema acadêmico.
 
     A janela faz isto com caixas de seleção; aqui é para quando a janela não
@@ -195,7 +233,7 @@ def exportar(gabarito_path: Path, respostas_csv: tuple[Path, ...], prova: str,
 
     from . import academico
 
-    pacote = _pacote(gabarito_path)
+    pacote = _pacote(gabarito_path, anular)
     try:
         serie = academico.serie_do_pacote(pacote)
     except academico.NaoDaParaExportar as erro:
@@ -255,6 +293,10 @@ def conferir(gabarito_path: Path) -> None:
     click.echo(f"Simulado: {molde.simulado} · {molde.etapa}")
     click.echo(f"Prova: {molde.prova.get('serie')} ({molde.prova.get('id')})")
     click.echo(f"Âncoras: {len(molde.ancoras)} · faixa de identificação: {len(molde.codigo)} células")
+    if pacote.anulados:
+        click.echo(f"Itens anulados lembrados em "
+                   f"{anulacao.caminho_de(gabarito_path, molde.prova).name}: "
+                   f"{anulacao.em_texto(pacote.anulados)}")
     if pacote.tem_boletim:
         click.echo(f"Elenco: {len(pacote.elenco)} estudante(s) · notas lançadas para "
                    f"{len(pacote.notas)} · pesos do escore: "
