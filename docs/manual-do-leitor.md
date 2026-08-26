@@ -50,6 +50,11 @@ Quando sair uma versão nova: baixe o `.zip` de novo, extraia, e **substitua a
 pasta inteira**. Nada do seu trabalho fica dentro dela — os resultados ficam ao
 lado das digitalizações.
 
+> **Se a versão nova só mostrar “Source code”, espere dois minutos.** O programa
+> não fica guardado no repositório: uma máquina do GitHub o monta na hora em que
+> a versão é publicada, e o `PAS-Leitor-windows.zip` (uns 100 MB) só aparece na
+> lista quando ela termina. Recarregue a página.
+
 ---
 
 ## Parte 2 · Antes de cada lote
