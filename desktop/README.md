@@ -174,8 +174,20 @@ desktop/
 
 Item com defeito de formulação, ou sem alternativa correta, é **anulado**: a
 pontuação dele é concedida a todos os estudantes, como se todos o tivessem
-acertado. Quem marca é a secretaria, no passo **Itens anulados** — depois de
-abrir o pacote (é dele que sai a lista de itens) e antes de ler os cartões.
+acertado.
+
+**Ela nasce no sistema on-line**, na tela de Correção, e viaja DENTRO do pacote
+(`anulado: true` em cada item de `versoes`). Tem de ser assim: o sistema também
+corrige, e as duas correções precisam dizer a mesma coisa —
+`testar-correcao.py` compara as duas, com item anulado e sem.
+
+**E também se marca aqui**, no passo **Itens anulados**, porque a decisão
+costuma vir depois: com a prova aplicada, às vezes com o lote já digitalizado e o
+pacote já exportado. Quem está com o boletim para emitir não pode depender de
+alguém reexportar o arquivo. O que se marca deste lado soma-se ao que veio do
+pacote e fica lembrado em `pas-anulados-<prova>.json`, ao lado dele; o que veio
+do pacote aparece **travado** — desanular é decisão do sistema, e desfazê-la de
+um lado só faria a mesma prova valer notas diferentes conforme quem a corrigiu.
 
 **São duas coisas que já se chamaram “anulado” aqui, e a diferença é quem
 anulou.** Vale para o código e para a tela:
@@ -184,6 +196,12 @@ anulou.** Vale para o código e para a tela:
 |---|---|---|---|---|
 | **item anulado** | a coordenação | a prova inteira | acerto, para todos | `*` |
 | **dupla marcação** | o estudante | só ele, naquele item | erro | `N` |
+
+**A chave é `(versão, número)` — nunca o número sozinho.** Cada versão numera os
+seus itens de 1 a N: o nº 12 da regular pode ser o nº 10 da adaptada, e anular “o
+item 12” nas duas anularia coisas diferentes. Quem sabe que dois números são o
+mesmo item é o **`id`** que o pacote passou a trazer — é por ele que a tela junta
+as duas versões numa linha só, e que `--anular 12` marca o item nas duas provas.
 
 Três consequências que não são óbvias:
 
@@ -195,14 +213,13 @@ Três consequências que não são óbvias:
   afirmar de novo o que ela acabou de retirar) e um aviso no alto lista os itens
   anulados. A identidade é o ASTERISCO, não a cor — este boletim é impresso, e
   muita gente o imprime em preto e branco;
-- **a escolha fica lembrada ao lado do pacote**, em `pas-anulados-<prova>.json`,
-  e volta sozinha quando a prova é aberta de novo. Anulação esquecida no meio do
-  caminho é nota errada que ninguém confere — descobre-se pelo estudante que
-  reclama.
+- **o discursivo anulado vale a nota cheia**, e a nota lançada nele sai da conta
+  e do gráfico: ela mede um item que a prova não tem mais.
 
-Ela **não viaja de volta ao sistema on-line**: a tela de Correção de lá continua
-corrigindo sem a anulação, e quem emite o boletim é este aplicativo. Na linha de
-comando, `--anular 12 --anular 47` acrescenta itens à rodada, sem gravar nada.
+Na linha de comando, `--anular 12` usa o número da prova **regular** e marca o
+item nas duas versões; `--anular A2:7` alcança um item que só existe na
+adaptada. Nenhum dos dois grava nada — quem decide e guarda é o sistema, ou a
+janela.
 
 ## A janela
 
@@ -272,11 +289,12 @@ python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
     --respostas ./resultado/respostas.csv --respostas ./conferido.csv \
     --saida ./resultado
 
-# item anulado: a pontuação dele vai para todos. Vale em `ler`, `corrigir` e
-# `exportar`, e a janela guarda a escolha ao lado do pacote
+# item anulado nesta rodada: a pontuação dele vai para todos. O número é o da
+# prova regular, e o item é marcado nas duas versões; `A2:7` alcança um item que
+# só existe na adaptada. Vale em `ler`, `corrigir` e `exportar`
 python -m src.leitor.cli corrigir --gabarito pas-pacote-pr-2em.json \
     --respostas ./resultado/respostas.csv --saida ./resultado \
-    --anular 12 --anular 47
+    --anular 12 --anular A2:7
 
 # as notas no formato do sistema acadêmico. Sem `--componente`, ele lista os
 # componentes daquela série, com o código de cada um, e para
@@ -340,7 +358,10 @@ vírgula mudar de lugar.
 `testar-correcao.py` é de outra natureza: ele faz o **sistema on-line** e o
 aplicativo local corrigirem exatamente as mesmas marcações — as que o leitor
 tirou dos cartões impressos — e compara nota a nota. É o que impede as duas
-implementações do escore de divergirem.
+implementações do escore de divergirem. Ele corrige **duas vezes**: uma como o
+lote chega e outra com um item anulado dos dois lados, porque a anulação é a
+segunda regra que passou a existir em duplicata. E confere que a anulação mudou
+alguma nota — senão a comparação estaria comparando nada com nada.
 
 Se o Chromium já estiver instalado em outro lugar, `CHROMIUM=/caminho/do/chrome`
 dispensa o download; e `PLAYWRIGHT_BROWSERS_PATH`, se estiver definido, é

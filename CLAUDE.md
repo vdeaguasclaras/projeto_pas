@@ -420,14 +420,23 @@ passa e o leitor falha na secretaria.
   `anulados` da planilha e a legenda do boletim diziam uma pela outra. No código:
   `Detalhe.anulado`/`Resultado.anulados` para a primeira, `nulo`/`nulos` para a
   segunda.
-- **A anulação é o único dado da correção que não vem do pacote** — ela é tomada
-  depois da aplicação da prova, na tela “Itens anulados”, e fica lembrada em
-  `pas-anulados-<prova>.json`, ao lado do arquivo. Quem a lê é
-  `pacote.carregar()`, não cada casca: a janela e a linha de comando têm de
-  corrigir igual, e casca esquece. **O sistema on-line não a conhece** — a tela
-  de Correção de lá segue sem ela, e quem emite boletim é o aplicativo local. Ao
-  mexer na correção, lembre que o item anulado sai **antes** de tudo, inclusive
-  da pendência: marcação que não conta ninguém precisa conferir.
+- **A anulação é regra escrita nos dois lados, como o escore.** Ela nasce no
+  sistema (`anular_item`, migração 0018, coordenação pedagógica; `item.anulado`),
+  viaja DENTRO do pacote e é aplicada de novo em `correcao.py`. `testar-correcao.py`
+  corrige duas vezes — sem anulação e com um item anulado dos dois lados — e
+  compara nota a nota; é o que impede as duas implementações de divergirem.
+  O aplicativo local ainda deixa marcar itens anulados por lá (`anulacao.py`,
+  `pas-anulados-<prova>.json`), porque a decisão às vezes vem depois de o pacote
+  ser exportado: o que se marca ali **soma-se** ao que veio no pacote, e o que
+  veio no pacote **não se desmarca** de lá. Ao mexer na correção, lembre que o
+  item anulado sai **antes** de tudo, inclusive da pendência: marcação que não
+  conta ninguém precisa conferir.
+- **Cada versão numera os seus itens de 1 a N** (`prova()`, js/app.js): o item
+  que é o nº 12 na regular pode ser o nº 10 na adaptada, porque a adaptada tem
+  menos itens. Qualquer coisa que valha “por item” — anulação, hoje — se guarda
+  por `(versão, número)` e se cruza pelo **`id`** que o pacote passou a exportar.
+  Chave só com o número anula coisas diferentes nas duas provas, e ninguém
+  confere.
 - **O TXT do sistema acadêmico é contrato com um programa que já existe.**
   Vírgula, CRLF, **latin-1** (não UTF-8), conceito com ponto e sem o `.0` do
   inteiro, uma linha por estudante E por componente. Nada disso se descobriu

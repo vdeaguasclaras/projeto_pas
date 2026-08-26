@@ -594,14 +594,27 @@ nem no aplicativo local —, e sem isso a saída era editar o gabarito depois de
 cartões estarem impressos, que é exatamente o que o cartão-gabarito existe para
 denunciar.
 
-A escolha ficou no **aplicativo local**, num passo entre abrir o pacote e ler os
-cartões: é depois da aplicação que a anulação se decide, às vezes com o lote já
-digitalizado, e é este aplicativo que emite o boletim e lança a nota no sistema
-acadêmico. Ela fica lembrada ao lado do pacote (`pas-anulados-<prova>.json`) e
-volta sozinha na próxima vez que a prova for aberta — anulação esquecida no meio
-do caminho é nota errada que ninguém confere.
+A decisão nasce no **sistema**, na tela de Correção, para a coordenação
+pedagógica (`anular_item`, migração 0018 — função, e não política: ela toca só o
+campo `anulado` sobre a linha gravada, e o cliente reapresentaria o item inteiro,
+desfazendo em silêncio uma correção da leitura final). De lá ela viaja **dentro
+do pacote** e chega ao aplicativo local, que corrige igual.
 
-Duas coisas que o trabalho obrigou a arrumar antes:
+E também se marca no **aplicativo local**, num passo entre abrir o pacote e ler
+os cartões: a anulação costuma ser decidida com a prova aplicada, às vezes com o
+lote já digitalizado e o pacote já exportado, e quem tem o boletim para emitir
+não pode depender de alguém reexportar o arquivo. O que se marca ali soma-se ao
+que veio no pacote, fica lembrado ao lado dele (`pas-anulados-<prova>.json`) e
+volta sozinho na próxima vez — anulação esquecida no meio do caminho é nota
+errada que ninguém confere. O que veio do sistema aparece **travado**: desanular
+é decisão do sistema.
+
+Três coisas que o trabalho obrigou a arrumar antes:
+
+- **cada versão numera os seus itens de 1 a N.** O nº 12 da regular pode ser o
+  nº 10 da adaptada, e a primeira versão desta mudança anulava “o item 12” nas
+  duas — coisas diferentes. Hoje a chave é `(versão, número)`, e quem cruza as
+  duas é o `id` do item, que o pacote passou a exportar;
 
 - **“anulado” eram duas coisas.** A dupla marcação (o estudante anulando o item
   dele, que vale como erro) já se chamava assim, na tela, na planilha e no
@@ -610,10 +623,10 @@ Duas coisas que o trabalho obrigou a arrumar antes:
 - **item anulado sai da fila de conferência.** Marcação que não muda nota nenhuma
   não precisa que alguém a decida, e a fila passou a dizer isso na linha.
 
-Fica em aberto, para quando fizer sentido: a anulação **não viaja** ao sistema
-on-line, e a tela de Correção de lá segue corrigindo sem ela. Levá-la para o
-banco é mudança de esquema e de exportação, e o boletim que a escola entrega sai
-do aplicativo local.
+E o roteiro que fecha a brecha: `testar-correcao.py` passou a corrigir **duas
+vezes** — sem anulação e com um item anulado dos dois lados —, porque a anulação
+é a segunda regra que agora existe em duplicata, e regra escrita duas vezes
+diverge em silêncio.
 
 ### O que falta
 
@@ -625,8 +638,7 @@ quando o scanner salva o lote num PDF).
 
 Do leitor, resta a **importação dos percentuais do discursivo** pelo sistema
 on-line: o leitor os lê e grava em `percentuais.csv`, e a tela de Correção ainda
-não os consome. E, do lado do sistema, a **anulação de item**, que hoje só existe
-no aplicativo local (acima).
+não os consome.
 
 ## Pendências operacionais
 

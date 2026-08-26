@@ -92,24 +92,28 @@ certa.
 
 ### 2 · Itens anulados
 
-Se a coordenação **anulou** algum item — porque estava mal formulado, ou porque
-não tinha alternativa correta —, marque-o aqui. A pontuação daquele item é
-concedida a **todos os estudantes**, como se todos o tivessem acertado, e o
-boletim o mostra com **`*`**.
+Item que a coordenação **anulou** — porque estava mal formulado, ou porque não
+tinha alternativa correta — tem a pontuação concedida a **todos os estudantes**,
+como se todos o tivessem acertado, e sai no boletim com **`*`**.
 
-- vale para as duas versões da prova (A1 e A2);
+**O que a coordenação anulou no sistema já vem marcado aqui**, e travado: para
+desanular, é lá, na tela de Correção — e depois exporte o pacote de novo.
+
+Marque nesta tela o que foi anulado **depois** de o pacote ser exportado, que é o
+caso comum: a decisão costuma vir com a prova já aplicada.
+
+- cada linha é um **item**, com o número que ele tem em cada versão
+  (**A1 nº 12 · A2 nº 10**) — as duas provas numeram os seus itens de 1 a N, e
+  uma marcação resolve as duas;
 - **não precisa de botão**: marcar a caixa já vale, e as notas se refazem na
   hora se o lote já tiver sido lido;
-- a escolha fica **guardada ao lado do arquivo do pacote** e volta sozinha
-  quando você abrir esta prova de novo;
+- o que você marcar aqui fica **guardado ao lado do arquivo do pacote** e volta
+  sozinho quando você abrir esta prova de novo;
 - item anulado **sai da conferência**: o que o estudante marcou nele não muda
   mais nota nenhuma, e a linha dele aparece desligada.
 
 > Nenhum item anulado? É o caso mais comum — clique em **Continuar para a
 > leitura**.
-
-> A anulação vale **neste programa**: o sistema on-line continua corrigindo sem
-> ela. Quem emite o boletim e lança a nota é este aplicativo.
 
 ### 3 · Ler cartões
 
@@ -207,8 +211,9 @@ digitalizações**.
 | `E3_P3-1serie.txt` | as notas para o sistema acadêmico (quando você pede) |
 
 Um arquivo fica **fora** dessa pasta: `pas-anulados-<prova>.json`, ao lado do
-pacote da prova. É ele que guarda os itens anulados do passo 2, e é por isso que
-eles voltam sozinhos quando você abre a mesma prova de novo.
+pacote da prova. É ele que guarda os itens que **você** anulou no passo 2 (os que
+vieram do sistema já estão dentro do pacote), e é por isso que eles voltam
+sozinhos quando você abre a mesma prova de novo.
 
 ---
 
@@ -222,7 +227,7 @@ eles voltam sozinhos quando você abre a mesma prova de novo.
 | **Muitas folhas na conferência** | quase sempre o cartão-gabarito ficou de fora da digitalização. Digitalize o lote de novo com ele na frente. |
 | **Uma folha veio como “sem âncoras”** | a folha saiu cortada ou dobrada demais. Digitalize aquela folha de novo. |
 | **“Matrícula fora do padrão”** | acontece nos cartões extras, em que o estudante preenche a matrícula à mão. Confira no papel e corrija na conferência. |
-| **Um item saiu com `*` e ninguém anulou nada** | alguém anulou esse item nesta máquina antes, e a escolha ficou guardada. Volte ao passo 2 e desmarque. |
+| **Um item saiu com `*` e ninguém anulou nada** | alguém anulou esse item — no sistema, ou nesta máquina antes. Veja o passo 2: o que veio do sistema aparece travado, com a marca “anulado no sistema”; o resto você desmarca aí mesmo. |
 | **Aviso de que o cartão-gabarito divergiu** | **pare.** Quer dizer que os itens mudaram depois de os cartões serem impressos. Fale com a coordenação antes de lançar o lote. |
 | **A janela abriu e fechou sozinha** | abra o `PAS-Leitor-terminal.exe`, na mesma pasta: é o mesmo programa, com uma janela preta que **mostra o erro**. Mande a mensagem para quem cuida do sistema. |
 

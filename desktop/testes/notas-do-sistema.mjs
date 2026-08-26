@@ -11,7 +11,10 @@
  * traziam antes de importar o CSV do leitor — e preserva as notas do discursivo
  * e da redação, que não vêm do cartão e viajam no pacote.
  *
- * Uso:  node notas-do-sistema.mjs <respostas.csv> <saida.csv>
+ * Também sabe ANULAR itens antes de corrigir (`--anular id1,id2`): a anulação é
+ * a segunda regra escrita dos dois lados, e precisa ser comparada como o escore.
+ *
+ * Uso:  node notas-do-sistema.mjs <respostas.csv> <saida.csv> [--anular id1,id2]
  */
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -31,8 +34,11 @@ function carregarPlaywright() {
 const { chromium } = carregarPlaywright();
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const [ENTRADA, SAIDA] = process.argv.slice(2);
-if (!ENTRADA || !SAIDA) { console.error('uso: node notas-do-sistema.mjs <respostas.csv> <saida.csv>'); process.exit(2); }
+const ARGUMENTOS = process.argv.slice(2);
+const [ENTRADA, SAIDA] = ARGUMENTOS.filter(a => !a.startsWith('--'));
+const ANULAR = (ARGUMENTOS.find(a => a.startsWith('--anular='))?.slice(9) || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+if (!ENTRADA || !SAIDA) { console.error('uso: node notas-do-sistema.mjs <respostas.csv> <saida.csv> [--anular=id1,id2]'); process.exit(2); }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -70,13 +76,28 @@ await pagina.waitForSelector('#nav a');
 // Zera só as MARCAÇÕES: as notas do discursivo e da redação continuam, porque é
 // isso que o pacote leva para o aplicativo local, e os dois lados têm de partir
 // exatamente do mesmo estado.
-await pagina.evaluate(() => {
+const anulados = await pagina.evaluate(quaisAnular => {
   const CHAVE = 'pas-marista-mvp-v1';
   const s = JSON.parse(localStorage.getItem(CHAVE));
   for (const porEstudante of Object.values(s.respostas || {}))
     for (const r of Object.values(porEstudante)) r.marcacoes = {};
+  // A anulação entra pelo estado, e não pela tela, porque o que este roteiro
+  // compara é a CONTA — e a conta é a mesma que o clique produz (o clique
+  // escreve exatamente estes campos, ver `MUDS['item-anular']`).
+  const achados = [];
+  for (const item of s.itens || []) {
+    if (quaisAnular.includes(item.id)) {
+      item.anulado = true; item.anuladoPor = 'teste'; item.anuladoEm = '01/01/2026';
+      achados.push(item.id);
+    }
+  }
   localStorage.setItem(CHAVE, JSON.stringify(s));
-});
+  return achados;
+}, ANULAR);
+if (ANULAR.length && anulados.length !== ANULAR.length) {
+  console.error(`pedi para anular ${ANULAR} e o estado só tinha ${anulados}`);
+  process.exit(2);
+}
 await pagina.reload({ waitUntil: 'networkidle' });
 const entrada = pagina.getByText('usar sem conexão');
 if (await entrada.count()) await entrada.click();
@@ -99,4 +120,4 @@ await (await baixando).saveAs(SAIDA);
 await navegador.close();
 servidor.close();
 if (erros.length) { console.error('ERROS NA PÁGINA:', erros); process.exit(1); }
-console.log(`notas do sistema on-line em ${SAIDA}`);
+console.log(`notas do sistema on-line em ${SAIDA}` + (anulados.length ? ` · itens anulados: ${anulados.join(', ')}` : ''));

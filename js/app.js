@@ -417,20 +417,74 @@ function prova(provaId, versao, extras = []) {
 const itensEmRevisao = provaId =>
   itensDaProva(provaId).filter(i => ['area', 'geral', 'devolvido'].includes(i.status));
 
+/* ---------------- itens anulados ----------------
+   Item com defeito de formulação, ou sem alternativa correta, é anulado depois
+   da aplicação: a pontuação dele é concedida a todos os estudantes. A marca é do
+   ITEM (`item.anulado`), e não do número, porque cada versão numera os seus de 1
+   a N — o item que é o 12 na regular pode ser o 10 na adaptada, e anular por
+   número anularia coisas diferentes nas duas provas.
+
+   Esta lista é a prova vista uma vez só: cada item com o número que cada versão
+   lhe dá. É o que a tela de Correção mostra para marcar, e o que o pacote leva
+   para o aplicativo local. */
+function itensDaProvaComNumeros(provaId) {
+  const porItem = new Map();
+  for (const versao of ['regular', 'adaptada'])
+    for (const { item, numero } of prova(provaId, versao)) {
+      const achado = porItem.get(item.id) || { item, numeros: {} };
+      achado.item = item;
+      achado.numeros[versao] = numero;
+      porItem.set(item.id, achado);
+    }
+  // Pela ordem da prova regular; o que só existe na adaptada (item com adaptação
+  // própria) vai para o fim, na ordem dela.
+  const chave = x => x.numeros.regular ?? (1000 + (x.numeros.adaptada ?? 0));
+  return [...porItem.values()].sort((a, b) => chave(a) - chave(b));
+}
+
+const itensAnuladosDaProva = provaId =>
+  itensDaProvaComNumeros(provaId).filter(x => x.item.anulado);
+
+// Como o item anulado é chamado na tela: “A1 nº 12 · A2 nº 10”.
+const numerosDoItem = numeros => ['regular', 'adaptada']
+  .filter(v => numeros[v]).map(v => `${v === 'adaptada' ? 'A2' : 'A1'} nº ${numeros[v]}`).join(' · ');
+
 /* ---------------- correção ----------------
    Quanto vale cada resposta está em `PESOS_DO_ESCORE` (js/dados.js), e não em
    `if`s aqui dentro: o aplicativo local corrige também, para gerar os boletins
    na secretaria, e a tabela é o que impede as duas pontas de divergirem. Ela
-   viaja no pacote da prova. */
+   viaja no pacote da prova.
+
+   O ITEM ANULADO sai antes de qualquer conta. Item com defeito de formulação,
+   ou sem alternativa correta, é anulado depois da aplicação (`anular_item`,
+   migração 0018): a pontuação dele é concedida a todos os estudantes, como se
+   todos o tivessem acertado, e o que cada um marcou ali deixa de importar. Vale
+   para as duas versões, porque a marca é do item — e a marca é do ITEM, e não do
+   número, justamente porque cada versão numera os seus de 1 a N. */
 function corrigir(est, provaId = idProvaAtual()) {
   const pv = prova(provaId, est.versao);
   const resp = S.respostas[provaId]?.[est.id] || { marcacoes: {}, redacao: null };
-  let ac = 0, er = 0, br = 0, eb = 0, dLanc = 0, dTotal = 0;
+  let ac = 0, er = 0, br = 0, eb = 0, dLanc = 0, dTotal = 0, anul = 0;
   const porGrupo = {};
   GRUPOS.forEach(g => porGrupo[g] = { ac: 0, tot: 0 });
   const detalhes = [];
   for (const { item, numero } of pv) {
     const g = porGrupo[item.grupo] || (porGrupo[item.grupo] = { ac: 0, tot: 0 });
+    if (item.anulado) {
+      // Conta como acerto, com o peso de acerto do tipo. No discursivo o
+      // equivalente é a nota cheia (nota/escala = 1) — e a nota que porventura
+      // já tenha sido lançada não entra: ela mede um item que a prova não tem
+      // mais.
+      anul++;
+      g.tot++; g.ac++;
+      if (item.tipo === 'D') { dTotal++; eb += 1; }
+      else {
+        ac++;
+        eb += (PESOS_DO_ESCORE[item.tipo] || PESOS_DO_ESCORE.C).certo;
+        detalhes.push({ numero, gab: null, m: null, certa: true, anulado: true });
+      }
+      continue;
+    }
     if (item.tipo === 'D') {
       // Discursivo: nota lançada de 0 a 10 vale nota/10 no escore bruto.
       dTotal++;
@@ -461,7 +515,9 @@ function corrigir(est, provaId = idProvaAtual()) {
   const nr = contaDoNR(resp.redacao)?.nr ?? null;
   const temResp = Object.keys(resp.marcacoes || {}).length > 0 ||
     Object.keys(resp.discursivas || {}).length > 0;
-  return { ac, er, br, eb, porGrupo, nr, detalhes, temResp, total: pv.length, dLanc, dTotal };
+  // `anul` está DENTRO de `ac`: item anulado conta como acerto. Fica à parte só
+  // para poder aparecer com marca própria no boletim e na planilha.
+  return { ac, er, br, eb, porGrupo, nr, detalhes, temResp, total: pv.length, dLanc, dTotal, anul };
 }
 
 function ranking(provaId, versao) {
@@ -2024,8 +2080,8 @@ function telaTextos() {
     const livres = Math.max(0, (t.slots || 0) - itens.length);
     const chips = itens.map((i, ii) => `
       <span class="slot" data-acao="abrir-item" data-id="${i.id}" role="button" tabindex="0"
-        title="${esc(STATUS_ITEM[i.status].rot)}" style="cursor:pointer;${souEu(i) ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
-        <span class="t t${i.tipo}">${i.tipo}</span>${discChip(i.componente)} ${esc(i.autor.split(' ')[0])}${i.status !== 'aprovado' ? ' ·⏳' : ''}
+        title="${esc(STATUS_ITEM[i.status].rot)}${i.anulado ? ' — item anulado: a pontuação vale para todos' : ''}" style="cursor:pointer;${souEu(i) ? 'background:color-mix(in srgb,var(--verde) 12%,transparent)' : ''}">
+        <span class="t t${i.tipo}">${i.tipo}</span>${discChip(i.componente)} ${esc(i.autor.split(' ')[0])}${i.status !== 'aprovado' ? ' ·⏳' : ''}${i.anulado ? ' ·✳' : ''}
         ${ehCoord() ? `
           <button class="mv" data-acao="item-mover" data-id="${i.id}" data-dir="-1" title="Mover item para a esquerda" ${ii === 0 ? 'disabled' : ''}>◀</button>
           <button class="mv" data-acao="item-mover" data-id="${i.id}" data-dir="1" title="Mover item para a direita" ${ii === itens.length - 1 ? 'disabled' : ''}>▶</button>` : ''}
@@ -2705,7 +2761,8 @@ const ROTULO_CAMPO = {
   versao: 'versão da prova', componente: 'componente', habilidade: 'habilidade',
   grupo: 'grupo de habilidades', linhasRef: 'linhas de referência',
   dLinhas: 'linhas de resposta', dPauta: 'espaço de resposta', textoId: 'texto-base',
-  status: 'etapa da revisão', imagens: 'figuras', imagensOpcoes: 'figuras das alternativas'
+  status: 'etapa da revisão', imagens: 'figuras', imagensOpcoes: 'figuras das alternativas',
+  anulado: 'anulação do item'
 };
 
 // Como um valor guardado se lê na tela. Texto rico sai desenhado; o resto sai
@@ -2728,6 +2785,17 @@ function valorDoHistorico(campo, v) {
 
 function htmlHistoricoDoItem(item) {
   const h = Array.isArray(item?.historico) ? item.historico : [];
+  // O item anulado precisa dizer isso a quem o abre — inclusive a quem o
+  // escreveu. Sem esta faixa, a anulação só apareceria na tela de Correção, que
+  // é da coordenação pedagógica, e o item pareceria valer o que não vale mais.
+  const anulacao = item?.anulado ? `
+    <div class="cartao aviso" style="margin:0 0 10px">
+      <p style="font-size:13px;margin:0"><b>Item anulado.</b> A pontuação dele foi concedida a
+        todos os estudantes, como se todos o tivessem acertado${
+          item.anuladoPor ? `, por decisão de ${esc(item.anuladoPor)}` : ''}${
+          item.anuladoEm ? `, em ${esc(item.anuladoEm)}` : ''}. No boletim ele sai marcado com
+        <b>*</b>. Quem anula e desanula é a coordenação pedagógica, na tela de Correção.</p>
+    </div>` : '';
   const espera = item?.aguardaLeituraFinal;
   const aviso = espera ? `
     <div class="cartao aviso rev-pendente" style="margin:0 0 10px">
@@ -2738,7 +2806,7 @@ function htmlHistoricoDoItem(item) {
         ${ehCoord() && item.id ? `<button class="btn mini verde" data-acao="it-leitura-ok" data-id="${esc(item.id)}"
           style="margin-left:6px">Dar a leitura por concluída</button>` : ''}</p>
     </div>` : '';
-  if (!h.length) return aviso;
+  if (!h.length) return anulacao + aviso;
 
   const linhas = h.slice().reverse().map((e, n) => {
     const campos = (e.campos || []).map(c => ROTULO_CAMPO[c] || c);
@@ -2754,7 +2822,7 @@ function htmlHistoricoDoItem(item) {
     </li>`;
   }).join('');
 
-  return `${aviso}
+  return `${anulacao}${aviso}
     <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">
       O que mudou neste item</h3>
     <ol class="historico">${linhas}</ol>
@@ -5733,17 +5801,23 @@ ACOES['cart-template'] = () => {
   // o que procurar em cada uma.
   const daVersao = v => {
     const pv = prova(pAtiva.id, v);
+    // `id` e `anulado` viajam junto com o número. O `id` é o que permite ao
+    // aplicativo local saber que o item 12 da regular e o 10 da adaptada são o
+    // MESMO item — cada versão numera os seus de 1 a N, e sem isso a anulação
+    // marcada de um lado marcaria outra coisa do outro.
+    const daPeca = (item, numero) => ({
+      numero, id: item.id, tipo: item.tipo, grupo: item.grupo, componente: item.componente,
+      ...(item.anulado ? { anulado: true } : {})
+    });
     const folhas = [{
       folha: 1, tipo: 'objetiva',
       itens: pv.filter(({ item }) => item.tipo !== 'D')
-        .map(({ item, numero }) => ({ numero, tipo: item.tipo, gabarito: item.gabarito,
-                                      grupo: item.grupo, componente: item.componente }))
+        .map(({ item, numero }) => ({ ...daPeca(item, numero), gabarito: item.gabarito }))
     }];
     const ds = pv.filter(({ item }) => item.tipo === 'D');
     if (ds.length) folhas.push({
       folha: folhas.length + 1, tipo: 'discursiva', percentuais: PERCENTUAIS_D,
-      itens: ds.map(({ item, numero }) => ({ numero, tipo: 'D', linhas: item.dLinhas || 10,
-                                             grupo: item.grupo, componente: item.componente }))
+      itens: ds.map(({ item, numero }) => ({ ...daPeca(item, numero), linhas: item.dLinhas || 10 }))
     });
     if (pAtiva.temRedacao !== false && pAtiva.imprimirRedacao !== false)
       folhas.push({ folha: folhas.length + 1, tipo: 'redacao', linhas: LINHAS_REDACAO });
@@ -5858,11 +5932,24 @@ ACOES['cart-template'] = () => {
     }
   };
   baixar(`pas-pacote-${pAtiva.id}.json`, JSON.stringify(tpl, null, 2));
-  toast(`Pacote da prova de ${pAtiva.serie} exportado — leitura e boletins.`);
+  const anulados = itensAnuladosDaProva(pAtiva.id);
+  toast(`Pacote da prova de ${pAtiva.serie} exportado — leitura e boletins.` +
+    (anulados.length ? ` Leva ${anulados.length} item(ns) anulado(s): a pontuação deles vale para todos.` : ''));
 };
 
 /* ================= TELA 7 · CORREÇÃO ================= */
 let corrEstId = null, corrTurmaBol = 'todas';
+// A lista de itens anulados é remontada a cada marcação (anular refaz todas as
+// notas da tela). Sem guardar estas duas coisas, quem anula o item 84 de uma
+// prova de 110 volta ao topo da lista a cada clique — e é justamente quem tem
+// mais de um item para anular que rola até o fim.
+let corrAnulAberto = false, corrAnulRolagem = 0;
+document.addEventListener('toggle', e => {
+  if (e.target?.classList?.contains('anul')) corrAnulAberto = e.target.open;
+}, true);
+document.addEventListener('scroll', e => {
+  if (e.target?.classList?.contains('anul-lista')) corrAnulRolagem = e.target.scrollTop;
+}, true);
 
 // Ordenados dentro do elenco da prova — a correção é sempre de uma prova.
 function estudantesOrdenados(provaId = idProvaAtual()) {
@@ -6068,7 +6155,45 @@ function chipsDoEstudante(est, provaId) {
       ? `<span class="chip info" title="Nota da redação pela planilha oficial">NR ${
           c ? '= ' + esc(c.formula) + ' =' : '='} <b>&nbsp;${num(r.nr)}</b></span>` : ''}
     <span class="chip ${r.eb >= 0 ? 'ok' : 'falta'}" style="margin-left:6px">Escore bruto: ${num(r.eb, 2)}</span>
-    <span class="chip pend" style="margin-left:6px">${r.ac} certas · ${r.er} erradas · ${r.br} em branco</span>`;
+    <span class="chip pend" style="margin-left:6px">${r.ac} certas · ${r.er} erradas · ${r.br} em branco</span>${
+      r.anul ? `<span class="chip info" style="margin-left:6px" title="Item anulado conta como acerto para todos">${r.anul} de item anulado</span>` : ''}`;
+}
+
+/* Os itens anulados da prova — marcar aqui é a decisão, e ela vale na hora.
+   Fica na tela de Correção porque é depois da aplicação que se anula, e porque é
+   aqui que estão as notas que a anulação muda. É da coordenação pedagógica: a
+   anulação mexe na nota de todo estudante da série, nas duas versões (a função
+   `anular_item`, migração 0018, recusa qualquer outro papel).
+
+   Fechado por padrão: numa prova de 110 itens esta lista é a coisa mais alta da
+   tela, e na maioria dos lotes não há item anulado nenhum. Aberto quando há —
+   quem abre a tela precisa VER que aquela prova tem item anulado. */
+function cartaoAnulacao(provaId) {
+  const itens = itensDaProvaComNumeros(provaId);
+  if (!itens.length) return '';
+  const anulados = itens.filter(x => x.item.anulado);
+  const lista = itens.map(({ item, numeros }) => `
+    <label class="anul-item${item.anulado ? ' marcado' : ''}">
+      <input type="checkbox" data-mud="item-anular" data-item="${item.id}" ${item.anulado ? 'checked' : ''}>
+      <span style="min-width:0"><b>${numerosDoItem(numeros)}</b>
+        <span>tipo ${esc(item.tipo)}${item.componente ? ' · ' + esc(item.componente) : ''}${
+          item.grupo ? ' · ' + esc(item.grupo) : ''}</span>
+        ${item.anulado && item.anuladoPor
+          ? `<i>anulado por ${esc(item.anuladoPor)}${item.anuladoEm ? ', em ' + esc(item.anuladoEm) : ''}</i>` : ''}
+      </span>
+    </label>`).join('');
+  return `
+  <details class="cartao anul" style="margin-bottom:16px" ${anulados.length || corrAnulAberto ? 'open' : ''}>
+    <summary style="cursor:pointer;font-weight:800;font-size:14px">
+      Itens anulados${anulados.length ? ` — ${anulados.length}: ${
+        anulados.map(x => numerosDoItem(x.numeros)).join(' · ')}` : ' — nenhum'}</summary>
+    <p style="font-size:12.5px;color:var(--ink-2);margin:8px 0 12px">Item com defeito de formulação,
+      ou sem alternativa correta, é anulado: a pontuação dele é concedida a <b>todos</b> os
+      estudantes, como se todos o tivessem acertado, e o boletim o mostra com <b>*</b>. Vale para as
+      duas versões — a marca é do item, não do número. As notas e o pacote do leitor já saem assim;
+      se você já exportou o pacote desta prova, exporte-o de novo.</p>
+    <div class="anul-lista">${lista}</div>
+  </details>`;
 }
 
 function telaCorrecao() {
@@ -6172,6 +6297,8 @@ function telaCorrecao() {
         <div class="num">${prova(provaId, 'adaptada').length}</div></div>
     </div>
 
+    ${cartaoAnulacao(provaId)}
+
     <div class="campo" style="margin-bottom:14px;max-width:480px"><label>Estudante</label>
       <select class="caixa" data-mud="corr-est">${opsEst}</select></div>
     ${lancamento}
@@ -6208,7 +6335,48 @@ function telaCorrecao() {
   </div></div>
   <p class="nota-tela"><strong>Pontuação do MVP:</strong> tipo A: certo +1, errado −1 · tipo B: certo +1 · tipos C e D: certo +1, errado −1 · em branco 0.${
     comRed ? ' Redação pela planilha oficial: NR = NC − 2·NE/TL.' : ''} Os pesos finais do PAS (parâmetro x) entram na fase de calibração.</p>`;
+  const lista = $('.anul-lista');
+  if (lista) lista.scrollTop = corrAnulRolagem;
 }
+/* Anular e desanular. A gravação passa pela função do banco (migração 0018), e
+   não pela gravação do item: ela toca só o campo `anulado` sobre a linha que está
+   gravada — reapresentar a cópia que esta tela tem na mão desfaria, em silêncio,
+   uma correção da leitura final feita nesse meio-tempo.
+
+   Espera a resposta. Anular muda a nota de todo mundo: a tela não pode afirmar o
+   que o banco negou. */
+MUDS['item-anular'] = async (d, el) => {
+  const item = S.itens.find(i => i.id === d.item);
+  if (!item) return;
+  const anular = el.checked;
+  el.disabled = true;
+  if (modoNuvem) {
+    try {
+      const dados = await nuvem.anularItem(item.id, anular);
+      // Substituição, não mesclagem: desanular APAGA campos, e `Object.assign`
+      // não apaga o que não vem — o item ficaria anulado na tela e são no banco.
+      for (const chave of Object.keys(item)) if (!(chave in dados)) delete item[chave];
+      Object.assign(item, dados);
+    } catch (e) {
+      el.checked = !anular; el.disabled = false;
+      toast('⚠ O banco recusou a anulação: ' + (e?.message || e));
+      return;
+    }
+  } else if (anular) {
+    item.anulado = true;
+    item.anuladoPor = S.perfil.nome || '—';
+    item.anuladoEm = new Date().toLocaleDateString('pt-BR');
+  } else {
+    delete item.anulado; delete item.anuladoPor; delete item.anuladoEm;
+  }
+  const onde = numerosDoItem(itensDaProvaComNumeros(idProvaAtual())
+    .find(x => x.item.id === item.id)?.numeros || {});
+  commit();
+  toast(anular
+    ? `Item ${onde} anulado — a pontuação dele vale para todos, e o boletim o marca com *.`
+    : `Item ${onde} deixou de estar anulado — as notas voltaram a contar a marcação de cada um.`);
+};
+
 MUDS['corr-est'] = (d, el) => { corrEstId = el.value || null; render(); };
 MUDS['corr-turma-bol'] = (d, el) => { corrTurmaBol = el.value; };
 
@@ -6308,11 +6476,13 @@ ACOES['resp-importar-ok'] = () => {
 ACOES['notas-exportar'] = () => {
   const p = provaAtual();
   const provaId = p?.id;
-  const linhas = ['serie;etapa;matricula;nome;turma;versao;certas;erradas;brancos;escore_bruto;redacao_nr'];
+  // `anulados` está DENTRO de `certas`: item anulado conta como acerto. A coluna
+  // existe para a planilha não parecer errada a quem confere item a item.
+  const linhas = ['serie;etapa;matricula;nome;turma;versao;certas;erradas;brancos;anulados;escore_bruto;redacao_nr'];
   for (const e of estudantesDaProva(provaId)) {
     const r = corrigir(e, provaId);
     if (!r.temResp) continue;
-    linhas.push([p.serie, p.etapa, e.matricula, e.nome, e.turma, e.versao, r.ac, r.er, r.br,
+    linhas.push([p.serie, p.etapa, e.matricula, e.nome, e.turma, e.versao, r.ac, r.er, r.br, r.anul,
       r.eb.toFixed(2).replace('.', ','), r.nr === null ? '' : r.nr.toFixed(1).replace('.', ',')].join(';'));
   }
   baixar(`pas-notas-${provaId}.csv`, '﻿' + linhas.join('\n'), 'text/csv;charset=utf-8');
@@ -6330,9 +6500,19 @@ function htmlBoletim(provaId, est, r, pos, total, mediasTurma) {
       <b style="font-size:9px">${num(prop)}</b></div>`;
   }).join('');
   const trecho = r.detalhes.slice(0, 10);
-  const linhaG = trecho.map(d => String(d.gab).padStart(2, ' ')).join(' ');
-  const linhaM = trecho.map(d => d.m === null ? ' —' : `<b style="color:${d.certa ? '#12b76a' : '#e5484d'}">${String(d.m).padStart(2, ' ')}</b>`).join(' ');
+  // O item anulado sai com `*` na linha das marcações e um traço no lugar do
+  // gabarito: anular é a escola retirando aquele item, e reimprimir a chave dele
+  // seria afirmar de novo o que ela acabou de retirar. O NÚMERO fica como está —
+  // as três linhas são colunas de dois caracteres, e um asterisco ali
+  // desalinharia a tabela inteira; quem diz o que houve é a legenda.
+  const linhaG = trecho.map(d => (d.anulado ? '—' : String(d.gab)).padStart(2, ' ')).join(' ');
+  const linhaM = trecho.map(d => d.anulado
+    ? '<b style="color:#1d5cff"> *</b>'
+    : d.m === null ? ' —' : `<b style="color:${d.certa ? '#12b76a' : '#e5484d'}">${String(d.m).padStart(2, ' ')}</b>`).join(' ');
   const linhaN = trecho.map(d => String(d.numero).padStart(2, ' ')).join(' ');
+  const legendaAnulados = r.anul
+    ? `<div style="font-size:7px;color:#1d5cff;margin-top:4px"><b>*</b> item anulado — a pontuação
+       foi concedida a todos os estudantes, e conta como acerto na sua nota.</div>` : '';
   return `
   <div class="folha" style="width:100%">
     <div class="bol-cab"><h4>Boletim de Desempenho Individual</h4>
@@ -6350,6 +6530,7 @@ function htmlBoletim(provaId, est, r, pos, total, mediasTurma) {
     <div class="bol-sec" style="border-top:1px solid #eee;border-bottom:none">
       <h5>Gabarito × suas marcações (trecho)</h5>
       <div style="font-family:var(--mono);font-size:8.5px;line-height:2;color:#333;white-space:pre">Item  ${linhaN}\nGab.  ${linhaG}\nVocê  ${linhaM}</div>
+      ${legendaAnulados}
     </div>
   </div>`;
 }

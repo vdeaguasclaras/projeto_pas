@@ -76,24 +76,63 @@ class Pacote:
     elenco: list[Estudante]
     notas: dict[str, Notas]
     escore: Escore
-    # Os itens anulados pela coordenação — ver `anulacao.py`. NÃO vêm dentro do
-    # arquivo exportado: a anulação é decidida depois de a prova ter sido
-    # aplicada, aqui, e fica lembrada ao lado do pacote. É o único dado deste
-    # objeto que o sistema on-line não conhece.
-    anulados: set[int] = field(default_factory=set)
+    # Os itens anulados pela coordenação, como `(versão, número)` — ver
+    # `anulacao.py`. Vêm de dois lugares que se SOMAM: o pacote (a decisão
+    # tomada no sistema on-line, que também corrige) e o arquivo lembrado ao lado
+    # dele (a decisão tomada aqui, depois de o pacote ter sido exportado).
+    anulados: set[tuple[str, int]] = field(default_factory=set)
+    # Os que vieram DENTRO do pacote. Ficam à parte porque não se desmarcam
+    # aqui: desanular é decisão do sistema, e desfazê-la em silêncio de um lado
+    # só faria a mesma prova valer notas diferentes conforme quem a corrigiu.
+    anulados_do_pacote: set[tuple[str, int]] = field(default_factory=set)
     # O que deu errado ao abrir o pacote sem impedir de abri-lo — hoje, o arquivo
     # de itens anulados ilegível ou com item que não existe mais nesta prova.
     # Quem mostra é a casca; o que não pode é sumir.
     avisos: list[str] = field(default_factory=list)
 
-    def anulado(self, numero: int) -> bool:
-        """Este item foi anulado? Vale para todos os estudantes, nas duas versões."""
-        return numero in self.anulados
+    def anulado(self, versao: str, numero: int) -> bool:
+        """Este item, nesta versão da prova, foi anulado?
+
+        A chave é o par: cada versão numera os seus itens de 1 a N, e o nº 12 da
+        regular pode ser o nº 10 da adaptada.
+        """
+        return (versao, numero) in self.anulados
 
     @property
-    def numeros_dos_itens(self) -> set[int]:
-        """Os números de item que existem nesta prova, em qualquer versão."""
-        return {numero for _versao, numero in self.molde.itens}
+    def itens_da_prova(self) -> set[tuple[str, int]]:
+        """Todo `(versão, número)` que existe nesta prova."""
+        return set(self.molde.itens)
+
+    def mesmo_item(self, versao: str, numero: int) -> set[tuple[str, int]]:
+        """Este item em TODA versão em que ele aparece, pelo `id` do sistema.
+
+        É o que faz anular “o item” e não “o número”: marcar o nº 12 da regular
+        marca também o nº 10 da adaptada, quando são o mesmo item. Pacote velho,
+        sem `id`, devolve só o par pedido — melhor marcar de menos do que marcar
+        um item que ninguém escolheu.
+        """
+        alvo = (self.molde.itens.get((versao, numero)) or {}).get("id")
+        if not alvo:
+            return {(versao, numero)}
+        return {chave for chave, item in self.molde.itens.items() if item.get("id") == alvo}
+
+    @property
+    def quantos_anulados(self) -> int:
+        """Quantos ITENS estão anulados — e não quantos pares `(versão, número)`.
+
+        O mesmo item anulado nas duas versões são dois pares e um item só;
+        contar pares diria “4 itens anulados” de uma prova com dois.
+        """
+        distintos = set()
+        for versao, numero in self.anulados:
+            item = self.molde.itens.get((versao, numero)) or {}
+            distintos.add(item.get("id") or f"{versao}:{numero}")
+        return len(distintos)
+
+    @property
+    def anulados_locais(self) -> set[tuple[str, int]]:
+        """O que foi anulado AQUI — o que se grava no arquivo ao lado."""
+        return self.anulados - self.anulados_do_pacote
 
     @property
     def tem_redacao(self) -> bool:
@@ -154,11 +193,17 @@ def carregar(caminho: Path) -> Pacote:
                     marista=bruto.get("marista") or {})
     pacote = Pacote(molde=molde, elenco=elenco, notas=notas, escore=escore)
 
-    # E os itens anulados que ficaram lembrados ao lado do arquivo. É aqui, e não
-    # em cada casca, porque casca esquece: a janela lembraria e a linha de comando
-    # não, e a mesma prova valeria notas diferentes conforme quem a corrigiu.
-    pacote.anulados, pacote.avisos = anulacao.lembrados(
-        Path(caminho), molde.prova, pacote.numeros_dos_itens)
+    # Os itens anulados, das duas origens. Primeiro os que vieram DENTRO do
+    # pacote — a decisão tomada no sistema, que é quem corrige do outro lado.
+    pacote.anulados_do_pacote = {chave for chave, item in molde.itens.items()
+                                 if item.get("anulado")}
+    # Depois os que foram anulados aqui, lembrados no arquivo ao lado. É neste
+    # ponto, e não em cada casca, porque casca esquece: a janela lembraria e a
+    # linha de comando não, e a mesma prova valeria notas diferentes conforme
+    # quem a corrigiu.
+    locais, pacote.avisos = anulacao.lembrados(
+        Path(caminho), molde.prova, pacote.itens_da_prova)
+    pacote.anulados = pacote.anulados_do_pacote | locais
     return pacote
 
 

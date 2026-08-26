@@ -9,14 +9,16 @@ papel nem no pacote exportado — e por isso é a que mais precisa de roteiro.
 (Não confundir com a dupla marcação, que é o ESTUDANTE anulando o item dele e
 vale como erro. Essa tem roteiro próprio em `testar-dupla-marcacao.py`.)
 
-Cinco perguntas, e a última é a que impede um estrago silencioso:
+Seis perguntas, e a última é a que impede um estrago silencioso:
 
 1. o item anulado conta como acerto, no escore e na Nota Marista;
 2. ele sai da fila de conferência — marcação que não conta ninguém precisa
    decidir;
 3. o discursivo anulado vale a nota cheia, e a nota lançada nele deixa de valer;
 4. o boletim mostra o `*`, o traço no lugar do gabarito e o aviso do que houve;
-5. **sem anulação nenhuma, tudo continua exatamente como era** — o caminho de
+5. a anulação que vem DENTRO do pacote (a que a coordenação marcou no sistema)
+   vale igual à marcada aqui, e não se desfaz deste lado;
+6. **sem anulação nenhuma, tudo continua exatamente como era** — o caminho de
    todo lote normal não pode ter mudado de conta.
 
     python3 desktop/testes/testar-item-anulado.py [amostras]
@@ -24,6 +26,7 @@ Cinco perguntas, e a última é a que impede um estrago silencioso:
 from __future__ import annotations
 
 import csv
+import json
 import shutil
 import sys
 import tempfile
@@ -84,6 +87,9 @@ def main() -> int:
         estudante = next(e for e in pacote.elenco
                          if e.versao == "regular" and pacote.notas.get(e.matricula)
                          and pacote.notas[e.matricula].discursivas)
+        # A chave da anulação é `(versão, número)`: cada versão numera os seus
+        # itens de 1 a N, e o nº 12 da regular pode ser o nº 10 da adaptada.
+        par = lambda item: (estudante.versao, item["numero"])
         itens = pacote.molde.itens_da_versao(estudante.versao)
         objetivos = [i for i in itens if i["tipo"] != "D"]
         discursivos = [i for i in itens if i["tipo"] == "D"]
@@ -120,7 +126,7 @@ def main() -> int:
                           f"pendentes={antes.pendentes} (esperava 0 e 1)")
 
         # ------------------------------------------------- 1 e 2. com anulação
-        anulados = {anulado_errado["numero"], anulado_pendente["numero"]}
+        anulados = {par(anulado_errado), par(anulado_pendente)}
         anulacao.lembrar(caminho, pacote.molde.prova, anulados)
         pacote = carregar(caminho)                     # e volta lembrado do arquivo
         if pacote.anulados != anulados:
@@ -148,7 +154,7 @@ def main() -> int:
             falhas.append(f"Nota Marista: esperava {round(marista, 2)}, veio "
                           f"{depois.nota_marista}")
         detalhes = {d.numero: d for d in depois.detalhes}
-        for numero in anulados:
+        for _versao, numero in anulados:
             if not detalhes[numero].anulado:
                 falhas.append(f"o item {numero} não saiu marcado como anulado no detalhe")
 
@@ -164,7 +170,7 @@ def main() -> int:
                 falhas.append(f"o boletim não trouxe {o_que}")
 
         # ------------------------------- 3. o discursivo anulado vale a nota cheia
-        anulacao.lembrar(caminho, pacote.molde.prova, {discursivo["numero"]})
+        anulacao.lembrar(caminho, pacote.molde.prova, {par(discursivo)})
         pacote = carregar(caminho)
         so_d, boletins_d = _apurar(pacote, saida, estudante.matricula)
         esperado = (peso(certo, "certo") + peso(anulado_errado, "errado")
@@ -187,10 +193,44 @@ def main() -> int:
             falhas.append(f"resultados.csv: anulados={linha.get('anulados')!r}, "
                           f"certas={linha.get('certas')!r}")
 
+        # --------- 5. a anulação que vem DENTRO do pacote (marcada no sistema)
+        # É assim que ela chega de verdade: a coordenação anula na tela de
+        # Correção e o pacote sai com `anulado: true` no item. Aqui ela é
+        # simulada no arquivo, que é o contrato entre as duas pontas.
+        anulacao.lembrar(caminho, pacote.molde.prova, set())
+        bruto = json.loads(caminho.read_text(encoding="utf-8"))
+        alvo = None
+        for versao, conteudo in bruto["versoes"].items():
+            for folha in conteudo["folhas"]:
+                for item in folha.get("itens") or []:
+                    if item["numero"] == anulado_errado["numero"] and versao == estudante.versao:
+                        item["anulado"] = True
+                        alvo = (versao, item["numero"])
+        caminho.write_text(json.dumps(bruto, ensure_ascii=False), encoding="utf-8")
+        doPacote = carregar(caminho)
+        if doPacote.anulados_do_pacote != {alvo} or doPacote.anulados != {alvo}:
+            falhas.append(f"o item anulado no pacote não chegou: "
+                          f"do pacote={doPacote.anulados_do_pacote}, tudo={doPacote.anulados}")
+        if doPacote.anulados_locais:
+            falhas.append("o que veio do pacote foi contado como marcado aqui — e seria "
+                          f"gravado no arquivo ao lado: {doPacote.anulados_locais}")
+        comPacote, _ = _apurar(doPacote, saida, estudante.matricula)
+        if comPacote.anulados != 1:
+            falhas.append(f"a anulação do pacote não entrou na correção "
+                          f"(anulados={comPacote.anulados})")
+        # E o `id` é o que diz que o mesmo item nas duas versões é o mesmo item.
+        naDuas = doPacote.mesmo_item(*alvo)
+        if not naDuas or alvo not in naDuas:
+            falhas.append(f"`mesmo_item` não achou o próprio item: {naDuas}")
+
         # ------------------ item lembrado que não existe mais sai, mas com aviso
-        anulacao.lembrar(caminho, pacote.molde.prova, {max(pacote.numeros_dos_itens) + 40})
+        maior = max(n for _v, n in pacote.itens_da_prova)
+        anulacao.lembrar(caminho, pacote.molde.prova, {(estudante.versao, maior + 40)})
         orfao = carregar(caminho)
-        if orfao.anulados or not orfao.avisos:
+        # Sobra só o que veio do pacote: o lembrado que não existe mais sai —
+        # mas com aviso, porque sumir calado faria a pessoa achar que anulou o
+        # que não anulou.
+        if orfao.anulados != orfao.anulados_do_pacote or not orfao.avisos:
             falhas.append("item anulado que não existe nesta prova tinha de sair COM aviso — "
                           f"anulados={orfao.anulados}, avisos={orfao.avisos}")
 

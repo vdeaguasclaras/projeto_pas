@@ -46,7 +46,7 @@ def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes
         click.echo(f"{duplas} item(ns) com dupla marcação — contam como erro e saem marcados "
                    "com “N” no boletim.")
     if pacote.anulados:
-        click.echo(f"{len(pacote.anulados)} item(ns) anulado(s) "
+        click.echo(f"{pacote.quantos_anulados} item(ns) anulado(s) "
                    f"({anulacao.em_texto(pacote.anulados)}) — contam como acerto para todos "
                    f"e saem marcados com “*”.")
     pendentes = sum(r.pendentes for r in resultados)
@@ -58,15 +58,38 @@ def _mostrar_apuracao(pacote: Pacote, marcacoes: dict, saida_dir: Path, decisoes
         click.echo(f"Boletins de desempenho em {boletins}")
 
 
-def _pacote(caminho: Path, anular: tuple[int, ...] = ()) -> Pacote:
+VERSAO_PEDIDA = {"a1": "regular", "regular": "regular",
+                 "a2": "adaptada", "adaptada": "adaptada"}
+
+
+def _pedido(texto: str) -> tuple[str, int]:
+    """`12`, `A2:7`, `adaptada:7` — o que se digita em `--anular`.
+
+    Sem versão é a prova REGULAR, que é como a coordenação fala (“anulem o item
+    12”): o número dela é o do caderno da maioria. O item é resolvido depois pelo
+    `id`, então marcar o 12 da regular marca também o número que aquele mesmo
+    item tem na adaptada.
+    """
+    bruto = str(texto).strip()
+    versao, _, numero = bruto.rpartition(":")
+    alvo = VERSAO_PEDIDA.get(versao.strip().lower(), None) if versao else "regular"
+    if alvo is None or not numero.strip().isdigit():
+        raise click.BadParameter(
+            f"{texto!r} — use o número do item (12), ou a versão e o número "
+            f"(A2:7, adaptada:7).")
+    return alvo, int(numero)
+
+
+def _pacote(caminho: Path, anular: tuple[str, ...] = ()) -> Pacote:
     """Abre o pacote e resolve os itens anulados desta rodada.
 
-    A anulação que ficou lembrada ao lado do arquivo já vem com ele (`pacote.py`);
-    `--anular` acrescenta a desta rodada, sem gravar nada — quem decide e guarda
-    é a janela, e a linha de comando não pode mudar em silêncio o que a janela
-    vai mostrar amanhã. Ela é ECOADA sempre: anulação é a única coisa que muda a
-    nota sem estar no papel nem no pacote, e passar calada seria pedir que
-    alguém a descubra pela nota.
+    A anulação vem de dois lugares, e os dois já chegam com o pacote
+    (`pacote.py`): o que o sistema on-line mandou dentro do arquivo e o que ficou
+    lembrado ao lado dele. `--anular` acrescenta a desta rodada, sem gravar nada
+    — quem decide e guarda é o sistema, ou a janela.
+
+    Ela é ECOADA sempre: anulação é a única coisa que muda a nota sem estar no
+    papel, e passar calada seria pedir que alguém a descubra pela nota.
     """
     try:
         pacote = carregar(caminho)
@@ -75,24 +98,33 @@ def _pacote(caminho: Path, anular: tuple[int, ...] = ()) -> Pacote:
         sys.exit(2)
     for aviso in pacote.avisos:
         click.echo(f"ATENÇÃO — {aviso}", err=True)
-    fora = sorted(set(anular) - pacote.numeros_dos_itens)
-    if fora:
-        click.echo(f"ERRO: o(s) item(ns) {anulacao.em_texto(fora)} não existe(m) nesta prova.",
-                   err=True)
-        sys.exit(2)
-    pacote.anulados |= set(anular)
+
+    for texto in anular:
+        versao, numero = _pedido(texto)
+        if (versao, numero) not in pacote.itens_da_prova:
+            click.echo(f"ERRO: {anulacao.rotulo(versao, numero)} não existe nesta prova.",
+                       err=True)
+            sys.exit(2)
+        # O item, e não o número: marcar o nº 12 da regular marca o mesmo item na
+        # adaptada, onde ele pode ser o nº 10.
+        pacote.anulados |= pacote.mesmo_item(versao, numero)
+
     if pacote.anulados:
         click.echo(f"Itens anulados: {anulacao.em_texto(pacote.anulados)} — a pontuação vale "
                    f"para TODOS os estudantes, e sai marcada com * no boletim.")
+        do_pacote = pacote.anulados & pacote.anulados_do_pacote
+        if do_pacote and do_pacote != pacote.anulados:
+            click.echo(f"  (do pacote, anulados no sistema: {anulacao.em_texto(do_pacote)})")
     return pacote
 
 
 def _opcao_anular(comando):
-    """`--anular 12 --anular 47` — o mesmo em todo comando que corrige."""
+    """`--anular 12 --anular A2:7` — o mesmo em todo comando que corrige."""
     return click.option(
-        "--anular", "anular", multiple=True, type=int, metavar="ITEM",
-        help="Número de item anulado: a pontuação dele é concedida a todos os "
-             "estudantes. Pode repetir.")(comando)
+        "--anular", "anular", multiple=True, metavar="ITEM",
+        help="Item anulado: a pontuação dele é concedida a todos os estudantes. "
+             "O número é o da prova regular (12); para um item que só existe na "
+             "adaptada, A2:7. Pode repetir.")(comando)
 
 
 
@@ -112,7 +144,7 @@ def _opcao_anular(comando):
               help="Resolução com que as páginas de PDF são rasterizadas.")
 @_opcao_anular
 def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int,
-        anular: tuple[int, ...]) -> None:
+        anular: tuple[str, ...]) -> None:
     pacote = _pacote(gabarito_path, anular)
     click.echo(f"Simulado: {pacote.molde.simulado} · {pacote.molde.etapa}")
     click.echo(f"Prova: {pacote.molde.prova.get('serie')} ({pacote.molde.prova.get('id')})")
@@ -178,7 +210,7 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int,
 @click.option("--saida", "saida_dir", default=Path("resultado"), type=click.Path(path_type=Path))
 @_opcao_anular
 def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Path,
-             anular: tuple[int, ...]) -> None:
+             anular: tuple[str, ...]) -> None:
     """Refaz a correção depois de a conferência ter sido resolvida.
 
     O caminho normal é `ler`, que já corrige. Este comando existe para o depois:
@@ -223,7 +255,7 @@ def corrigir(gabarito_path: Path, respostas_csv: tuple[Path, ...], saida_dir: Pa
 @_opcao_anular
 def exportar(gabarito_path: Path, respostas_csv: tuple[Path, ...], prova: str,
              componentes: tuple[str, ...], ano: int, turno: str,
-             saida_dir: Path, arquivo_txt: Path | None, anular: tuple[int, ...]) -> None:
+             saida_dir: Path, arquivo_txt: Path | None, anular: tuple[str, ...]) -> None:
     """O arquivo que a secretaria importa no sistema acadêmico.
 
     A janela faz isto com caixas de seleção; aqui é para quando a janela não
@@ -294,9 +326,13 @@ def conferir(gabarito_path: Path) -> None:
     click.echo(f"Prova: {molde.prova.get('serie')} ({molde.prova.get('id')})")
     click.echo(f"Âncoras: {len(molde.ancoras)} · faixa de identificação: {len(molde.codigo)} células")
     if pacote.anulados:
-        click.echo(f"Itens anulados lembrados em "
-                   f"{anulacao.caminho_de(gabarito_path, molde.prova).name}: "
-                   f"{anulacao.em_texto(pacote.anulados)}")
+        # O resumo já saiu em `_pacote`; aqui é a origem de cada um.
+        if pacote.anulados_do_pacote:
+            click.echo(f"  no pacote (anulados no sistema): "
+                       f"{anulacao.em_texto(pacote.anulados_do_pacote)}")
+        if pacote.anulados_locais:
+            click.echo(f"  em {anulacao.caminho_de(gabarito_path, molde.prova).name} "
+                       f"(anulados aqui): {anulacao.em_texto(pacote.anulados_locais)}")
     if pacote.tem_boletim:
         click.echo(f"Elenco: {len(pacote.elenco)} estudante(s) · notas lançadas para "
                    f"{len(pacote.notas)} · pesos do escore: "

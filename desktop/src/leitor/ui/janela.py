@@ -171,19 +171,26 @@ class PaginaProva(QWidget):
 class PaginaAnulacao(QWidget):
     """Passo 2 — os itens que a coordenação anulou.
 
-    Fica aqui, entre escolher a prova e ler os cartões, porque é aqui que a
-    decisão cabe no trabalho: depois de o pacote estar aberto (é dele que sai a
-    lista de itens) e antes de a leitura começar. Mexer nela mais tarde continua
-    valendo — a anulação não muda o que o leitor enxerga no papel, só o que a
-    correção faz com isso, e a tela refaz as notas na hora.
+    A anulação nasce no sistema on-line e vem DENTRO do pacote: o sistema também
+    corrige, e as duas correções têm de dizer a mesma coisa. Esta tela mostra o
+    que veio de lá — travado, porque desanular é decisão do sistema — e deixa
+    marcar o que foi decidido depois de o pacote ter sido exportado, que é o caso
+    comum: anula-se com a prova já aplicada, às vezes com o lote já digitalizado.
 
-    O que se escolhe aqui não vai para o sistema on-line: a tela de Correção de
-    lá segue corrigindo sem a anulação, e é este aplicativo que emite o boletim.
+    Fica aqui, entre escolher a prova e ler os cartões, porque é aqui que a
+    decisão cabe no trabalho. Mexer nela mais tarde continua valendo — a anulação
+    não muda o que o leitor enxerga no papel, só o que a correção faz com isso, e
+    a tela refaz as notas na hora.
+
+    **Uma linha é um ITEM, não um número.** Cada versão numera os seus itens de 1
+    a N: o nº 12 da regular pode ser o nº 10 da adaptada. Quem diz que os dois
+    números são o mesmo item é o `id` que vem no pacote.
     """
 
     def __init__(self, janela: "Janela"):
         super().__init__()
         self.janela = janela
+        self.grupos: list[dict] = []
         self.lista = QListWidget()
         self.lista.setMinimumHeight(260)
         self.lista.itemChanged.connect(self._mudou)
@@ -198,64 +205,95 @@ class PaginaAnulacao(QWidget):
             rotulo("Itens anulados", "titulo"),
             rotulo("Item com defeito de formulação, ou sem alternativa correta, é anulado: a "
                    "pontuação dele é concedida a <b>todos</b> os estudantes, como se todos o "
-                   "tivessem acertado, e o boletim o mostra com <b>*</b>. Marque abaixo os itens "
-                   "que a coordenação anulou — vale para as duas versões da prova. Se nenhum "
-                   "item foi anulado, siga em frente.", "sub"),
+                   "tivessem acertado, e o boletim o mostra com <b>*</b>. O que a coordenação "
+                   "anulou no sistema já vem marcado e travado aqui — para desanular, é lá. "
+                   "Marque abaixo o que foi anulado depois de o pacote ser exportado.", "sub"),
             self.lista, self.resumo, self.onde,
             linha(self.seguir, None)))
+
+    def _grupos_do_pacote(self, pacote: Pacote) -> list[dict]:
+        """Um registro por ITEM, com o número que cada versão lhe dá."""
+        porItem: dict[str, dict] = {}
+        for versao in ("regular", "adaptada"):
+            for item in pacote.molde.itens_da_versao(versao):
+                chave = (versao, item["numero"])
+                # Sem `id` (pacote exportado antes de ele existir) cada par vira
+                # a sua própria linha: melhor duas linhas do que juntar itens que
+                # ninguém garantiu serem o mesmo.
+                nome = item.get("id") or f"{versao}:{item['numero']}"
+                grupo = porItem.setdefault(nome, {"chaves": set(), "numeros": {}, "item": item})
+                grupo["chaves"].add(chave)
+                grupo["numeros"][versao] = item["numero"]
+                grupo["item"] = grupo["item"] or item
+        for grupo in porItem.values():
+            grupo["do_pacote"] = bool(grupo["chaves"] & pacote.anulados_do_pacote)
+        # Pela ordem da prova regular; o que só existe na adaptada vai para o fim.
+        return sorted(porItem.values(),
+                      key=lambda g: g["numeros"].get("regular", 1000 + g["numeros"].get("adaptada", 0)))
 
     def mostrar(self, pacote: Pacote | None) -> None:
         self._montando = True
         self.lista.clear()
+        self.grupos = []
         if pacote is None:
             self._montando = False
             return
-        # A lista é por NÚMERO de item, não por versão: item 12 é o item 12 nas
-        # duas provas, e anular “o 12 da regular e não o da adaptada” não é uma
-        # coisa que a coordenação diga — ela anula o item.
-        por_numero: dict[int, dict] = {}
-        versoes: dict[int, list[str]] = {}
-        for versao in ("regular", "adaptada"):
-            for item in pacote.molde.itens_da_versao(versao):
-                por_numero.setdefault(item["numero"], item)
-                versoes.setdefault(item["numero"], []).append(
-                    "A2" if versao == "adaptada" else "A1")
-        for numero in sorted(por_numero):
-            item = por_numero[numero]
-            partes = [f"Item {numero}", f"tipo {item['tipo']}"]
+        self.grupos = self._grupos_do_pacote(pacote)
+        for indice, grupo in enumerate(self.grupos):
+            item = grupo["item"]
+            numeros = " · ".join(anulacao.rotulo(v, n)
+                                 for v, n in sorted(grupo["numeros"].items(), reverse=True))
+            partes = [numeros, f"tipo {item['tipo']}"]
             if item.get("componente"):
                 partes.append(str(item["componente"]))
             if item.get("grupo"):
                 partes.append(str(item["grupo"]))
-            partes.append(" + ".join(versoes[numero]))
+            if grupo["do_pacote"]:
+                partes.append("anulado no sistema")
             linha_lista = QListWidgetItem(" · ".join(partes))
-            linha_lista.setFlags(linha_lista.flags() | Qt.ItemIsUserCheckable)
-            linha_lista.setCheckState(Qt.Checked if pacote.anulado(numero) else Qt.Unchecked)
-            linha_lista.setData(Qt.UserRole, numero)
+            marcado = bool(grupo["chaves"] & pacote.anulados)
+            if grupo["do_pacote"]:
+                # Veio do sistema: fica marcado e fora de alcance. Desmarcar aqui
+                # faria a mesma prova valer notas diferentes conforme quem a
+                # corrigiu — e sem ninguém notar.
+                linha_lista.setFlags(Qt.ItemIsSelectable)
+                linha_lista.setToolTip("Anulado no sistema on-line, e por isso travado aqui. "
+                                       "Para desanular, use a tela de Correção do sistema e "
+                                       "exporte o pacote de novo.")
+            else:
+                linha_lista.setFlags(linha_lista.flags() | Qt.ItemIsUserCheckable)
+            linha_lista.setCheckState(Qt.Checked if marcado else Qt.Unchecked)
+            linha_lista.setData(Qt.UserRole, indice)
             self.lista.addItem(linha_lista)
         self._montando = False
         self._resumir(pacote)
 
-    def _escolhidos(self) -> set[int]:
-        return {self.lista.item(i).data(Qt.UserRole)
-                for i in range(self.lista.count())
-                if self.lista.item(i).checkState() == Qt.Checked}
+    def _escolhidos(self) -> set[tuple[str, int]]:
+        """O que está marcado na tela, como `(versão, número)`."""
+        escolhidos: set[tuple[str, int]] = set()
+        for i in range(self.lista.count()):
+            linha_lista = self.lista.item(i)
+            if linha_lista.checkState() == Qt.Checked:
+                escolhidos |= self.grupos[linha_lista.data(Qt.UserRole)]["chaves"]
+        return escolhidos
 
     def _resumir(self, pacote: Pacote) -> None:
         if pacote.anulados:
-            self.resumo.setText(
-                f"<b>{len(pacote.anulados)} item(ns) anulado(s):</b> "
-                f"{anulacao.em_texto(pacote.anulados)}. A pontuação vale para todos os "
-                f"estudantes e o boletim os marca com <b>*</b>.")
+            partes = [f"<b>{pacote.quantos_anulados} item(ns) anulado(s):</b> "
+                      f"{anulacao.em_texto(pacote.anulados)}."]
+            if pacote.anulados_do_pacote:
+                partes.append(f"Do sistema: {anulacao.em_texto(pacote.anulados_do_pacote)}.")
+            if pacote.anulados_locais:
+                partes.append(f"Marcados aqui: {anulacao.em_texto(pacote.anulados_locais)}.")
+            self.resumo.setText(" ".join(partes))
         else:
             self.resumo.setText("Nenhum item anulado — a prova vale como foi aplicada.")
         caminho = self.janela.sessao.caminho_pacote
-        if caminho:
-            alvo = anulacao.caminho_de(caminho, pacote.molde.prova)
-            self.onde.setText(
-                f"A escolha fica guardada em <b>{alvo.name}</b>, ao lado do pacote — e volta "
-                f"sozinha quando você abrir esta prova de novo."
-                if pacote.anulados else "")
+        alvo = anulacao.caminho_de(caminho, pacote.molde.prova) if caminho else None
+        self.onde.setText(
+            f"O que você marcar aqui fica guardado em <b>{alvo.name}</b>, ao lado do pacote — e "
+            f"volta sozinho quando você abrir esta prova de novo."
+            if alvo and pacote.anulados_locais else "")
 
     def _mudou(self, _item) -> None:
         """Marcou ou desmarcou: guarda, e refaz as notas se já houver notas.
@@ -269,9 +307,12 @@ class PaginaAnulacao(QWidget):
         sessao = self.janela.sessao
         if not (sessao.pacote and sessao.caminho_pacote):
             return
-        sessao.pacote.anulados = self._escolhidos()
+        # O que veio do pacote continua valendo, marcado ou não na tela: as
+        # linhas dele são travadas, e reafirmá-las aqui é o que garante que uma
+        # marcação local não as apague.
+        sessao.pacote.anulados = sessao.pacote.anulados_do_pacote | self._escolhidos()
         anulacao.lembrar(sessao.caminho_pacote, sessao.pacote.molde.prova,
-                         sessao.pacote.anulados)
+                         sessao.pacote.anulados_locais)
         self._resumir(sessao.pacote)
         if sessao.resultados:
             self.janela.recorrigir()
@@ -548,8 +589,11 @@ class PaginaConferencia(QWidget):
         # aqui poupa a conferência mais cara que existe — a que não servia para
         # nada. O campo fica desligado, e não como pendência: a correção já não
         # olha para ele.
+        # Anulado é por (versão, número), e quem diz a versão da folha é o
+        # estudante dela: o nº 12 da regular pode ser o nº 10 da adaptada.
         pacote = self.janela.sessao.pacote
-        if pacote and pacote.anulado(achado["item"]):
+        estudante = pacote.casar(achado["matricula"]) if (pacote and achado["matricula"]) else None
+        if estudante and pacote.anulado(estudante.versao, achado["item"]):
             campo.setEnabled(False)
             texto.setText(f"<b>{achado['matricula'] or '—'}</b> · item {achado['item']}"
                           f"<br><span style='color:#1d5cff'>item anulado — não precisa "
@@ -571,7 +615,12 @@ class PaginaConferencia(QWidget):
         if not sessao.saida:
             return
         conferido = sessao.saida / "conferido.csv"
-        anulado = (sessao.pacote.anulado if sessao.pacote else lambda _n: False)
+        pacote = sessao.pacote
+
+        def anulado(achado: dict) -> bool:
+            estudante = pacote.casar(achado["matricula"]) if (pacote and achado["matricula"]) else None
+            return bool(estudante and pacote.anulado(estudante.versao, achado["item"]))
+
         with conferido.open("w", encoding="utf-8", newline="") as arquivo:
             escritor = csv.writer(arquivo, delimiter=";", lineterminator="\n")
             escritor.writerow(["matricula", "item", "resposta"])
@@ -580,7 +629,7 @@ class PaginaConferencia(QWidget):
                 # campo trazia o palpite do leitor. Gravá-lo seria transformar
                 # palpite em decisão humana — e ela ressurgiria como resposta se
                 # a anulação fosse desfeita depois.
-                if achado["matricula"] and not anulado(achado["item"]):
+                if achado["matricula"] and not anulado(achado):
                     escritor.writerow([achado["matricula"], achado["item"],
                                        campo.text().strip().upper()])
         self.janela.recorrigir()

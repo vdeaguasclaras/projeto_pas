@@ -193,6 +193,8 @@ def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
 
     Os itens anulados (`pacote.anulados`) saem antes de qualquer conta: valem
     como acerto para todo mundo, tenha o estudante marcado o que tiver marcado.
+    A anulação é por `(versão, número)`, porque cada versão numera os seus itens
+    de 1 a N — o nº 12 da regular pode ser o nº 10 da adaptada.
     """
     escore = pacote.escore
     notas = pacote.notas.get(estudante.matricula)
@@ -205,7 +207,7 @@ def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
     for item in itens:
         grupo = resultado.por_grupo.setdefault(item["grupo"] or "—", Acertos())
 
-        if pacote.anulado(item["numero"]):
+        if pacote.anulado(item["versao"], item["numero"]):
             _creditar_anulado(resultado, grupo, item, escore)
             continue
 

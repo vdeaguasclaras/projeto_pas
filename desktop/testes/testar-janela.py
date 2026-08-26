@@ -82,12 +82,19 @@ def main() -> int:
         if aberto(3) or aberto(4):
             falhas.append("conferência ou resultados abriram antes de haver leitura")
 
-        # 2 · os itens anulados — a lista sai do pacote, um por número de item
+        # 2 · os itens anulados — uma linha por ITEM, não por número: o mesmo item
+        # tem números diferentes na regular e na adaptada, e quem os junta é o
+        # `id` que vem no pacote.
         anulacao_pagina = janela.pag_anulacao
-        numeros = sorted(janela.sessao.pacote.numeros_dos_itens)
-        if anulacao_pagina.lista.count() != len(numeros):
-            falhas.append(f"a tela de anulação listou {anulacao_pagina.lista.count()} item(ns) "
-                          f"para {len(numeros)} da prova")
+        pct = janela.sessao.pacote
+        itens_distintos = {(i.get("id") or f"{v}:{n}")
+                           for (v, n), i in pct.molde.itens.items()}
+        if anulacao_pagina.lista.count() != len(itens_distintos):
+            falhas.append(f"a tela de anulação listou {anulacao_pagina.lista.count()} linha(s) "
+                          f"para {len(itens_distintos)} item(ns) da prova")
+        cruzados = [g for g in anulacao_pagina.grupos if len(g["numeros"]) > 1]
+        if not cruzados:
+            falhas.append("nenhuma linha juntou as duas versões — o `id` do pacote não chegou")
 
         # 3 · a leitura (direta, sem thread: o teste não tem laço de eventos vivo)
         lote = ler_lote(janela.sessao.pacote, digitalizacoes(entrada), saida)
@@ -101,13 +108,13 @@ def main() -> int:
 
         # Marcar um item na tela de anulação refaz as notas na hora, e a escolha
         # fica lembrada ao lado do pacote — sem botão de aplicar pelo caminho.
-        alvo = numeros[0]
+        alvo = anulacao_pagina.grupos[0]["chaves"]
         antes = {r.estudante.matricula: r.escore for r in janela.sessao.resultados}
         anulacao_pagina.lista.item(0).setCheckState(Qt.Checked)
         aplicacao.processEvents()
-        if janela.sessao.pacote.anulados != {alvo}:
-            falhas.append(f"marcar a caixa não anulou o item {alvo} "
-                          f"({janela.sessao.pacote.anulados})")
+        if janela.sessao.pacote.anulados != alvo:
+            falhas.append(f"marcar a caixa não anulou o item nas duas versões: esperava {alvo}, "
+                          f"veio {janela.sessao.pacote.anulados}")
         from leitor import anulacao as _anulacao
         lembrado = _anulacao.caminho_de(copia, janela.sessao.pacote.molde.prova)
         if not lembrado.exists():

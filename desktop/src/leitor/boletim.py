@@ -282,7 +282,7 @@ def _discursivos(resultado: Resultado, pacote: Pacote,
     # prova deixou de ter, e a correção já não a usa. Deixá-lo desenhado seria o
     # boletim comparando o estudante à turma num item que não vale mais nada.
     lancadas = {n: v for n, v in (notas.discursivas if notas else {}).items()
-                if not pacote.anulado(n)}
+                if not pacote.anulado(resultado.estudante.versao, n)}
     if not lancadas:
         return ""
     escala = pacote.escore.escala_do_discursivo
@@ -338,7 +338,7 @@ def html_de(pacote: Pacote, resultado: Resultado, turma: dict[str, float],
     # é da VERSÃO: item anulado que só existe na regular não tem por que aparecer
     # no boletim de quem fez a adaptada.
     anulados = [i["numero"] for i in pacote.molde.itens_da_versao(est.versao)
-                if pacote.anulado(i["numero"])]
+                if pacote.anulado(est.versao, i["numero"])]
     anulacao = (f'<div class="anulacao"><b>Item(ns) anulado(s):</b> '
                 f'{", ".join(f"{n}*" for n in anulados)}. '
                 f'{"Ele foi anulado" if len(anulados) == 1 else "Eles foram anulados"} '
