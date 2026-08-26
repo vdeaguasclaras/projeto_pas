@@ -298,7 +298,10 @@ ferramenta do GitHub disponível aqui só cria branch, não apaga. Branch de PR
 fechada se apaga na tela de *Branches*; o histórico dela continua alcançável por
 `refs/pull/<n>/head`, que o GitHub guarda para sempre. Etiqueta se publica pela
 tela de *Releases* — e é o que faz sair uma versão nova do leitor
-(`leitor-vX`).
+(`leitor-vX`). **A Release nasce só com o “Source code”**: o `.exe` não fica
+versionado, e o `PAS-Leitor-windows.zip` é anexado pela máquina do GitHub uns
+dois minutos depois, quando o workflow termina. Quem publica a etiqueta e olha na
+hora vê uma Release sem programa — e ela não está errada, está a meio caminho.
 
 ## Ambiente de desenvolvimento remoto
 
