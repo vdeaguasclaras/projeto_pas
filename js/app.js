@@ -12,7 +12,7 @@ import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
 import { htmlTabelaPeriodica } from './tabela-periodica.js';
 import {
-  guardarImagem, descartarImagem, prepararImagens, todasAsImagens,
+  guardarImagem, duplicarImagem, arquivoAusente, descartarImagem, prepararImagens, todasAsImagens,
   htmlImagens, pecasDeImagens, htmlEditorImagens
 } from './imagens.js';
 import {
@@ -1508,99 +1508,657 @@ function telaPainel() {
   </div></div>`;
 }
 
-function dlgProva(p, nova = false) {
+/* ---------------- configurar e criar prova ----------------
+   Os campos da prova moram num formulário só, usado para configurar e para
+   criar. `c` é a forma plana desse formulário (`camposDaProva`), não o registro
+   gravado: o diálogo de criação se remonta — trocar de modo, trocar a prova de
+   origem, recusar o “Salvar” —, e diálogo que se remonta lê a cópia de
+   trabalho, nunca o registro. */
+const camposDaProva = p => ({
+  nome: p?.nome || '',
+  serie: p?.serie || SERIES[0],
+  etapa: p?.etapa || '',
+  dataAplicacao: p?.dataAplicacao || '',
+  duracao: p?.duracao || '',
+  qtd: totalDeQuestoes(p, 'regular'),
+  qtdAda: totalDeQuestoes(p, 'adaptada'),
+  temRedacao: p?.temRedacao !== false,
+  imprimirRedacao: p?.imprimirRedacao !== false
+});
+
+// O que está na TELA, na mesma forma. O `change` de um <input> só dispara ao
+// perder o foco, então o formulário é lido aqui, na hora de gravar ou de
+// remontar, e não confiado aos avisos dos campos.
+function recolherCamposDaProva() {
+  const numero = sel => {
+    const n = parseInt($(sel)?.value, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    nome: $('#cfg-nome').value.trim(),
+    serie: $('#cfg-serie').value,
+    etapa: $('#cfg-etapa').value.trim(),
+    dataAplicacao: $('#cfg-data').value,
+    duracao: $('#cfg-dur').value.trim(),
+    qtd: numero('#cfg-qtd'),
+    qtdAda: numero('#cfg-qtd-ada'),
+    temRedacao: $('#cfg-tem-red').checked,
+    imprimirRedacao: $('#cfg-red').checked
+  };
+}
+
+// Do formulário para o registro da prova.
+const dadosDosCampos = c => ({
+  nome: c.nome, serie: c.serie, etapa: c.etapa,
+  dataAplicacao: c.dataAplicacao, duracao: c.duracao,
+  totalQuestoes: { regular: c.qtd, adaptada: c.qtdAda },
+  temRedacao: c.temRedacao, imprimirRedacao: c.imprimirRedacao
+});
+
+// A recusa do “Criar” marca o campo e diz o motivo ao pé dele, como a do item
+// (`recusarItem`): o diálogo da cópia rola por uma lista de cem itens, e um
+// aviso de passagem não alcança quem está no fim dela.
+let erroDaProva = null;   // { campo, msg }
+const marcaDaProva = campo =>
+  ` data-erro-campo="prova-${campo}" class="campo${erroDaProva?.campo === campo ? ' com-erro' : ''}"`;
+const avisoDaProva = campo => erroDaProva?.campo === campo
+  ? `<p class="campo-erro">⚠ ${esc(erroDaProva.msg)}</p>` : '';
+
+function htmlCamposDaProva(c, { dicaEtapa = '' } = {}) {
   const opsSerie = SERIES.map(s =>
-    `<option ${p.serie === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
-  abrirDlg(`
-    <div class="dlg-cab"><h2>${nova ? 'Nova prova' : 'Configurar a prova'}</h2>
-      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
-    <div class="dlg-corpo">
+    `<option ${c.serie === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
+  return `
       <div class="form-linha">
-        <div class="campo" style="min-width:230px"><label>Nome do simulado</label>
-          <input class="caixa" id="cfg-nome" value="${esc(p.nome || '')}"></div>
+        <div${marcaDaProva('nome')} style="min-width:230px"><label>Nome do simulado</label>
+          <input class="caixa" id="cfg-nome" value="${esc(c.nome)}">${avisoDaProva('nome')}</div>
         <div class="campo"><label>Série</label>
           <select class="caixa" id="cfg-serie">${opsSerie}</select></div>
-        <div class="campo"><label>Etapa</label>
-          <input class="caixa" id="cfg-etapa" value="${esc(p.etapa || '')}"></div>
+        <div${marcaDaProva('etapa')}><label>Etapa</label>
+          <input class="caixa" id="cfg-etapa" value="${esc(c.etapa)}"${
+            dicaEtapa ? ` placeholder="${esc(dicaEtapa)}"` : ''}>${avisoDaProva('etapa')}</div>
       </div>
       <div class="form-linha">
         <div class="campo"><label>Data de aplicação</label>
-          <input class="caixa" type="date" id="cfg-data" value="${esc(p.dataAplicacao || '')}"></div>
+          <input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
         <div class="campo"><label>Duração</label>
-          <input class="caixa" id="cfg-dur" value="${esc(p.duracao || '')}"></div>
+          <input class="caixa" id="cfg-dur" value="${esc(c.duracao)}"></div>
       </div>
       <div class="form-linha">
         <div class="campo"><label>Questões — prova regular</label>
-          <input class="caixa" type="number" min="1" max="300" id="cfg-qtd"
-            value="${totalDeQuestoes(p, 'regular') ?? ''}" placeholder="a definir"></div>
+          <input class="caixa" type="number" min="1" max="300" id="cfg-qtd" data-mud="cfg-qtd"
+            value="${c.qtd ?? ''}" placeholder="a definir"></div>
         <div class="campo"><label>Questões — prova adaptada</label>
           <input class="caixa" type="number" min="1" max="300" id="cfg-qtd-ada"
-            value="${totalDeQuestoes(p, 'adaptada') ?? ''}" placeholder="a definir"></div>
+            value="${c.qtdAda ?? ''}" placeholder="a definir"></div>
       </div>
       <p style="font-size:12px;color:var(--ink-2);margin:-4px 0 12px">São <b>dois</b> números porque a prova adaptada
         (de inclusão) tem tamanho próprio. O painel compara cada versão com os itens já aprovados nela, e a regular
         também com os espaços dos textos-base. Campo em branco significa <em>a definir</em> — a barra fica sem
         denominador em vez de mostrar zero.</p>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:8px">
-        <input type="checkbox" id="cfg-tem-red" ${p.temRedacao !== false ? 'checked' : ''}> esta prova tem redação</label>
+        <input type="checkbox" id="cfg-tem-red" ${c.temRedacao ? 'checked' : ''}> esta prova tem redação</label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
-        <input type="checkbox" id="cfg-red" ${p.imprimirRedacao !== false ? 'checked' : ''}> imprimir a folha de redação no cartão-resposta
+        <input type="checkbox" id="cfg-red" ${c.imprimirRedacao ? 'checked' : ''}> imprimir a folha de redação no cartão-resposta
         <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
       <p style="font-size:12px;color:var(--ink-2);margin:10px 0 0">Sem redação, a prova não tem proposta, nem folha de
         redação, nem lançamento de NC/NE/TL. A <b>proposta</b> — tema, comando e textos motivadores — é escrita na tela
-        <b>Redação</b>, e sai nas últimas páginas do caderno.</p>
+        <b>Redação</b>, e sai nas últimas páginas do caderno.</p>`;
+}
+
+function dlgProva(p) {
+  erroDaProva = null;
+  const origem = p.duplicadaDe;
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Configurar a prova</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      ${htmlCamposDaProva(camposDaProva(p))}
+      ${origem ? `<p class="nota-copia" style="margin-top:14px">Esta prova foi criada como cópia de
+        <b>${esc(origem.rotulo)}</b>${origem.em ? `, em ${esc(origem.em)}` : ''}. Ela é independente:
+        o que mudar aqui não muda a original.</p>` : ''}
     </div>
     <div class="dlg-pe">
-      ${!nova && provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
+      ${provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
       <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
-      <button class="btn" data-acao="cfg-salvar" data-id="${esc(p.id)}" data-nova="${nova ? '1' : ''}">Salvar</button></div>`);
+      <button class="btn" data-acao="cfg-salvar" data-id="${esc(p.id)}">Salvar</button></div>`);
 }
 
 ACOES['cfg'] = () => { const p = provaAtual(); if (p) dlgProva(p); };
-ACOES['prova-nova'] = () => {
-  const usadas = new Set(provasOrdenadas().map(p => p.serie));
-  const livre = SERIES.find(s => !usadas.has(s)) || SERIES[0];
-  dlgProva(provaNova(livre, provasOrdenadas().length), true);
-};
 
 ACOES['cfg-salvar'] = d => {
-  const numero = sel => {
-    const n = parseInt($(sel).value, 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-  const dados = {
-    nome: $('#cfg-nome').value.trim(),
-    serie: $('#cfg-serie').value,
-    etapa: $('#cfg-etapa').value.trim(),
-    dataAplicacao: $('#cfg-data').value,
-    duracao: $('#cfg-dur').value.trim(),
-    totalQuestoes: { regular: numero('#cfg-qtd'), adaptada: numero('#cfg-qtd-ada') },
-    temRedacao: $('#cfg-tem-red').checked,
-    imprimirRedacao: $('#cfg-red').checked
-  };
+  const alvo = provaPorId(d.id);
+  if (!alvo) return;
+  const dados = dadosDosCampos(recolherCamposDaProva());
   if (!dados.nome || !dados.etapa) { toast('Nome e etapa são obrigatórios.'); return; }
-
-  let alvo;
-  if (d.nova) {
-    if (provasOrdenadas().some(p => p.serie === dados.serie && p.etapa === dados.etapa)) {
-      toast(`Já existe uma prova de ${dados.serie} na ${dados.etapa}.`); return;
-    }
-    alvo = { ...provaNova(dados.serie, provasOrdenadas().length), ...dados, id: uid() };
-    S.provas.push(alvo);
-    S.provaAtiva = alvo.id;
-    salvarProvaAtiva(alvo.id);
-    sincronizarElenco(alvo.id);
-  } else {
-    alvo = provaPorId(d.id);
-    if (!alvo) return;
-    const mudouSerie = alvo.serie !== dados.serie;
-    Object.assign(alvo, dados);
-    // Trocar a série de uma prova troca quem a faz.
-    if (mudouSerie) sincronizarElenco(alvo.id);
-  }
+  const mudouSerie = alvo.serie !== dados.serie;
+  Object.assign(alvo, dados);
+  // Trocar a série de uma prova troca quem a faz.
+  if (mudouSerie) sincronizarElenco(alvo.id);
   $('#dlg').close(); commit(); PERS.prova(alvo); PERS.elenco(alvo.id);
-  toast(d.nova ? `Prova de ${alvo.serie} criada.` : 'Prova atualizada.');
+  toast('Prova atualizada.');
 };
+
+/* ================= nova prova: em branco, ou cópia de outra =================
+   A coordenação reaproveita prova: o simulado do 3º trimestre nasce do que já
+   foi aplicado na 1ª etapa, com uns itens trocados e outros mantidos. Até aqui
+   isso era refazer à mão — cadastrar de novo cada texto-base e cada item —, ou
+   mexer na prova aplicada, que é justamente a que não pode mudar: ela tem
+   cartões impressos, respostas lançadas, boletins emitidos e itens anulados.
+
+   Duplicar cria uma PROVA NOVA, com identidade própria em tudo:
+
+   · a prova, os textos-base e os itens ganham `id` novo. Nada na cópia aponta
+     para a original, a não ser `copiadoDe`/`duplicadaDe`, que é só rastro — a
+     tela os usa para dizer de onde a coisa veio, e nenhuma regra os lê;
+   · as FIGURAS ganham arquivo próprio no bucket (`duplicarImagem`). Referência
+     compartilhada faria a cópia depender da original para sempre;
+   · o que é da aplicação fica para trás: data, respostas, notas, metas de
+     alocação, a conversa da revisão, o histórico e a marca de item anulado. A
+     cópia é uma prova que ainda não foi aplicada;
+   · o que é da prova vem junto e é editável como sempre: capa, instruções,
+     tamanho, e — se marcado — a proposta de redação. Ter ou não redação é
+     escolha da cópia, independente do que a original fez.
+
+   O item copiado chega no MESMO status em que estava: o aprovado entra direto
+   no caderno novo, e o que estava em revisão continua na etapa dele. Mexer
+   nele segue o fluxo de sempre, e a original não fica sabendo.
+
+   A versão adaptada de um item (`derivadoDe`) anda junto com ele: marcar um
+   marca o outro. Separá-los deixaria a cópia apontando para um item da prova
+   original, ou a prova adaptada nova sem a adaptação. */
+let rascProva = null;   // { modo, origemId, campos, textos:Set, itens:Set, trazerProposta }
+
+function novaProvaEmBranco() {
+  const usadas = new Set(provasOrdenadas().map(p => p.serie));
+  const livre = SERIES.find(s => !usadas.has(s)) || SERIES[0];
+  return camposDaProva(provaNova(livre, provasOrdenadas().length));
+}
+
+// Os textos da origem na ordem da prova: os aprovados pelo número, depois as
+// sugestões, que ainda não têm número.
+function textosDaOrigem(origemId) {
+  const lista = textosDaProva(origemId);
+  return [
+    ...lista.filter(t => t.status === 'aprovado').sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0)),
+    ...lista.filter(t => t.status !== 'aprovado')
+  ];
+}
+const itensDoTextoNaOrigem = (origemId, textoId) =>
+  S.itens.filter(i => i.provaId === origemId && i.textoId === textoId);
+
+// Os mesmos itens na ordem em que a prova os numera — o caderno agrupa por
+// tipo dentro do bloco, e a ordem gravada sozinha listaria “1, 2, 4, 3”. A
+// adaptação própria vem logo abaixo do original; o que não está na prova
+// montada (ainda não aprovado) vai para o fim do bloco.
+function itensDoTextoNaOrdem(origemId, textoId, numeros) {
+  const lista = itensDoTextoNaOrigem(origemId, textoId);
+  const chave = new Map();
+  lista.forEach((i, k) => {
+    const n = numeros.get(i.id);
+    chave.set(i.id, n?.regular ?? (n?.adaptada != null ? 500 + n.adaptada : 1000 + k));
+  });
+  for (const i of lista)
+    if (i.derivadoDe && chave.has(i.derivadoDe)) chave.set(i.id, chave.get(i.derivadoDe) + 0.5);
+  return lista.slice().sort((a, b) => chave.get(a.id) - chave.get(b.id));
+}
+
+// O item regular e a versão adaptada dele, de um lado ou do outro do vínculo.
+function parNaCopia(item) {
+  const outro = item.derivadoDe ? S.itens.find(i => i.id === item.derivadoDe) : itemAdaptadoDe(item.id);
+  return outro && outro.provaId === item.provaId ? outro : null;
+}
+
+// Marcar um item traz o texto dele junto: item sem o seu texto-base não tem
+// onde ficar na prova.
+function marcarNaCopia(item, dentro) {
+  for (const x of [item, parNaCopia(item)].filter(Boolean)) {
+    if (dentro) { rascProva.itens.add(x.id); rascProva.textos.add(x.textoId); }
+    else rascProva.itens.delete(x.id);
+  }
+}
+
+// O ponto de partida: a prova como ela saiu — textos aprovados e itens
+// aprovados. O item anulado fica de fora (ele foi anulado por um defeito), e o
+// que não chegou a ser aprovado também; os dois continuam na lista para quem
+// quiser marcá-los.
+function selecaoPadrao(origemId) {
+  rascProva.textos = new Set(textosDaProva(origemId).filter(t => t.status === 'aprovado').map(t => t.id));
+  rascProva.itens = new Set();
+  for (const t of textosDaOrigem(origemId))
+    for (const i of itensDoTextoNaOrigem(origemId, t.id))
+      if (i.status === 'aprovado' && !i.anulado && rascProva.textos.has(i.textoId)) marcarNaCopia(i, true);
+}
+
+// `digitados` é o que a pessoa já escreveu na etapa e na data — trocar de prova
+// de origem não pode apagar isso, porque não veio de origem nenhuma.
+function escolherOrigem(origemId, digitados = { etapa: '', dataAplicacao: '' }) {
+  const origem = provaPorId(origemId);
+  rascProva.origemId = origem?.id || null;
+  if (!origem) return;
+  // A cópia começa igual à original no que é configuração, e em branco no que
+  // é da aplicação. A etapa vem vazia de propósito: série e etapa são o nome da
+  // prova no seletor, e a cópia não pode se chamar como a original.
+  rascProva.campos = { ...camposDaProva(origem),
+                       etapa: digitados.etapa, dataAplicacao: digitados.dataAplicacao };
+  rascProva.trazerProposta = true;
+  selecaoPadrao(origem.id);
+}
+
+ACOES['prova-nova'] = () => {
+  if (!ehCoord()) return;
+  erroDaProva = null;
+  rascProva = { modo: 'zero', origemId: null, campos: novaProvaEmBranco(),
+                textos: new Set(), itens: new Set(), trazerProposta: true };
+  dlgNovaProva();
+};
+
+function dlgNovaProva() {
+  const r = rascProva;
+  const origem = r.modo === 'duplicar' ? provaPorId(r.origemId) : null;
+  const haOrigem = provasOrdenadas().length > 0;
+  const opcaoModo = (valor, titulo, desc) => `
+        <label class="capa-arranjo-op${r.modo === valor ? ' sel' : ''}">
+          <input type="radio" name="np-modo" value="${valor}" data-mud="np-modo" ${r.modo === valor ? 'checked' : ''}>
+          <span class="capa-arranjo-txt"><strong>${titulo}</strong>${desc}</span></label>`;
+  const opsOrigem = provasOrdenadas().map(p => {
+    const n = itensDaProva(p.id).length;
+    return `<option value="${esc(p.id)}" ${p.id === r.origemId ? 'selected' : ''}>${
+      esc(rotuloProva(p))} — ${esc(p.nome)} (${n} ${n === 1 ? 'item' : 'itens'})</option>`;
+  }).join('');
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Nova prova</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      ${haOrigem ? `<div class="campo" style="margin-bottom:14px"><label>Como começar</label>
+        <div class="capa-arranjos np-modos">
+          ${opcaoModo('zero', 'Prova em branco', 'Textos-base e itens são escritos do começo pela equipe.')}
+          ${opcaoModo('duplicar', 'Duplicar uma prova existente',
+            'Aproveita textos-base e itens de outra prova — todos ou só alguns. A cópia é uma prova nova: o que mudar nela não muda a original.')}
+        </div></div>` : ''}
+      ${origem ? `<div${marcaDaProva('origem')} style="margin-bottom:14px"><label>Prova de origem</label>
+        <select class="caixa" data-mud="np-origem">${opsOrigem}</select>${avisoDaProva('origem')}</div>` : ''}
+      ${htmlCamposDaProva(r.campos, { dicaEtapa: origem ? `diferente de “${origem.etapa}”` : '' })}
+      ${origem ? htmlEscolhaDaCopia(origem) : ''}
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="np-criar">${origem ? 'Criar a cópia' : 'Criar prova'}</button></div>`, !!origem);
+}
+
+function htmlEscolhaDaCopia(origem) {
+  const r = rascProva;
+  const numeros = new Map(itensDaProvaComNumeros(origem.id).map(x => [x.item.id, x.numeros]));
+  const linhaItem = item => {
+    const n = numeros.get(item.id);
+    const dentro = r.itens.has(item.id);
+    return `
+          <label class="adap-item${dentro ? ' dentro' : ''}">
+            <input type="checkbox" data-mud="np-item" data-id="${esc(item.id)}" ${dentro ? 'checked' : ''}>
+            <span class="adap-n" title="${n ? esc(numerosDoItem(n)) : 'fora da prova montada'}">${n?.regular ?? (n?.adaptada ? '↳' : '—')}</span>
+            <span class="t t${item.tipo}">${item.tipo}</span>
+            ${discChip(item.componente)}
+            <span class="adap-enun">${esc(simples(item.enunciado).slice(0, 90))}</span>
+            ${item.derivadoDe ? '<span class="adap-marca">↳ adaptação</span>' : ''}
+            ${item.anulado ? '<span class="adap-marca np-anulado">✳ anulado na original</span>' : ''}
+            ${item.status !== 'aprovado' ? `<span class="adap-marca np-status">${esc(STATUS_ITEM[item.status]?.rot || item.status)}</span>` : ''}
+          </label>`;
+  };
+  const blocos = textosDaOrigem(origem.id).map(t => {
+    const itens = itensDoTextoNaOrdem(origem.id, t.id, numeros);
+    const vem = r.textos.has(t.id);
+    const rot = t.status === 'aprovado' ? `Texto ${t.numero ?? '?'}` : 'Sugestão';
+    return `
+        <div class="adap-bloco${vem ? '' : ' fora'}">
+          <div class="adap-bloco-cab">
+            <input type="checkbox" data-mud="np-texto" data-id="${esc(t.id)}" ${vem ? 'checked' : ''}
+              title="Copiar este texto-base" aria-label="Copiar ${esc(rot)}">
+            <b>${esc(rot)} — ${esc((t.titulo || '').slice(0, 56))}</b>
+            <span class="adap-conta" id="np-c-${esc(t.id)}">${itens.filter(i => r.itens.has(i.id)).length} de ${itens.length}</span>
+            ${itens.length ? `<span class="adap-bloco-acoes">
+              <button class="btn mini fantasma" data-acao="np-bloco" data-id="${esc(t.id)}" data-v="1">todos</button>
+              <button class="btn mini fantasma" data-acao="np-bloco" data-id="${esc(t.id)}" data-v="0">nenhum</button>
+            </span>` : ''}
+          </div>
+          ${itens.map(linhaItem).join('')}
+        </div>`;
+  }).join('');
+  const temProposta = propostaEscrita(origem.id);
+  return `
+      <div class="np-copia">
+        <h3>O que vem da prova de origem</h3>
+        <p class="np-explica">Vêm marcados os textos-base e os <b>itens aprovados</b> — a prova como ela saiu.
+          Desmarque o que não serve; marque o que quiser trazer a mais. Texto-base marcado sem nenhum item vem
+          vazio, pronto para receber itens novos. A versão adaptada de um item acompanha o item.</p>
+        <div id="np-resumo">${htmlResumoDaCopia(r.campos.qtd)}</div>
+        <div class="adap-barra">
+          <button class="btn mini fantasma" data-acao="np-todos" data-v="aprovados">Só os aprovados</button>
+          <button class="btn mini fantasma" data-acao="np-todos" data-v="1">Marcar tudo</button>
+          <button class="btn mini fantasma" data-acao="np-todos" data-v="0">Desmarcar tudo</button>
+        </div>
+        <div class="adap-lista">${blocos || '<div class="vazio" style="padding:14px">A prova de origem não tem textos-base.</div>'}</div>
+        ${temProposta ? `<label class="np-opcao"><input type="checkbox" data-mud="np-proposta" ${r.trazerProposta ? 'checked' : ''}>
+          <span>trazer também a <b>proposta de redação</b> (“${esc(proposta(origem.id).tema || 'sem tema')}”) —
+          vale se a nova prova tiver redação</span></label>` : ''}
+        <p class="adap-nota">Vêm também a capa, as instruções e o tamanho da prova. <b>Não vêm</b>: data de aplicação,
+          respostas e notas lançadas, metas de alocação, a conversa da revisão, o histórico dos itens e a marca de item
+          anulado — isso tudo é da aplicação original. Os estudantes da nova prova são os da série escolhida acima.</p>
+      </div>`;
+}
+
+// `meta` é o tamanho da regular. Ao montar o diálogo ele vem da cópia de
+// trabalho — o campo que está na tela nessa hora é o do diálogo ANTERIOR —, e
+// ao repintar vem do próprio campo, que fica acima da lista e pode estar sendo
+// editado.
+function htmlResumoDaCopia(meta) {
+  const r = rascProva;
+  const itens = S.itens.filter(i => i.provaId === r.origemId && r.itens.has(i.id));
+  const aprovados = itens.filter(i => i.status === 'aprovado');
+  const nReg = aprovados.filter(i => i.versao !== 'adaptada').length;
+  const nAda = aprovados.filter(i => i.versao !== 'regular').length;
+  const outros = itens.length - aprovados.length;
+  const porTipo = {};
+  for (const i of itens) porTipo[i.tipo] = (porTipo[i.tipo] || 0) + 1;
+  const tipos = Object.keys(TIPOS).filter(t => porTipo[t])
+    .map(t => `<span class="t t${t}">${t}</span> ${porTipo[t]}`).join(' · ');
+  const nTextos = r.textos.size;
+  return `
+        <div class="adap-resumo${meta && meta === nReg ? ' certo' : ''}">
+          <div class="adap-numero"><b>${itens.length}</b><span>${itens.length === 1 ? 'item' : 'itens'}</span></div>
+          <div class="adap-detalhe">
+            <p><b>${nTextos}</b> ${nTextos === 1 ? 'texto-base' : 'textos-base'} · <b>${nReg}</b> aprovados na prova
+              regular e <b>${nAda}</b> na adaptada</p>
+            <p class="adap-linha">Tamanho da regular, no campo acima: ${meta ? `<b>${meta}</b>` : '<em>a definir</em>'}${
+              meta === nReg ? ' · <b class="ok">bate com a seleção</b>'
+                : ` <button class="btn mini fantasma" data-acao="np-usar-qtd" data-n="${nReg}">usar ${nReg}</button>`}</p>
+            ${outros ? `<p class="adap-linha">${outros} ${outros === 1 ? 'item ainda não aprovado vem' : 'itens ainda não aprovados vêm'}
+              na etapa da revisão em que ${outros === 1 ? 'está' : 'estão'}</p>` : ''}
+            ${tipos ? `<p class="adap-linha">Por tipo: ${tipos}</p>` : ''}
+          </div>
+        </div>`;
+}
+
+// Redesenha só o que a marcação muda. Remontar o diálogo inteiro levaria quem
+// está no meio da lista de volta ao topo a cada clique.
+function repintarCopia() {
+  const r = rascProva;
+  for (const cx of $$('[data-mud="np-item"]')) {
+    const dentro = r.itens.has(cx.dataset.id);
+    cx.checked = dentro;
+    cx.closest('.adap-item')?.classList.toggle('dentro', dentro);
+  }
+  for (const cx of $$('[data-mud="np-texto"]')) {
+    const id = cx.dataset.id;
+    cx.checked = r.textos.has(id);
+    cx.closest('.adap-bloco')?.classList.toggle('fora', !r.textos.has(id));
+    const conta = document.getElementById(`np-c-${id}`);
+    const ids = itensDoTextoNaOrigem(r.origemId, id).map(i => i.id);
+    if (conta) conta.textContent = `${ids.filter(x => r.itens.has(x)).length} de ${ids.length}`;
+  }
+  const resumo = $('#np-resumo');
+  if (resumo) resumo.innerHTML = htmlResumoDaCopia(parseInt($('#cfg-qtd')?.value, 10) || null);
+}
+
+MUDS['np-modo'] = (d, el) => {
+  erroDaProva = null;
+  rascProva.modo = el.value;
+  // Cada modo tem o seu ponto de partida: em branco é a série livre, cópia é a
+  // prova de origem.
+  if (el.value === 'duplicar') escolherOrigem(rascProva.origemId || idProvaAtual());
+  else rascProva.campos = novaProvaEmBranco();
+  dlgNovaProva();
+};
+MUDS['np-origem'] = (d, el) => {
+  erroDaProva = null;
+  const { etapa, dataAplicacao } = recolherCamposDaProva();
+  escolherOrigem(el.value, { etapa, dataAplicacao });
+  dlgNovaProva();
+};
+MUDS['np-item'] = (d, el) => {
+  const item = S.itens.find(i => i.id === d.id);
+  if (item) marcarNaCopia(item, el.checked);
+  repintarCopia();
+};
+MUDS['np-texto'] = (d, el) => {
+  if (el.checked) rascProva.textos.add(d.id);
+  else {
+    rascProva.textos.delete(d.id);
+    for (const i of itensDoTextoNaOrigem(rascProva.origemId, d.id)) marcarNaCopia(i, false);
+  }
+  repintarCopia();
+};
+MUDS['np-proposta'] = (d, el) => { rascProva.trazerProposta = el.checked; };
+MUDS['cfg-qtd'] = () => { if (rascProva && $('#np-resumo')) repintarCopia(); };
+ACOES['np-usar-qtd'] = d => { $('#cfg-qtd').value = d.n; repintarCopia(); };
+ACOES['np-bloco'] = d => {
+  for (const i of itensDoTextoNaOrigem(rascProva.origemId, d.id)) marcarNaCopia(i, d.v === '1');
+  repintarCopia();
+};
+ACOES['np-todos'] = d => {
+  const r = rascProva;
+  if (d.v === 'aprovados') selecaoPadrao(r.origemId);
+  else if (d.v === '1') {
+    for (const t of textosDaOrigem(r.origemId)) {
+      r.textos.add(t.id);
+      for (const i of itensDoTextoNaOrigem(r.origemId, t.id)) r.itens.add(i.id);
+    }
+  } else { r.textos.clear(); r.itens.clear(); }
+  repintarCopia();
+};
+
+function recusarProva(campo, msg) {
+  erroDaProva = { campo, msg };
+  // Nesta ordem: remontar devolve o aviso ao corpo da página (`abrirDlg`), então
+  // ele é dito depois, com o diálogo novo de pé.
+  dlgNovaProva();
+  toast(msg);
+  const alvo = $(`[data-erro-campo="prova-${campo}"]`);
+  if (alvo) {
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    alvo.querySelector('input, select')?.focus({ preventScroll: true });
+  }
+  return false;
+}
+
+ACOES['np-criar'] = async (d, botao) => {
+  const r = rascProva;
+  if (!r || !ehCoord()) return;
+  r.campos = recolherCamposDaProva();
+  const c = r.campos;
+  const origem = r.modo === 'duplicar' ? provaPorId(r.origemId) : null;
+  if (r.modo === 'duplicar' && !origem) return recusarProva('origem', 'Escolha a prova de origem.');
+  if (!c.nome) return recusarProva('nome', 'Dê um nome à prova: ele sai na capa e no cabeçalho do caderno.');
+  if (!c.etapa) return recusarProva('etapa', origem
+    ? 'Diga a etapa da nova prova. Série e etapa são o nome dela no seletor, e a cópia não pode se chamar como a original.'
+    : 'Diga a etapa da prova: ela sai no cabeçalho do caderno e identifica a prova no seletor.');
+  if (provasOrdenadas().some(p => p.serie === c.serie && p.etapa === c.etapa))
+    return recusarProva('etapa', `Já existe uma prova de ${c.serie} na ${c.etapa}. Mude a etapa ou a série.`);
+  erroDaProva = null;
+
+  const nova = { ...provaNova(c.serie, provasOrdenadas().length), ...dadosDosCampos(c), id: uid() };
+  if (!origem) {
+    S.provas.push(nova);
+    S.provaAtiva = nova.id;
+    salvarProvaAtiva(nova.id);
+    sincronizarElenco(nova.id);
+    $('#dlg').close(); commit(); PERS.prova(nova); PERS.elenco(nova.id);
+    toast(`Prova de ${nova.serie} criada.`);
+    return;
+  }
+
+  // A cópia é gravada esperando a resposta: o diálogo só fecha quando o banco
+  // aceitou tudo, e diz o motivo, com a escolha ainda na tela, quando recusou.
+  const rotulo = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Copiando…';
+  let feito;
+  try {
+    feito = await duplicarProva(origem, nova, r);
+  } catch (e) {
+    botao.disabled = false;
+    botao.textContent = rotulo;
+    toast(`⚠ A cópia não foi criada — ${e?.message || e}. Nada foi gravado.`);
+    return;
+  }
+  S.provaAtiva = nova.id;
+  salvarProvaAtiva(nova.id);
+  $('#dlg').close();
+  commit();
+  const { textos, itens, faltando } = feito;
+  const resumo = `${itens.length} ${itens.length === 1 ? 'item' : 'itens'} e ${textos.length} ${
+    textos.length === 1 ? 'texto-base' : 'textos-base'}`;
+  if (!faltando.length) {
+    toast(`Prova de ${nova.serie} criada como cópia de ${rotuloProva(origem)}: ${resumo}.`);
+    return;
+  }
+  // Figura que já não existia na original não tem de onde ser copiada. Isso
+  // precisa ser dito de um jeito que fique — um aviso de passagem some, e a
+  // figura só faria falta no caderno impresso. O aviso de passagem que ainda
+  // estiver no ar é de uma tentativa anterior (“a cópia não foi criada”), e sai:
+  // ao lado deste diálogo, ele afirmaria o contrário.
+  $('#toast')?.classList.remove('on');
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Prova criada, com figura faltando</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p style="margin-top:0">A cópia de <b>${esc(rotuloProva(origem))}</b> foi criada com ${resumo}. Mas
+        ${faltando.length === 1 ? 'uma figura já não existia' : `${faltando.length} figuras já não existiam`} no
+        banco, <b>na prova de origem</b>, e por isso ${faltando.length === 1 ? 'continua faltando' : 'continuam faltando'}
+        também na cópia:</p>
+      <ul style="font-size:13px;line-height:1.7">${faltando.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+      <p style="font-size:13px;color:var(--ink-2)">Abra cada um, remova a figura quebrada e envie o arquivo de novo —
+        nas duas provas, se a original ainda for impressa.</p>
+    </div>
+    <div class="dlg-pe"><button class="btn" data-acao="fechar-dlg">Entendi</button></div>`);
+};
+
+// Monta a cópia, copia as figuras e grava. Se qualquer passo falhar, desfaz o
+// que chegou a ser gravado e lança o motivo: meia cópia — prova sem itens,
+// itens sem prova — seria pior que nenhuma, e ficaria no seletor de todo mundo.
+async function duplicarProva(origem, nova, r) {
+  const clone = x => JSON.parse(JSON.stringify(x));
+
+  for (const k of ['capaArranjo', 'capaImagem', 'instrucoes'])
+    if (origem[k] !== undefined) nova[k] = clone(origem[k]);
+  if (nova.temRedacao && r.trazerProposta && propostaEscrita(origem.id))
+    nova.redacao = clone(origem.redacao);
+  nova.duplicadaDe = {
+    id: origem.id, rotulo: `${rotuloProva(origem)} — ${origem.nome}`,
+    em: new Date().toLocaleDateString('pt-BR')
+  };
+
+  // Textos: os aprovados renumerados em sequência — tirar o texto 3 não pode
+  // deixar a prova nova pulando do 2 para o 4.
+  const novoTexto = new Map();
+  const ondeTexto = new Map();   // como a mensagem chama o texto: pelo número da ORIGEM
+  let numero = 0;
+  const textos = textosDaOrigem(origem.id).filter(t => r.textos.has(t.id)).map(t => {
+    const copia = clone(t);
+    copia.id = uid();
+    copia.provaId = nova.id;
+    if (copia.status === 'aprovado') copia.numero = ++numero;
+    copia.copiadoDe = { provaId: origem.id, textoId: t.id };
+    novoTexto.set(t.id, copia.id);
+    ondeTexto.set(copia.id, `texto ${t.status === 'aprovado' ? t.numero : 'sugerido'} (${t.titulo || 'sem título'})`);
+    return copia;
+  });
+
+  // Itens: na ordem em que estão na original, que é a ordem dentro de cada tipo
+  // no caderno.
+  const numeros = new Map(itensDaProvaComNumeros(origem.id).map(x => [x.item.id, x.numeros]));
+  const escolhidos = S.itens.filter(i =>
+    i.provaId === origem.id && r.itens.has(i.id) && novoTexto.has(i.textoId));
+  const novoItem = new Map(escolhidos.map(i => [i.id, uid()]));
+  const ondeEsta = new Map();
+  const itens = escolhidos.map((i, ordem) => {
+    const copia = clone(i);
+    copia.id = novoItem.get(i.id);
+    copia.provaId = nova.id;
+    copia.textoId = novoTexto.get(i.textoId);
+    if (copia.derivadoDe) {
+      if (novoItem.has(copia.derivadoDe)) copia.derivadoDe = novoItem.get(copia.derivadoDe);
+      else delete copia.derivadoDe;
+    }
+    copia.ordem = ordem;
+    copia.comentarios = [];
+    copia.historico = [];
+    delete copia.anulado; delete copia.anuladoPor; delete copia.anuladoEm;
+    copia.copiadoDe = { provaId: origem.id, itemId: i.id };
+    const n = numeros.get(i.id);
+    ondeEsta.set(copia.id, n ? `item ${numerosDoItem(n)} (${i.componente})` : `item de ${i.componente} ainda não aprovado`);
+    return copia;
+  });
+
+  // Figuras: cada uma ganha arquivo próprio na pasta da prova nova.
+  const vagas = [];
+  for (const t of textos)
+    (t.imagens || []).forEach((img, k) =>
+      vagas.push({ img, dono: 'textos', onde: ondeTexto.get(t.id), por: n => { t.imagens[k] = n; } }));
+  for (const i of itens) {
+    (i.imagens || []).forEach((img, k) =>
+      vagas.push({ img, dono: 'itens', onde: ondeEsta.get(i.id), por: n => { i.imagens[k] = n; } }));
+    (i.imagensOpcoes || []).forEach((lista, o) => (lista || []).forEach((img, k) =>
+      vagas.push({ img, dono: 'itens', onde: `${ondeEsta.get(i.id)}, alternativa ${'ABCD'[o]}`,
+                   por: n => { i.imagensOpcoes[o][k] = n; } })));
+  }
+  const copiadas = [];
+  const apagarCopiadas = () => Promise.allSettled(copiadas.map(c => nuvem.apagarImagem(c)));
+  const faltando = [];
+  let falha = null;
+  const resultados = await Promise.allSettled(vagas.map(v =>
+    duplicarImagem(v.img, { modoNuvem, provaId: nova.id, dono: v.dono, uid })));
+  resultados.forEach((res, k) => {
+    const v = vagas[k];
+    if (res.status === 'fulfilled') {
+      if (res.value.caminho && res.value.caminho !== v.img.caminho) copiadas.push(res.value.caminho);
+      v.por(res.value);
+    } else if (arquivoAusente(res.reason)) {
+      // Já quebrada na original: a referência fica como estava, apontando para
+      // o mesmo nada, e quem duplicou fica sabendo.
+      faltando.push(v.onde);
+    } else falha = falha || { onde: v.onde, erro: res.reason };
+  });
+  if (falha) {
+    await apagarCopiadas();
+    throw new Error(`a figura do ${falha.onde} não pôde ser copiada (${falha.erro?.message || falha.erro})`);
+  }
+
+  const elenco = S.estudantes.filter(e => e.serie === nova.serie).map(e => e.id);
+  if (modoNuvem) {
+    try {
+      await nuvem.gravarLinha('provas', nova);
+      await nuvem.gravarLinhas('textos', textos);
+      await nuvem.gravarLinhas('itens', itens);
+      await nuvem.gravarElenco(nova.id, elenco);
+    } catch (e) {
+      await Promise.allSettled([
+        nuvem.removerLinhas('itens', itens.map(i => i.id)),
+        nuvem.removerLinhas('textos', textos.map(t => t.id))
+      ]);
+      await nuvem.removerLinha('provas', nova.id).catch(() => {});
+      await apagarCopiadas();
+      throw e;
+    }
+  }
+
+  S.provas.push(nova);
+  S.textos.push(...textos);
+  S.itens.push(...itens);
+  S.elencos = S.elencos || {};
+  S.elencos[nova.id] = elenco;
+  return { textos, itens, faltando };
+}
+
+// O texto-base e o item que vieram de uma prova duplicada dizem de onde vieram
+// — e que são outros. Quem abre a cópia de um item já aplicado precisa saber
+// que pode mexer nele sem alcançar a prova que já saiu.
+function htmlOrigemDaCopia(registro, oque = 'item') {
+  const o = registro?.copiadoDe;
+  if (!o) return '';
+  const pv = provaPorId(o.provaId);
+  return `<p class="nota-copia">Copiado da prova <b>${esc(pv ? rotuloProva(pv) : 'de origem, que já foi excluída')}</b>,
+    quando ela foi duplicada. É ${oque === 'item' ? 'um item independente' : 'um texto-base independente'}: o que
+    mudar aqui não muda o ${oque === 'item' ? 'item' : 'texto'} original.</p>`;
+}
 
 ACOES['prova-excluir'] = d => {
   const p = provaPorId(d.id);
@@ -2215,6 +2773,7 @@ function dlgTexto(t, { preservar = false } = {}) {
       ${somenteLeitura ? `<div class="cartao aviso" style="margin:0 0 14px">
         <p style="font-size:13px;margin:0">Este texto-base já foi aprovado e vale para a prova inteira: só a
           coordenação o altera. Se algo precisa mudar, fale com a coordenação da sua área.</p></div>` : ''}
+      ${novo ? '' : htmlOrigemDaCopia(t, 'texto')}
       <div class="form-linha">
         <div class="campo" style="min-width:260px"><label>Título</label>
           <input class="caixa" id="tx-titulo" value="${esc(r.titulo)}" placeholder="ex.: “O Cerrado e as veredas” — Guimarães Rosa (adapt.)"${somenteLeitura ? ' disabled' : ''}></div>
@@ -2665,6 +3224,8 @@ ACOES['it-adaptar'] = async () => {
   copia.adaptadoPor = S.perfil.nome;
   // As figuras são referências ao mesmo arquivo no bucket, e é o que se quer:
   // a cópia começa com a figura do original e quem adapta troca se precisar.
+  // Tirar a figura da cópia não apaga o arquivo enquanto o original o citar
+  // (`arquivoCitado`, em `img-remover`).
   S.itens.push(copia);
   // O original deixa a prova adaptada para a cópia.
   if (base.versao === 'ambas') { base.versao = 'regular'; PERS.item(base); }
@@ -3034,6 +3595,7 @@ function dlgItem() {
               gráfico. Sai no caderno depois do enunciado${rasc.tipo === 'C' ? ' e antes das opções — a figura que pertence a uma <b>alternativa</b> vai no campo dela, logo abaixo' : ''}.</p></div>
           ${opcoesHtml}${respostaHtml}
 
+          ${htmlOrigemDaCopia(rasc)}
           ${htmlHistoricoDoItem(rasc)}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -3156,13 +3718,28 @@ MUDS['img-escala']  = (d, el) => {
   reabrirFormularioDe(d.campo);        // a miniatura mostra o tamanho escolhido
 };
 
+// Algum registro GRAVADO ainda cita este arquivo? `S` guarda o que foi salvo; a
+// cópia de trabalho do diálogo (`rasc`, `rascTexto`) fica fora da conta.
+const arquivoCitado = caminho => !!caminho && [...S.textos, ...S.itens].some(r =>
+  [r.imagens, ...(r.imagensOpcoes || [])].some(l => todasAsImagens(l).some(i => i.caminho === caminho)));
+
 ACOES['img-remover'] = async d => {
   const lista = listaDeImagens(d.campo);
   const [fora] = lista.splice(+d.i, 1);
   reabrirFormularioDe(d.campo);
-  // Só apaga do bucket depois de a figura sair do registro: arquivo órfão é
-  // lixo, registro apontando para arquivo apagado é figura quebrada no caderno.
-  await descartarImagem(fora);
+  // Tirar a figura da cópia de trabalho não é tirá-la do registro: isso só
+  // acontece no “Salvar”, que pode nem vir — a pessoa cancela, ou o banco
+  // recusa. Esta linha apagava o arquivo na hora, e quem removia e desistia
+  // deixava o texto gravado apontando para um arquivo que não existe mais — é
+  // o estado em que o texto 4 da 2ª série [3º TRIM] foi encontrado, em outubro
+  // de 2026, com a figura sumida do caderno. E valia também para a figura que a
+  // versão adaptada herda do item regular: remover na cópia apagava a do original.
+  //
+  // Então só sai do bucket o arquivo que NENHUM registro gravado cita — na
+  // prática, o que acabou de ser enviado neste diálogo e nunca foi salvo. O que
+  // já estava gravado vira órfão quando o “Salvar” confirmar a remoção: arquivo
+  // órfão é lixo, registro apontando para arquivo apagado é figura quebrada.
+  if (!arquivoCitado(fora?.caminho)) await descartarImagem(fora);
   toast('Figura removida.');
 };
 

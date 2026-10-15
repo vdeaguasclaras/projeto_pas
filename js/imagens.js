@@ -101,6 +101,28 @@ async function guardarImagem(arquivo, { modoNuvem, provaId, dono, uid }) {
   return { origem: 'nuvem', caminho, ...comum };
 }
 
+/* ---------------- copiar para outro registro ---------------- */
+// A figura de uma prova duplicada ganha ARQUIVO PRÓPRIO, na pasta da prova
+// nova, e não só a referência ao arquivo da original. Referência compartilhada
+// faria a cópia depender da original para sempre: limpar a pasta de uma prova
+// antiga, ou trocar a figura de um lado, alcançaria o outro — e o outro é uma
+// prova já aplicada. A cópia acontece dentro do Storage; os bytes não passam
+// pelo navegador.
+//
+// Sem nuvem a figura é data URI, e copiar o registro já copia a figura.
+async function duplicarImagem(img, { modoNuvem, provaId, dono, uid }) {
+  if (!modoNuvem || img?.origem !== 'nuvem' || !img.caminho) return { ...img };
+  const extensao = EXTENSAO[img.mime] || img.caminho.split('.').pop() || 'bin';
+  const caminho = `${provaId}/${dono}/${uid()}.${extensao}`;
+  await nuvem.copiarImagem(img.caminho, caminho);
+  return { ...img, caminho };
+}
+
+// O Storage responde “não encontrado” quando o arquivo de origem já não existe.
+// Isso é figura que já estava quebrada na prova original — não é falha da cópia.
+const arquivoAusente = e => String(e?.statusCode) === '404' || e?.status === 404 ||
+  /not.?found/i.test(e?.message || '');
+
 async function descartarImagem(img) {
   if (img?.origem === 'nuvem' && img.caminho) {
     try { await nuvem.apagarImagem(img.caminho); }
@@ -256,6 +278,6 @@ function htmlEditorImagens(lista, { campo, modoNuvem, soLeitura = false, compact
 
 export {
   ESCALAS, ESCALA_PADRAO, LIMITE_NUVEM, LIMITE_EMBUTIDA, MIMES,
-  guardarImagem, descartarImagem, prepararImagens, enderecoDaImagem,
+  guardarImagem, duplicarImagem, arquivoAusente, descartarImagem, prepararImagens, enderecoDaImagem,
   ehImagem, todasAsImagens, htmlImagem, htmlImagens, pecasDeImagens, htmlEditorImagens
 };

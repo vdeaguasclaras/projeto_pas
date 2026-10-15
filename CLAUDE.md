@@ -251,6 +251,28 @@ prova regular não muda** — o item desmarcado continua nela, com o mesmo núme
 - `versao` já está em `campos_do_item()` (migração 0017), então cada entrada e
   saída da adaptada fica registrada no histórico do item sem nada a fazer.
 
+## Duplicar prova: a cópia não aponta para a original
+
+“+ Nova prova” tem dois modos, em branco e **duplicar** (`dlgNovaProva`,
+`duplicarProva`). A cópia é prova nova em tudo — `id` novo para prova, textos e
+itens; `copiadoDe`/`duplicadaDe` são só rastro, que nenhuma regra lê — porque a
+original costuma ser prova aplicada, com cartão, resposta e boletim.
+
+- **Figura copiada ganha arquivo próprio** (`duplicarImagem`, cópia no
+  Storage), não a mesma referência. Figura já ausente na origem não derruba a
+  cópia: ela segue, e um diálogo lista o que falta.
+- **Fica para trás o que é da aplicação**: data, respostas, alocações, conversa,
+  histórico e a marca de anulado. Ao acrescentar campo ao item ou à prova,
+  decida de que lado ele está.
+- **Tudo-ou-nada e esperado**: se um passo falha, o que foi gravado (linhas e
+  arquivos) é removido, e o diálogo fica aberto com a seleção. Regular e
+  adaptado (`derivadoDe`) andam juntos na escolha — separá-los deixaria a cópia
+  apontando para a prova original.
+- **Remover figura não é apagar o arquivo** (`arquivoCitado`, `img-remover`).
+  O registro só muda no “Salvar”, que pode nem vir; apagar na hora deixava
+  texto gravado apontando para arquivo inexistente. Só sai do bucket o que
+  nenhum registro gravado cita.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável

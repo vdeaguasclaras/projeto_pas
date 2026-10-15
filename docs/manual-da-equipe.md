@@ -46,9 +46,10 @@ aberta pelo botão **☰** ao lado do título.
 
 **1 · Painel** — quanto já foi produzido, o que está em revisão e a entrega de
 cada componente curricular. A coordenação também configura aqui a prova — nome,
-etapa, série, data, duração e a **quantidade de questões de cada versão** — e vê
-as quatro provas lado a lado. O docente abre esta tela com a sua lista do que tem
-para entregar.
+etapa, série, data, duração e a **quantidade de questões de cada versão** —, vê
+as provas lado a lado e cria provas novas, em branco ou **duplicando uma que já
+existe** (ver “Coordenação: criar uma prova, ou duplicar uma existente”). O
+docente abre esta tela com a sua lista do que tem para entregar.
 
 No alto fica a **contagem para a aplicação** da prova que está na tela — “faltam
 40 dias”, “a aplicação é amanhã”, “aplicada há 9 dias”. Ela vem da data em
@@ -692,6 +693,14 @@ coluna não ganha nada em ter 4000 pixels de largura.
 > está na tela ao anexar, remover ou redimensionar figura. Se você tentou e
 > desistiu, pode refazer o cadastro normalmente.
 
+> **Se uma figura sumiu do caderno depois que alguém a removeu e desistiu:**
+> também era defeito, corrigido em outubro de 2026. “Remover” apagava o arquivo
+> na hora, antes do “Salvar” — quem removia e depois cancelava deixava o texto
+> apontando para um arquivo que não existia mais. Hoje “Remover” só tira a figura
+> do formulário: o arquivo gravado continua no banco, e cancelar deixa tudo como
+> estava. Figura que já sumiu não volta sozinha:
+> abra o texto ou o item, remova a figura quebrada e envie o arquivo de novo.
+
 As figuras ficam no banco da escola, e **só quem está na equipe consegue
 abri-las** — conteúdo de prova é sigiloso até a aplicação.
 
@@ -716,6 +725,55 @@ inclusão. São dois eixos diferentes.
 Cada prova tem nome, etapa, data, duração, **quantidade de questões (uma por versão)** e a escolha
 de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa, as instruções
 do caderno e a **proposta de redação** também são de cada prova.
+
+## Coordenação: criar uma prova, ou duplicar uma existente
+
+No Painel, **+ Nova prova** pergunta primeiro **como começar**:
+
+- **Prova em branco** — como sempre foi: a prova nasce vazia, e textos-base e
+  itens são escritos pela equipe.
+- **Duplicar uma prova existente** — para aproveitar uma prova já montada (ou já
+  aplicada) em outra ação: o simulado do trimestre seguinte, uma reaplicação,
+  uma turma que não fez.
+
+Ao escolher duplicar:
+
+1. Escolha a **prova de origem**. O formulário se preenche com o que é dela —
+   nome, série, duração, tamanho, ter ou não redação —, menos a **data** e a
+   **etapa**, que ficam em branco: a etapa é o que distingue a cópia da original
+   no seletor de provas, e duas provas da mesma série não podem ter a mesma.
+2. Embaixo vem a lista do que copiar, **agrupada por texto-base**, na ordem da
+   prova. Vêm marcados os textos-base e os **itens aprovados** — a prova como ela
+   saiu. Desmarque o que não serve, ou use **todos / nenhum** em cada bloco.
+   - Desmarcar um **texto-base** tira os itens dele junto. Um texto-base marcado
+     **sem nenhum item** vem vazio, pronto para receber itens novos.
+   - Itens **ainda não aprovados** e itens **anulados na original** aparecem
+     desmarcados; marque-os se quiser trazê-los. O item vem na etapa da revisão
+     em que estava.
+   - A **versão adaptada** de um item acompanha o item: marcar um marca o outro.
+   - O quadro no alto conta o que vai na cópia. Se o tamanho da prova regular
+     não bater com a seleção, o botão **usar N** acerta o campo.
+3. **Redação**: marque ou desmarque “esta prova tem redação” à vontade — a cópia
+   pode ter redação mesmo que a original não tivesse. Se a original tinha
+   proposta escrita, dá para trazê-la junto; senão, escreva a nova na tela
+   **Redação**.
+4. **Criar a cópia.** A prova nova abre já selecionada.
+
+**A cópia é outra prova.** Editar, aprovar, devolver, acrescentar ou excluir
+itens nela segue o fluxo normal e **não mexe na original** — que continua com os
+mesmos itens, cartões, respostas e boletins. Quem abre um item copiado vê de que
+prova ele veio. As figuras também são copiadas: cada prova fica com os seus
+arquivos.
+
+**O que vem:** textos-base e itens marcados (com figuras), capa, instruções,
+tamanho da prova e, se marcada, a proposta de redação.
+**O que não vem:** data de aplicação, respostas e notas lançadas, metas de
+alocação, a conversa da revisão, o histórico dos itens e a marca de item
+anulado — tudo isso é da aplicação original. Os estudantes da cópia são os da
+série escolhida, como em qualquer prova nova.
+
+Se o sistema não conseguir gravar a cópia inteira, **não grava nada** e diz o
+motivo, com a sua seleção ainda na tela — nunca fica meia prova no seletor.
 
 ## Coordenação: subir a lista de estudantes
 
