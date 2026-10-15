@@ -268,6 +268,12 @@ original costuma ser prova aplicada, com cartão, resposta e boletim.
   arquivos) é removido, e o diálogo fica aberto com a seleção. Regular e
   adaptado (`derivadoDe`) andam juntos na escolha — separá-los deixaria a cópia
   apontando para a prova original.
+- **Uma prova por série + etapa + tipo de aplicação** (`provaDeMesmoNome`). A
+  **aplicação extra** (`aplicacaoExtra`: segunda chamada, reaplicação) repete a
+  série e a etapa da original e se distingue pela marca, que toda TELA mostra
+  (`etapaDaProva`) e o papel e o pacote do leitor não. Ao mostrar a etapa numa
+  tela nova, use `etapaDaProva()`, não `p.etapa`. E escreva sempre “aplicação
+  extra” por inteiro: “cartão extra” é o cartão de reserva sem nome.
 - **Remover figura não é apagar o arquivo** (`arquivoCitado`, `img-remover`).
   O registro só muda no “Salvar”, que pode nem vir; apagar na hora deixava
   texto gravado apontando para arquivo inexistente. Só sai do bucket o que

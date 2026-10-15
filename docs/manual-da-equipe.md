@@ -742,6 +742,11 @@ Ao escolher duplicar:
    nome, série, duração, tamanho, ter ou não redação —, menos a **data** e a
    **etapa**, que ficam em branco: a etapa é o que distingue a cópia da original
    no seletor de provas, e duas provas da mesma série não podem ter a mesma.
+   **Exceção: aplicação extra.** Para uma segunda chamada ou reaplicação da
+   *mesma* etapa, marque **aplicação extra** logo abaixo da etapa — ela já vem
+   preenchida com a etapa da original. As duas convivem: o sistema mostra a
+   nova como “1ª Etapa · aplicação extra” no seletor, no Painel e em todas as
+   telas. No **papel** (caderno, cartão, boletim) a etapa sai como está escrita.
 2. Embaixo vem a lista do que copiar, **agrupada por texto-base**, na ordem da
    prova. Vêm marcados os textos-base e os **itens aprovados** — a prova como ela
    saiu. Desmarque o que não serve, ou use **todos / nenhum** em cada bloco.
@@ -774,6 +779,12 @@ série escolhida, como em qualquer prova nova.
 
 Se o sistema não conseguir gravar a cópia inteira, **não grava nada** e diz o
 motivo, com a sua seleção ainda na tela — nunca fica meia prova no seletor.
+
+> **Aplicação extra não é cartão extra.** “Cartão extra” é o cartão de reserva,
+> sem nome, que se imprime na tela de Cartões-resposta. “Aplicação extra” é uma
+> prova inteira, à parte. Use sempre o nome completo para não confundir as duas
+> na secretaria. A marca também fica em “⚙ Configurar prova”, para corrigir uma
+> prova marcada errado.
 
 ## Coordenação: subir a lista de estudantes
 

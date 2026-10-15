@@ -463,6 +463,19 @@ aprovados — a prova como saiu. A cópia é uma **prova nova em tudo**:
 | data, respostas, alocações, conversa, histórico, anulação | **não vêm** — são da aplicação |
 | elenco | os estudantes da série escolhida, como em toda prova nova |
 
+**Aplicação extra.** A regra de sempre é uma prova por série e etapa — é o nome
+dela no seletor, e duas iguais não se distinguem. Uma segunda chamada ou
+reaplicação é, de propósito, a *mesma* etapa; para ela existe a marca
+`aplicacaoExtra` no registro da prova, e a regra passou a ser **série + etapa +
+tipo de aplicação** (`provaDeMesmoNome`, com a etapa comparada sem caixa e sem
+espaço sobrando). A marca é campo próprio, e não texto colado na etapa, porque
+quem decide onde ela aparece é o sistema: em toda **tela** (`etapaDaProva`,
+`rotuloProva`) ela aparece; no **papel** e no **pacote do leitor**, não — a
+etapa sai como está escrita. Para o leitor isso não é risco: ele separa provas
+pelo `id` que viaja no pacote (`pas-pacote-<id>.json`, `pas-anulados-<id>.json`).
+O nome é sempre “aplicação extra”, por inteiro, porque “cartão extra” já é o
+cartão de reserva sem nome.
+
 **Por que figura com arquivo próprio, e não a mesma referência.** Referência
 compartilhada faria a cópia depender da original para sempre: trocar a figura de
 um lado, ou limpar a pasta de uma prova antiga, alcançaria o outro — e o outro é

@@ -344,7 +344,27 @@ function provaAtual() {
 }
 const idProvaAtual = () => provaAtual()?.id || null;
 const provaPorId = id => (S.provas || []).find(p => p.id === id) || null;
-const rotuloProva = p => p ? `${p.serie} · ${p.etapa}` : '—';
+// A etapa como as TELAS do sistema a mostram. Aplicação extra é a mesma etapa
+// aplicada de novo — segunda chamada, reaplicação — e é uma prova à parte, com
+// itens, respostas e pacote próprios; sem a marca, ela e a original teriam o
+// mesmo nome no seletor e em toda tela. O papel (caderno, cartão, boletim) e o
+// pacote do leitor imprimem `etapa` como foi escrita.
+//
+// “Aplicação extra”, sempre por inteiro: “cartão extra” já é outra coisa neste
+// sistema — o cartão sem nome, de reserva —, e “a extra” sozinho não diz qual.
+const etapaDaProva = p => p ? `${p.etapa}${p.aplicacaoExtra ? ' · aplicação extra' : ''}` : '';
+const rotuloProva = p => p ? `${p.serie} · ${etapaDaProva(p)}` : '—';
+
+// Duas provas da mesma série, na mesma etapa e com o mesmo tipo de aplicação
+// não se distinguem em tela nenhuma. A etapa é comparada sem diferença de
+// maiúscula e de espaço: “1ª Etapa” e “1ª etapa ” são a mesma para quem lê.
+const normaDaEtapa = e => String(e || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+const provaDeMesmoNome = (c, ignorarId = null) => provasOrdenadas().find(p => p.id !== ignorarId &&
+  p.serie === c.serie && normaDaEtapa(p.etapa) === normaDaEtapa(c.etapa) &&
+  !!p.aplicacaoExtra === !!c.aplicacaoExtra) || null;
+const avisoDeMesmoNome = c => c.aplicacaoExtra
+  ? `Já existe uma aplicação extra de ${c.serie} na ${c.etapa}. Diferencie a etapa — por exemplo, “${c.etapa} (2)”.`
+  : `Já existe uma prova de ${c.serie} na ${c.etapa}. Mude a etapa ou a série — ou, se esta for uma segunda chamada ou reaplicação dela, marque “aplicação extra”.`;
 
 /* ---------------- escopo ---------------- */
 const textosDaProva = provaId => S.textos.filter(t => t.provaId === provaId);
@@ -602,7 +622,7 @@ function seletorDeProva() {
   const atual = idProvaAtual();
   const ops = lista.map(p => {
     const n = itensDaProva(p.id).length;
-    return `<option value="${esc(p.id)}" ${p.id === atual ? 'selected' : ''}>${esc(p.serie)} — ${esc(p.etapa)}${n ? ` (${n} ${n === 1 ? 'item' : 'itens'})` : ''}</option>`;
+    return `<option value="${esc(p.id)}" ${p.id === atual ? 'selected' : ''}>${esc(p.serie)} — ${esc(etapaDaProva(p))}${n ? ` (${n} ${n === 1 ? 'item' : 'itens'})` : ''}</option>`;
   }).join('');
   return `<label class="sel-prova" title="Prova em que você está trabalhando">
     <span>Prova</span><select data-mud="prova-ativa" aria-label="Prova ativa">${ops}</select></label>`;
@@ -646,7 +666,7 @@ function render() {
   const atual = telaAtual();
   $('#h-titulo').textContent = TELAS[atual].rot;
   $('#h-sub').textContent = p
-    ? `${p.nome} — ${p.etapa} · ${p.serie}` +
+    ? `${p.nome} — ${etapaDaProva(p)} · ${p.serie}` +
       (p.dataAplicacao ? ` · Aplicação: ${dataBR(p.dataAplicacao)}` : '')
     : 'Nenhuma prova cadastrada ainda.';
 
@@ -994,7 +1014,7 @@ function painelDoDocente() {
       : m.criados ? '<span class="chip ok">Tudo aprovado</span>'
       : '<span class="chip">Nada entregue</span>';
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
-      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(etapaDaProva(p))}</span></td>
       <td>${progressoDaMeta(m.aprovados, meta)}${htmlTiposDaMeta(a, m)}</td>
       <td>${m.criados}</td><td>${m.aprovados}</td><td>${m.emRevisao}</td>
       <td>${situacao}</td>
@@ -1074,7 +1094,7 @@ function painelDaRedacao() {
       : lancadas ? `<span class="chip pend">Faltam ${elenco.length - lancadas} lançamentos</span>`
       : '<span class="chip info">Proposta pronta, à espera da aplicação</span>';
     return `<tr class="clic" data-acao="ir-para-redacao" data-id="${esc(p.id)}">
-      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(etapaDaProva(p))}</span></td>
       <td>${!tem ? '—' : escrita ? '<span class="chip ok">escrita</span>' : '<span class="chip falta">em branco</span>'}</td>
       <td>${tem && escrita ? esc(proposta(p.id).tema).slice(0, 48) || '—' : '—'}</td>
       <td>${tem ? `${lancadas}/${elenco.length}` : '—'}</td>
@@ -1182,7 +1202,7 @@ function painelDasProvas() {
     const soma = somaDasMetas(p.id);
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b>${p.id === idProvaAtual() ? ' <span class="chip info">na tela</span>' : ''}</td>
-      <td>${esc(p.etapa)}</td>
+      <td>${esc(etapaDaProva(p))}</td>
       <td>${dataBR(p.dataAplicacao)}</td>
       <td>${b.textos}</td>
       <td>${soma || '<span style="color:var(--ink-2)">—</span>'}</td>
@@ -1440,7 +1460,7 @@ function telaPainel() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div>
-        <span class="cab-sobrancelha">${esc(p.nome)} · ${esc(p.etapa)}</span>
+        <span class="cab-sobrancelha">${esc(p.nome)} · ${esc(etapaDaProva(p))}</span>
         <h2>${esc(saudacao())} 👋</h2>
         <span class="sub">${esc(p.serie)} · Aplicação: ${dataBR(p.dataAplicacao)} · ${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'}${p.temRedacao === false ? ' · sem redação' : ' · com redação'}</span>
         ${htmlContagem(p) ? `<div class="cab-contagem">${htmlContagem(p)}</div>` : ''}
@@ -1518,6 +1538,7 @@ const camposDaProva = p => ({
   nome: p?.nome || '',
   serie: p?.serie || SERIES[0],
   etapa: p?.etapa || '',
+  aplicacaoExtra: !!p?.aplicacaoExtra,
   dataAplicacao: p?.dataAplicacao || '',
   duracao: p?.duracao || '',
   qtd: totalDeQuestoes(p, 'regular'),
@@ -1538,6 +1559,7 @@ function recolherCamposDaProva() {
     nome: $('#cfg-nome').value.trim(),
     serie: $('#cfg-serie').value,
     etapa: $('#cfg-etapa').value.trim(),
+    aplicacaoExtra: !!$('#cfg-extra')?.checked,
     dataAplicacao: $('#cfg-data').value,
     duracao: $('#cfg-dur').value.trim(),
     qtd: numero('#cfg-qtd'),
@@ -1549,7 +1571,7 @@ function recolherCamposDaProva() {
 
 // Do formulário para o registro da prova.
 const dadosDosCampos = c => ({
-  nome: c.nome, serie: c.serie, etapa: c.etapa,
+  nome: c.nome, serie: c.serie, etapa: c.etapa, aplicacaoExtra: !!c.aplicacaoExtra,
   dataAplicacao: c.dataAplicacao, duracao: c.duracao,
   totalQuestoes: { regular: c.qtd, adaptada: c.qtdAda },
   temRedacao: c.temRedacao, imprimirRedacao: c.imprimirRedacao
@@ -1577,6 +1599,11 @@ function htmlCamposDaProva(c, { dicaEtapa = '' } = {}) {
           <input class="caixa" id="cfg-etapa" value="${esc(c.etapa)}"${
             dicaEtapa ? ` placeholder="${esc(dicaEtapa)}"` : ''}>${avisoDaProva('etapa')}</div>
       </div>
+      <label class="np-opcao" style="margin:-4px 0 14px">
+        <input type="checkbox" id="cfg-extra" data-mud="cfg-extra" ${c.aplicacaoExtra ? 'checked' : ''}>
+        <span><b>aplicação extra</b> — segunda chamada ou reaplicação de uma etapa que já tem prova. Pode repetir
+          a série e a etapa da original: o sistema a mostra como “${esc(c.etapa || 'etapa')} · aplicação extra”, e
+          as duas não se confundem. No papel, a etapa sai como está escrita.</span></label>
       <div class="form-linha">
         <div class="campo"><label>Data de aplicação</label>
           <input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
@@ -1630,6 +1657,7 @@ ACOES['cfg-salvar'] = d => {
   if (!alvo) return;
   const dados = dadosDosCampos(recolherCamposDaProva());
   if (!dados.nome || !dados.etapa) { toast('Nome e etapa são obrigatórios.'); return; }
+  if (provaDeMesmoNome(dados, alvo.id)) { toast(avisoDeMesmoNome(dados)); return; }
   const mudouSerie = alvo.serie !== dados.serie;
   Object.assign(alvo, dados);
   // Trocar a série de uma prova troca quem a faz.
@@ -1928,6 +1956,13 @@ MUDS['np-texto'] = (d, el) => {
 };
 MUDS['np-proposta'] = (d, el) => { rascProva.trazerProposta = el.checked; };
 MUDS['cfg-qtd'] = () => { if (rascProva && $('#np-resumo')) repintarCopia(); };
+// Aplicação extra de uma cópia é, quase sempre, a MESMA etapa da original — a
+// etapa vazia já vem preenchida com ela ao marcar.
+MUDS['cfg-extra'] = (d, el) => {
+  const etapa = $('#cfg-etapa');
+  const origem = $('#dlg .np-copia') && rascProva?.modo === 'duplicar' ? provaPorId(rascProva.origemId) : null;
+  if (el.checked && origem && etapa && !etapa.value.trim()) etapa.value = origem.etapa;
+};
 ACOES['np-usar-qtd'] = d => { $('#cfg-qtd').value = d.n; repintarCopia(); };
 ACOES['np-bloco'] = d => {
   for (const i of itensDoTextoNaOrigem(rascProva.origemId, d.id)) marcarNaCopia(i, d.v === '1');
@@ -1970,8 +2005,7 @@ ACOES['np-criar'] = async (d, botao) => {
   if (!c.etapa) return recusarProva('etapa', origem
     ? 'Diga a etapa da nova prova. Série e etapa são o nome dela no seletor, e a cópia não pode se chamar como a original.'
     : 'Diga a etapa da prova: ela sai no cabeçalho do caderno e identifica a prova no seletor.');
-  if (provasOrdenadas().some(p => p.serie === c.serie && p.etapa === c.etapa))
-    return recusarProva('etapa', `Já existe uma prova de ${c.serie} na ${c.etapa}. Mude a etapa ou a série.`);
+  if (provaDeMesmoNome(c)) return recusarProva('etapa', avisoDeMesmoNome(c));
   erroDaProva = null;
 
   const nova = { ...provaNova(c.serie, provasOrdenadas().length), ...dadosDosCampos(c), id: uid() };
@@ -2361,7 +2395,7 @@ function telaAlocacao() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Alocação — ${esc(p.serie)}</h2>
-        <span class="sub">${esc(p.etapa)} · quantos itens cada docente deve entregar nesta prova</span></div>
+        <span class="sub">${esc(etapaDaProva(p))} · quantos itens cada docente deve entregar nesta prova</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn fantasma" data-acao="aloc-dividir">Dividir igualmente</button>
         <button class="btn fantasma" data-acao="aloc-copiar">Copiar de outra prova</button>
@@ -2589,7 +2623,7 @@ ACOES['aloc-copiar'] = () => {
     <div class="dlg-corpo">
       <div class="campo"><label>Copiar as metas de</label>
         <select class="caixa" id="aloc-de">${outras.map(x =>
-          `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(x.etapa)} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
+          `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(etapaDaProva(x))} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
       <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Substitui as metas desta prova pelas da prova
         escolhida, docente por docente, junto com a divisão por tipo de quem tiver uma. Útil quando a distribuição entre
         as séries é a mesma. Os recados não são copiados.</p>
@@ -2696,7 +2730,7 @@ function telaTextos() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Textos-base — ${esc(pAtiva.serie)}</h2>
-        <span class="sub">${esc(pAtiva.etapa)} · Clique em um espaço livre para alocar um item seu · clique em um item para abri-lo</span></div>
+        <span class="sub">${esc(etapaDaProva(pAtiva))} · Clique em um espaço livre para alocar um item seu · clique em um item para abri-lo</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="chip info">Sua produção nesta prova: ${minhaProducao(pAtiva.id).criados} ${minhaProducao(pAtiva.id).criados === 1 ? 'item' : 'itens'}</span>
         ${ehQualquerCoord()
@@ -4843,7 +4877,7 @@ function telaCaderno() {
     <div class="miolo" style="padding-bottom:0">
       <div class="cab-tela">
         <div><h2>Caderno de provas — ${esc(pAtiva.serie)}</h2>
-          <span class="sub">${esc(pAtiva.etapa)} · ${pv.length - naPrevia} itens aprovados nesta versão${
+          <span class="sub">${esc(etapaDaProva(pAtiva))} · ${pv.length - naPrevia} itens aprovados nesta versão${
             naPrevia ? ` · ${naPrevia} em revisão à mostra` : ''} · numeração contínua · diagramação no padrão PAS${
             provaTemRedacao(pAtiva.id) ? (comRedacao ? ' · com a proposta de redação' : ' · proposta de redação ainda em branco') : ' · sem redação'}</span></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -5415,7 +5449,7 @@ function telaRedacao() {
     const lancadas = elenco.filter(e => redLancada(redacaoDe(p.id, e.id))).length;
     return `<tr class="clic" data-acao="ir-para-redacao" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b>${p.id === pAtiva.id ? ' <span class="chip info">na tela</span>' : ''}</td>
-      <td>${esc(p.etapa)}</td>
+      <td>${esc(etapaDaProva(p))}</td>
       <td>${tem ? '✓' : '<span style="color:var(--ink-2)">sem redação</span>'}</td>
       <td>${!tem ? '—' : ok
         ? `<span class="chip ok">escrita</span>`
@@ -5430,7 +5464,7 @@ function telaRedacao() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Redação — ${esc(pAtiva.serie)}</h2>
-        <span class="sub">${esc(pAtiva.etapa)} · a proposta que o estudante lê e a nota que ele recebe</span></div>
+        <span class="sub">${esc(etapaDaProva(pAtiva))} · a proposta que o estudante lê e a nota que ele recebe</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${podeEscrever && temRed
           ? `<button class="btn ${escrita ? 'fantasma' : 'rosa'}" data-acao="cad-redacao">✍ ${escrita ? 'Editar a proposta' : 'Escrever a proposta'}</button>`
@@ -5440,7 +5474,7 @@ function telaRedacao() {
       </div>
     </div>
 
-    ${!temRed ? `<div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(pAtiva.etapa)}) está marcada como
+    ${!temRed ? `<div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(etapaDaProva(pAtiva))}) está marcada como
       <b>sem redação</b>.${ehCoord() ? ' Isso se muda no Painel, em “⚙ Configurar prova”.' : ''}
       Troque de prova no seletor do menu à esquerda para trabalhar em outra série.</div>`
     : `
@@ -6684,8 +6718,8 @@ function telaCorrecaoRedacao() {
     $('#app').innerHTML = `
     <div class="quadro"><div class="miolo">
       <div class="cab-tela"><div><h2>Redação — lançamento</h2>
-        <span class="sub">${esc(pAtiva.serie)} · ${esc(pAtiva.etapa)}</span></div></div>
-      <div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(pAtiva.etapa)}) <b>não tem redação</b>.
+        <span class="sub">${esc(pAtiva.serie)} · ${esc(etapaDaProva(pAtiva))}</span></div></div>
+      <div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(etapaDaProva(pAtiva))}) <b>não tem redação</b>.
         Se você corrige a redação de outra série, troque de prova no seletor do menu à esquerda.</div>
     </div></div>`;
     return;
@@ -6693,7 +6727,7 @@ function telaCorrecaoRedacao() {
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela"><div><h2>Redação — lançamento · ${esc(pAtiva.serie)}</h2>
-      <span class="sub">${esc(pAtiva.etapa)} · NR = NC − 2·NE/TL, pela planilha oficial · cada campo é salvo ao sair dele</span></div></div>
+      <span class="sub">${esc(etapaDaProva(pAtiva))} · NR = NC − 2·NE/TL, pela planilha oficial · cada campo é salvo ao sair dele</span></div></div>
     <div id="red-resumo">${htmlResumoRedacao(pAtiva.id)}</div>
     <div class="red-corr">
       <div class="cartao">
@@ -6857,7 +6891,7 @@ function telaCorrecao() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Correção e boletins — ${esc(pAtiva.serie)}</h2>
-        <span class="sub">${esc(pAtiva.etapa)} · lançamento manual, importação do leitor local e relatórios</span></div>
+        <span class="sub">${esc(etapaDaProva(pAtiva))} · lançamento manual, importação do leitor local e relatórios</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn fantasma" data-acao="resp-importar">⬆ Importar respostas (CSV do leitor)</button>
         <button class="btn fantasma" data-acao="notas-exportar">⬇ Planilha de notas (CSV)</button>
@@ -7205,7 +7239,7 @@ function telaAdministracao() {
   const porSerie = SERIES.map(s => {
     const n = S.estudantes.filter(e => e.serie === s).length;
     const provasDaSerie = provasOrdenadas().filter(p => p.serie === s);
-    const elencos = provasDaSerie.map(p => `${esc(p.etapa)}: ${(S.elencos?.[p.id] || []).length}`).join(' · ');
+    const elencos = provasDaSerie.map(p => `${esc(etapaDaProva(p))}: ${(S.elencos?.[p.id] || []).length}`).join(' · ');
     return `<tr><td><b>${esc(s)}</b></td><td>${n}</td>
       <td>${provasDaSerie.length ? elencos : '<span style="color:var(--ink-2)">nenhuma prova desta série</span>'}</td></tr>`;
   }).join('');
