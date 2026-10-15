@@ -845,6 +845,19 @@ A **série é o que liga o estudante à prova**: quem está na 1ª série entra 
 elenco das provas da 1ª série, e é para esse elenco que saem os cartões-resposta
 e os boletins.
 
+**Prova já aplicada não muda.** Importar a lista, ou salvar um estudante, refaz
+o elenco das provas da série — menos as que têm **data de aplicação anterior a
+hoje**: elas guardam quem as fez. É o que permite importar a lista do ano novo,
+com cada estudante na série seguinte, sem tirar ninguém das provas e dos
+boletins do ano anterior. Quem muda de série sai das provas ainda não aplicadas
+da série antiga e entra nas da nova. O aviso depois da importação diz quantas
+provas aplicadas mantiveram a lista.
+
+Duas exceções, porque são decisões de quem as toma: **criar** uma prova monta o
+elenco pela série mesmo com data passada, e **trocar a série** de uma prova em
+“⚙ Configurar prova” refaz o elenco pela série nova. E a **aplicação extra**
+nunca é refeita pela série — ela tem a lista dela.
+
 ## Trabalhando em várias pessoas ao mesmo tempo
 
 O simulado é o mesmo para toda a equipe: o que você salva aparece para os

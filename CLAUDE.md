@@ -55,6 +55,13 @@ o menu mostra só as do papel de quem entrou.
   fixo — quando era fixo, o docente lia “1, 3, 4…” e procurava a tela 2, que é
   da coordenação. O manual (`docs/manual-da-equipe.md`) chama as telas pelo
   número da visão da coordenação; ao acrescentar ou remover tela, renumere lá.
+- **Prova já aplicada guarda quem a fez.** Importar a lista ou salvar estudante
+  refaz o elenco pela série (`refazerElencosDasSeries`), menos na prova com data
+  passada (`provaJaAplicada`) e na aplicação extra. Criar a prova e trocar a
+  série dela são explícitos e refazem (`{ mesmoAplicada: true }`). Ao escrever
+  outra porta que mexa no cadastro, passe por `refazerElencosDasSeries` com a
+  série nova E a de onde o estudante saiu — só a de destino deixava quem mudou
+  de série nas provas da antiga.
 - `redacao` não escreve item: não vê Textos nem Itens, e o painel dele é de
   redação, não de metas. Ao mexer no Painel, lembre que `painelDoDocente()`,
   `painelDaRedacao()` e `painelDasProvas()` são visões diferentes da mesma tela.

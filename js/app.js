@@ -389,23 +389,49 @@ function estudantesDaProva(provaId) {
   return p ? S.estudantes.filter(e => e.serie === p.serie) : [];
 }
 
+// Prova já aplicada: a data de aplicação é anterior a hoje — a mesma conta da
+// contagem “aplicada há N dias”. Prova sem data ainda não foi aplicada.
+const provaJaAplicada = p => (diasAteAplicacao(p) ?? 0) < 0;
+
 // Recalcula o elenco a partir da série — usado ao importar a lista, ao salvar
-// um estudante e ao criar uma prova. Vale para toda prova da série, inclusive
-// a já aplicada (ver “Pendências” no plano de implantação).
+// um estudante, ao criar uma prova e ao trocar a série dela.
 //
-// A aplicação extra fica de fora: a lista dela foi escolhida, e importar a
-// lista da escola ou corrigir o nome de um estudante a apagaria em silêncio,
-// trocando-a pela série inteira.
-function sincronizarElenco(provaId) {
+// Duas provas ficam fora do recálculo AUTOMÁTICO (importar, salvar estudante):
+// · a aplicação extra, cuja lista foi lançada à mão — importar a lista da
+//   escola a trocaria pela série inteira, em silêncio;
+// · a prova JÁ APLICADA, que guarda quem a fez. O elenco é materializado
+//   justamente para isso (migração 0007): na virada do ano o estudante muda de
+//   série, e a lista nova o tiraria das provas antigas — junto com o boletim e
+//   o denominador da turma. O comentário daqui prometia isso desde a 0007, e o
+//   código não fazia.
+// Criar a prova e trocar a série dela são decisões de quem as toma, e passam
+// `{ mesmoAplicada: true }`.
+function sincronizarElenco(provaId, { mesmoAplicada = false } = {}) {
   const p = provaPorId(provaId);
   if (!p) return 0;
   S.elencos = S.elencos || {};
   if (p.aplicacaoExtra) return (S.elencos[provaId] || []).length;
+  if (provaJaAplicada(p) && !mesmoAplicada && S.elencos[provaId])
+    return S.elencos[provaId].length;
   const ids = S.estudantes.filter(e => e.serie === p.serie).map(e => e.id);
-  S.elencos = S.elencos || {};
   S.elencos[provaId] = ids;
   return ids.length;
 }
+
+// O recálculo automático, para as séries que o cadastro tocou. Devolve as
+// provas refeitas (para gravar) e as que guardaram o elenco por já terem sido
+// aplicadas (para dizer isso a quem importou).
+function refazerElencosDasSeries(series) {
+  const daSerie = provasOrdenadas().filter(p => series.has(p.serie) && !p.aplicacaoExtra);
+  const guardadas = daSerie.filter(p => provaJaAplicada(p) && S.elencos?.[p.id]);
+  const refeitas = daSerie.filter(p => !guardadas.includes(p)).map(p => p.id);
+  refeitas.forEach(id => sincronizarElenco(id));
+  return { refeitas, guardadas };
+}
+const avisoDasGuardadas = guardadas => guardadas.length
+  ? ` · ${guardadas.length === 1 ? 'a prova já aplicada manteve os estudantes que a fizeram'
+      : `as ${guardadas.length} provas já aplicadas mantiveram os estudantes que as fizeram`}`
+  : '';
 
 /* ---------------- montagem da prova ---------------- */
 // Numeração contínua: itens aprovados da versão, na ordem dos textos aprovados.
@@ -1679,7 +1705,7 @@ ACOES['cfg-salvar'] = d => {
   // Trocar a série de uma prova troca quem a faz — menos na aplicação extra,
   // cuja lista foi lançada à mão. E a prova que deixa de ser aplicação extra
   // volta à regra de toda prova: a série inteira.
-  if (mudouSerie || deixouDeSerExtra) sincronizarElenco(alvo.id);
+  if (mudouSerie || deixouDeSerExtra) sincronizarElenco(alvo.id, { mesmoAplicada: true });
   $('#dlg').close(); commit(); PERS.prova(alvo); PERS.elenco(alvo.id);
   toast(deixouDeSerExtra
     ? 'Prova atualizada. Ela deixou de ser aplicação extra, e os estudantes voltam a ser os da série.'
@@ -2033,7 +2059,7 @@ ACOES['np-criar'] = async (d, botao) => {
     S.provas.push(nova);
     S.provaAtiva = nova.id;
     salvarProvaAtiva(nova.id);
-    sincronizarElenco(nova.id);
+    sincronizarElenco(nova.id, { mesmoAplicada: true });
     // Aplicação extra nasce sem ninguém: quem a faz é a lista lançada a seguir.
     if (nova.aplicacaoExtra) S.elencos[nova.id] = [];
     $('#dlg').close(); commit(); PERS.prova(nova); PERS.elenco(nova.id);
@@ -6355,14 +6381,16 @@ ACOES['est-salvar'] = d => {
   };
   if (!dados.nome || !dados.matricula) { toast('Nome e matrícula são obrigatórios.'); return; }
   let alvo;
+  const serieAntes = d.id ? S.estudantes.find(e => e.id === d.id)?.serie : null;
   if (d.id) { alvo = S.estudantes.find(e => e.id === d.id); Object.assign(alvo, dados); }
   else { alvo = { id: uid(), ...dados }; S.estudantes.push(alvo); }
-  // O elenco das provas da série acompanha o cadastro.
-  const tocadas = provasOrdenadas().filter(p => p.serie === dados.serie).map(p => p.id);
-  tocadas.forEach(sincronizarElenco);
+  // O elenco das provas acompanha o cadastro — as da série nova e, se a série
+  // mudou, as da antiga. As já aplicadas guardam quem as fez (`sincronizarElenco`).
+  const series = new Set([dados.serie, serieAntes].filter(Boolean));
+  const { refeitas, guardadas } = refazerElencosDasSeries(series);
   $('#dlg').close(); commit(); PERS.estudante(alvo);
-  tocadas.forEach(PERS.elenco);
-  toast('Estudante salvo.');
+  refeitas.forEach(PERS.elenco);
+  toast('Estudante salvo.' + avisoDasGuardadas(guardadas));
 };
 ACOES['est-remover'] = d => {
   const alvo = S.estudantes.find(e => e.id === d.id);
@@ -7495,7 +7523,8 @@ ACOES['est-importar'] = () => {
         <b>Série</b> aceita “9º ano”, “1ª série”, “2a serie EM”, “3”… ·
         <b>Versão</b> é <em>regular</em> ou <em>adaptada</em> (opcional, padrão regular) ·
         Uma primeira linha de cabeçalho é ignorada automaticamente ·
-        Quem já existe é reconhecido pela matrícula e <b>atualizado</b>, não duplicado.</p>
+        Quem já existe é reconhecido pela matrícula e <b>atualizado</b>, não duplicado ·
+        Prova <b>já aplicada</b> (data de aplicação passada) não muda: ela guarda quem a fez.</p>
       <textarea class="caixa" id="imp-est" rows="9" placeholder="Antonia Silva de Oliveira;225100142;1ª B;1ª série EM;regular&#10;Elisa Fontes Marques;225100231;9º D;9º ano;adaptada"></textarea>
       <div id="imp-previa"></div>
     </div>
@@ -7530,20 +7559,22 @@ ACOES['est-importar-conferir'] = () => {
 ACOES['est-importar-ok'] = () => {
   const { bons, ruins } = lerCsvEstudantes();
   if (!bons.length) { toast('Nenhuma linha válida para importar.'); return; }
+  const seriesAntes = bons.map(b => S.estudantes.find(e => e.matricula === b.matricula)?.serie).filter(Boolean);
   for (const b of bons) {
     const ja = S.estudantes.find(e => e.matricula === b.matricula);
     if (ja) Object.assign(ja, b);
     else S.estudantes.push({ id: uid(), ...b });
   }
-  // O elenco de cada prova das séries tocadas é refeito a partir do cadastro.
-  const series = new Set(bons.map(b => b.serie));
-  const tocadas = provasOrdenadas().filter(p => series.has(p.serie)).map(p => p.id);
-  tocadas.forEach(sincronizarElenco);
+  // O elenco de cada prova das séries tocadas é refeito a partir do cadastro —
+  // as da série nova de cada um e as da série de onde saiu. As já aplicadas
+  // guardam quem as fez (`sincronizarElenco`).
+  const series = new Set([...bons.map(b => b.serie), ...seriesAntes]);
+  const { refeitas, guardadas } = refazerElencosDasSeries(series);
 
   $('#dlg').close(); commit(); PERS.estudantesTodos();
-  tocadas.forEach(PERS.elenco);
+  refeitas.forEach(PERS.elenco);
   toast(`${bons.length} estudante(s) importado(s)` +
-    (ruins.length ? ` · ${ruins.length} linha(s) ignorada(s)` : '') + '.');
+    (ruins.length ? ` · ${ruins.length} linha(s) ignorada(s)` : '') + avisoDasGuardadas(guardadas) + '.');
 };
 
 function dlgMembro(m) {
