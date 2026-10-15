@@ -747,6 +747,8 @@ Ao escolher duplicar:
    preenchida com a etapa da original. As duas convivem: o sistema mostra a
    nova como “1ª Etapa · aplicação extra” no seletor, no Painel e em todas as
    telas. No **papel** (caderno, cartão, boletim) a etapa sai como está escrita.
+   A aplicação extra é feita por **outro grupo**, então ela começa **sem
+   estudantes** — ver “Os estudantes da aplicação extra”, logo abaixo.
 2. Embaixo vem a lista do que copiar, **agrupada por texto-base**, na ordem da
    prova. Vêm marcados os textos-base e os **itens aprovados** — a prova como ela
    saiu. Desmarque o que não serve, ou use **todos / nenhum** em cada bloco.
@@ -775,10 +777,42 @@ tamanho da prova e, se marcada, a proposta de redação.
 **O que não vem:** data de aplicação, respostas e notas lançadas, metas de
 alocação, a conversa da revisão, o histórico dos itens e a marca de item
 anulado — tudo isso é da aplicação original. Os estudantes da cópia são os da
-série escolhida, como em qualquer prova nova.
+série escolhida, como em qualquer prova nova — menos na aplicação extra, que
+começa vazia.
 
 Se o sistema não conseguir gravar a cópia inteira, **não grava nada** e diz o
 motivo, com a sua seleção ainda na tela — nunca fica meia prova no seletor.
+
+### Os estudantes da aplicação extra
+
+Toda prova é feita pela série inteira, e a lista se refaz sozinha quando a
+lista da escola é importada. A **aplicação extra** é a exceção: quem a faz é a
+lista que você lança. Ao criá-la, o sistema já abre **👥 Estudantes desta
+aplicação** (depois, o botão está no Painel e na tela de Cartões-resposta).
+
+1. Cole a lista, uma linha por estudante, **no mesmo formato da importação da
+   Administração**: `nome completo;matrícula;turma;série;versão`.
+2. Clique em **Conferir**. O sistema diz quantos já estão no cadastro, quantos
+   são novos e se alguma linha tem problema. Se a matrícula de uma linha
+   pertencer a alguém **com outro nome** no cadastro, isso aparece em destaque:
+   quase sempre é matrícula digitada errado, e a prova iria para outra pessoa.
+3. **Salvar a lista.** Linha com problema impede a gravação — quem ficasse de
+   fora por um erro de digitação não teria cartão no dia.
+
+O que a lista faz:
+
+- quem **já está no cadastro** entra **como está cadastrado** — nome, turma,
+  série e versão (regular/adaptada) não mudam por aqui; para corrigir, use a
+  Administração;
+- quem **não está** é cadastrado com os dados da linha;
+- a lista nova **substitui** a anterior; marque *manter quem já está na lista*
+  para **acrescentar** em vez de substituir;
+- **nenhuma outra prova muda**, e importar a lista da escola depois não apaga a
+  lista da aplicação extra.
+
+Só quem está na lista recebe cartão-resposta nominal, entra na correção e vai
+no pacote do leitor. Desmarcar “aplicação extra” em “⚙ Configurar prova” devolve
+a prova à regra de sempre: a série inteira.
 
 > **Aplicação extra não é cartão extra.** “Cartão extra” é o cartão de reserva,
 > sem nome, que se imprime na tela de Cartões-resposta. “Aplicação extra” é uma

@@ -375,21 +375,32 @@ const textosAprovados = (provaId = idProvaAtual()) =>
 
 // Elenco da prova. O vínculo é materializado (S.elencos); a série serve de
 // palpite quando a prova ainda não teve o elenco montado.
+//
+// A aplicação extra é a exceção: quem a faz é a lista lançada (`abrirElenco`), e
+// lista vazia quer dizer “ninguém lançado ainda”, não “a série inteira”. O
+// palpite pela série imprimiria cartão nominal para quem já fez a original.
 function estudantesDaProva(provaId) {
   const elenco = S.elencos?.[provaId];
-  if (elenco?.length) {
-    const porId = new Map(S.estudantes.map(e => [e.id, e]));
-    return elenco.map(id => porId.get(id)).filter(Boolean);
-  }
   const p = provaPorId(provaId);
+  if (elenco?.length || p?.aplicacaoExtra) {
+    const porId = new Map(S.estudantes.map(e => [e.id, e]));
+    return (elenco || []).map(id => porId.get(id)).filter(Boolean);
+  }
   return p ? S.estudantes.filter(e => e.serie === p.serie) : [];
 }
 
-// Recalcula o elenco a partir da série — usado ao importar a lista e ao criar
-// uma prova. Não mexe em prova cuja data de aplicação já passou.
+// Recalcula o elenco a partir da série — usado ao importar a lista, ao salvar
+// um estudante e ao criar uma prova. Vale para toda prova da série, inclusive
+// a já aplicada (ver “Pendências” no plano de implantação).
+//
+// A aplicação extra fica de fora: a lista dela foi escolhida, e importar a
+// lista da escola ou corrigir o nome de um estudante a apagaria em silêncio,
+// trocando-a pela série inteira.
 function sincronizarElenco(provaId) {
   const p = provaPorId(provaId);
   if (!p) return 0;
+  S.elencos = S.elencos || {};
+  if (p.aplicacaoExtra) return (S.elencos[provaId] || []).length;
   const ids = S.estudantes.filter(e => e.serie === p.serie).map(e => e.id);
   S.elencos = S.elencos || {};
   S.elencos[provaId] = ids;
@@ -1430,6 +1441,9 @@ function telaPainel() {
     if (provaTemRedacao(p.id) && !propostaEscrita(p.id))
       conf.push('esta prova tem redação, mas a <b>proposta</b> (tema, comando e textos motivadores) ainda não foi escrita — escreva na tela <a href="#/redacao">Redação</a>');
   } else {
+  if (p.aplicacaoExtra && !elenco.length)
+    conf.push('esta é uma <b>aplicação extra</b> e ainda não tem estudantes — sem a lista, não há cartão para imprimir' +
+      (doPapel ? ' — lance em “👥 Estudantes”' : ''));
   if (b.totalQuestoes && b.slots && b.slots !== b.totalQuestoes)
     conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, e a prova regular pede <b>${b.totalQuestoes}</b>`);
   if (!b.totalQuestoes)
@@ -1467,6 +1481,7 @@ function telaPainel() {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${doPapel ? '<button class="btn fantasma" data-acao="cfg">⚙ Configurar prova</button>' : ''}
+        ${doPapel && p.aplicacaoExtra ? '<button class="btn fantasma" data-acao="elenco-abrir">👥 Estudantes</button>' : ''}
         ${doPapel ? '<button class="btn fantasma" data-acao="prova-nova">+ Nova prova</button>' : ''}
         <a class="btn rosa" href="#/caderno" style="text-decoration:none">Gerar cadernos</a>
       </div>
@@ -1659,11 +1674,16 @@ ACOES['cfg-salvar'] = d => {
   if (!dados.nome || !dados.etapa) { toast('Nome e etapa são obrigatórios.'); return; }
   if (provaDeMesmoNome(dados, alvo.id)) { toast(avisoDeMesmoNome(dados)); return; }
   const mudouSerie = alvo.serie !== dados.serie;
+  const deixouDeSerExtra = !!alvo.aplicacaoExtra && !dados.aplicacaoExtra;
   Object.assign(alvo, dados);
-  // Trocar a série de uma prova troca quem a faz.
-  if (mudouSerie) sincronizarElenco(alvo.id);
+  // Trocar a série de uma prova troca quem a faz — menos na aplicação extra,
+  // cuja lista foi lançada à mão. E a prova que deixa de ser aplicação extra
+  // volta à regra de toda prova: a série inteira.
+  if (mudouSerie || deixouDeSerExtra) sincronizarElenco(alvo.id);
   $('#dlg').close(); commit(); PERS.prova(alvo); PERS.elenco(alvo.id);
-  toast('Prova atualizada.');
+  toast(deixouDeSerExtra
+    ? 'Prova atualizada. Ela deixou de ser aplicação extra, e os estudantes voltam a ser os da série.'
+    : 'Prova atualizada.');
 };
 
 /* ================= nova prova: em branco, ou cópia de outra =================
@@ -2014,8 +2034,11 @@ ACOES['np-criar'] = async (d, botao) => {
     S.provaAtiva = nova.id;
     salvarProvaAtiva(nova.id);
     sincronizarElenco(nova.id);
+    // Aplicação extra nasce sem ninguém: quem a faz é a lista lançada a seguir.
+    if (nova.aplicacaoExtra) S.elencos[nova.id] = [];
     $('#dlg').close(); commit(); PERS.prova(nova); PERS.elenco(nova.id);
-    toast(`Prova de ${nova.serie} criada.`);
+    if (nova.aplicacaoExtra) abrirElenco(nova.id, { aviso: `Prova de ${nova.serie} criada.` });
+    else toast(`Prova de ${nova.serie} criada.`);
     return;
   }
 
@@ -2040,8 +2063,10 @@ ACOES['np-criar'] = async (d, botao) => {
   const { textos, itens, faltando } = feito;
   const resumo = `${itens.length} ${itens.length === 1 ? 'item' : 'itens'} e ${textos.length} ${
     textos.length === 1 ? 'texto-base' : 'textos-base'}`;
+  const criada = `Prova de ${nova.serie} criada como cópia de ${rotuloProva(origem)}: ${resumo}.`;
   if (!faltando.length) {
-    toast(`Prova de ${nova.serie} criada como cópia de ${rotuloProva(origem)}: ${resumo}.`);
+    if (nova.aplicacaoExtra) abrirElenco(nova.id, { aviso: criada });
+    else toast(criada);
     return;
   }
   // Figura que já não existia na original não tem de onde ser copiada. Isso
@@ -2062,7 +2087,9 @@ ACOES['np-criar'] = async (d, botao) => {
       <p style="font-size:13px;color:var(--ink-2)">Abra cada um, remova a figura quebrada e envie o arquivo de novo —
         nas duas provas, se a original ainda for impressa.</p>
     </div>
-    <div class="dlg-pe"><button class="btn" data-acao="fechar-dlg">Entendi</button></div>`);
+    <div class="dlg-pe">${nova.aplicacaoExtra
+      ? `<button class="btn" data-acao="elenco-abrir" data-aviso="${esc(criada)}">Lançar os estudantes desta aplicação</button>`
+      : '<button class="btn" data-acao="fechar-dlg">Entendi</button>'}</div>`);
 };
 
 // Monta a cópia, copia as figuras e grava. Se qualquer passo falhar, desfaz o
@@ -2156,7 +2183,9 @@ async function duplicarProva(origem, nova, r) {
     throw new Error(`a figura do ${falha.onde} não pôde ser copiada (${falha.erro?.message || falha.erro})`);
   }
 
-  const elenco = S.estudantes.filter(e => e.serie === nova.serie).map(e => e.id);
+  // A aplicação extra nasce sem estudantes: quem a faz é outro grupo, lançado
+  // depois. As demais seguem a regra de toda prova nova — a série inteira.
+  const elenco = nova.aplicacaoExtra ? [] : S.estudantes.filter(e => e.serie === nova.serie).map(e => e.id);
   if (modoNuvem) {
     try {
       await nuvem.gravarLinha('provas', nova);
@@ -2193,6 +2222,158 @@ function htmlOrigemDaCopia(registro, oque = 'item') {
     quando ela foi duplicada. É ${oque === 'item' ? 'um item independente' : 'um texto-base independente'}: o que
     mudar aqui não muda o ${oque === 'item' ? 'item' : 'texto'} original.</p>`;
 }
+
+/* ================= a lista de quem faz a aplicação extra =================
+   Toda prova é feita pela série dela, e o elenco se refaz sozinho a cada lista
+   importada (`sincronizarElenco`). A aplicação extra não: quem a faz é outro
+   grupo, e a coordenação LANÇA a lista dele aqui, no mesmo formato da
+   importação da Administração. Ela nasce sem ninguém. Só quem está na lista
+   recebe cartão nominal, entra na correção e vai no pacote do leitor.
+
+   O que a lista faz, e o que não faz:
+   · quem já está no cadastro é reconhecido pela matrícula — texto exato, depois
+     os algarismos, como na importação de respostas — e entra na lista COMO ESTÁ
+     cadastrado. Nome, turma, série e versão não mudam por aqui: a versão é do
+     estudante e vale para toda prova, e a lista de uma aplicação extra não é o
+     lugar de trocá-la;
+   · quem não está no cadastro é cadastrado;
+   · nenhuma outra prova muda. Esta lista não é a lista da escola, e não refaz o
+     elenco de prova nenhuma além desta;
+   · linha com problema impede a gravação. Quem ficasse de fora por um erro de
+     digitação não teria cartão no dia da prova, e ninguém perceberia antes. */
+const textoDaListaExtra = () => $('#el-lista')?.value || '';
+
+// Liga cada linha da lista a um estudante do cadastro, ou a um cadastro novo.
+function conferirListaExtra(provaId) {
+  const { bons, ruins } = lerLinhasEstudantes(textoDaListaExtra());
+  const problemas = ruins.filter(r => r.linha !== '—');      // “vale a última” é aviso, não erro
+  const porTexto = new Map(S.estudantes.map(e => [String(e.matricula).trim(), e]));
+  const porDigitos = new Map();
+  for (const e of S.estudantes) {
+    const dg = digitosDaMatricula(e.matricula);
+    if (dg) porDigitos.set(dg, porDigitos.has(dg) ? null : e);
+  }
+  // Matrícula que cai num cadastro de OUTRO nome é, quase sempre, matrícula
+  // digitada errado — e a prova iria para a pessoa errada. Não impede, porque
+  // nome muda (casamento, grafia), mas aparece na conferência.
+  const nomeSimples = n => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+  const ja = [], novos = [], divergentes = [];
+  for (const b of bons) {
+    const e = porTexto.get(b.matricula) || porDigitos.get(digitosDaMatricula(b.matricula));
+    if (e) {
+      if (!ja.includes(e)) ja.push(e);
+      if (nomeSimples(e.nome) !== nomeSimples(b.nome)) divergentes.push({ lista: b, cadastro: e });
+    } else novos.push({ id: uid(), ...b });
+  }
+  const manter = !!$('#el-manter')?.checked;
+  const ids = [...new Set([...(manter ? S.elencos?.[provaId] || [] : []),
+                           ...ja.map(e => e.id), ...novos.map(e => e.id)])];
+  return { bons, ruins, problemas, ja, novos, divergentes, ids, manter };
+}
+
+function htmlConferenciaDaLista(c) {
+  if (!textoDaListaExtra().trim()) return '';
+  return `
+      <div class="cartao" style="margin-top:12px">
+        <h3>Conferência</h3>
+        <p style="font-size:13px;margin:0 0 6px"><b>${c.bons.length}</b> ${c.bons.length === 1 ? 'linha válida' : 'linhas válidas'}
+          — ${c.ja.length} já ${c.ja.length === 1 ? 'cadastrado' : 'cadastrados'} (entram como estão no cadastro) e
+          ${c.novos.length} ${c.novos.length === 1 ? 'novo, que será cadastrado' : 'novos, que serão cadastrados'}.
+          ${c.manter ? `Somados aos que já estão, a lista fica com <b>${c.ids.length}</b>.`
+            : `A lista desta aplicação passa a ter <b>${c.ids.length}</b>, no lugar da atual.`}</p>
+        ${c.divergentes.length ? `<p style="font-size:13px;margin:10px 0 6px;color:#b45309"><b>Confira a matrícula</b> —
+          ${c.divergentes.length === 1 ? 'este nome não bate' : 'estes nomes não batem'} com o cadastro. Se a matrícula
+          estiver errada, a prova vai para outra pessoa:</p>
+          <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${c.divergentes.map(x =>
+            `<li>“${esc(x.lista.nome)}” (${esc(x.lista.matricula)}) — no cadastro é <b>${esc(x.cadastro.nome)}</b>,
+              ${esc(x.cadastro.serie)} · ${esc(x.cadastro.turma)}</li>`).join('')}</ul>` : ''}
+        ${c.ruins.length ? `<p style="font-size:13px;margin:10px 0 6px;color:${c.problemas.length ? 'var(--vermelho)' : 'var(--ink-2)'}">
+          ${c.problemas.length ? `<b>${c.problemas.length}</b> ${c.problemas.length === 1 ? 'linha com problema' : 'linhas com problema'} —
+            corrija antes de salvar:` : 'Avisos:'}</p>
+          <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${
+            c.ruins.slice(0, 12).map(r => `<li>linha ${r.linha}: ${esc(r.porque)} —
+              <span style="font-family:var(--mono)">${esc(String(r.texto).slice(0, 60))}</span></li>`).join('')
+          }${c.ruins.length > 12 ? `<li>…e mais ${c.ruins.length - 12}</li>` : ''}</ul>` : ''}
+      </div>`;
+}
+
+function abrirElenco(provaId, { aviso = '' } = {}) {
+  const p = provaPorId(provaId);
+  if (!p || !ehCoord()) return;
+  const atual = estudantesDaProva(p.id).slice().sort((a, b) =>
+    String(a.turma || '').localeCompare(String(b.turma || ''), 'pt-BR') ||
+    String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Estudantes desta aplicação — ${esc(rotuloProva(p))}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      ${aviso ? `<p class="nota-copia">${esc(aviso)} Como é uma <b>aplicação extra</b>, ela começa sem
+        estudantes: lance aqui a lista de quem vai fazê-la. Dá para voltar a ela depois, pelo Painel ou pela tela de
+        Cartões-resposta.</p>` : ''}
+      <p class="np-explica">Só quem estiver nesta lista recebe cartão-resposta nominal, entra na correção e vai no
+        pacote do leitor. Cole uma linha por estudante, como na importação da Administração:</p>
+      <p class="el-formato">nome completo;matrícula;turma;série;versão</p>
+      <p class="np-explica">Quem já está no cadastro é reconhecido pela matrícula e entra como está cadastrado; quem
+        não está é cadastrado. As outras provas não mudam.</p>
+      <textarea class="caixa" id="el-lista" rows="7"
+        placeholder="Antonia Silva de Oliveira;225100142;1ª B;1ª série EM;regular&#10;Elisa Fontes Marques;225100231;9º D;9º ano;adaptada"></textarea>
+      <label class="np-opcao"><input type="checkbox" id="el-manter">
+        <span>manter quem já está na lista — <b>acrescentar</b> estes, em vez de substituir a lista</span></label>
+      <div id="el-previa"></div>
+      <h3 class="el-titulo">Na lista agora: ${atual.length} ${atual.length === 1 ? 'estudante' : 'estudantes'}</h3>
+      ${atual.length ? `<div class="el-atual"><table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Série</th><th>Versão</th></tr></thead>
+        <tbody>${atual.map(e => `<tr><td>${esc(e.nome)}</td><td style="font-family:var(--mono)">${esc(e.matricula)}</td>
+          <td>${esc(e.turma)}</td><td>${esc(e.serie)}</td><td style="text-transform:capitalize">${esc(e.versao)}</td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="vazio">Ninguém ainda — sem estudantes, esta aplicação não tem cartão para imprimir.</div>'}
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="el-conferir" data-id="${esc(p.id)}">Conferir</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="el-salvar" data-id="${esc(p.id)}">Salvar a lista</button></div>`);
+}
+ACOES['elenco-abrir'] = d => abrirElenco(idProvaAtual(), { aviso: d.aviso || '' });
+
+ACOES['el-conferir'] = d => { $('#el-previa').innerHTML = htmlConferenciaDaLista(conferirListaExtra(d.id)); };
+
+// Gravada esperando a resposta: é uma lista que a pessoa acabou de lançar, e o
+// diálogo só fecha quando o banco a aceitou.
+ACOES['el-salvar'] = async (d, botao) => {
+  const p = provaPorId(d.id);
+  if (!p || !ehCoord()) return;
+  if (!textoDaListaExtra().trim()) { toast('Cole a lista de estudantes — ou feche, se não quer mudar a atual.'); return; }
+  const c = conferirListaExtra(p.id);
+  $('#el-previa').innerHTML = htmlConferenciaDaLista(c);
+  if (c.problemas.length || !c.bons.length) {
+    toast(c.bons.length ? 'Corrija as linhas com problema antes de salvar.' : 'Nenhuma linha válida na lista.');
+    $('#el-previa').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  const recusou = e => {
+    botao.disabled = false;
+    toast('⚠ O banco recusou a lista: ' + (e?.message || e));
+  };
+  if (modoNuvem) {
+    botao.disabled = true;
+    try { await nuvem.gravarLinhas('estudantes', c.novos); }
+    catch (e) { recusou(e); return; }
+  }
+  // Os cadastrados agora entram no estado ANTES da lista ser gravada: se o banco
+  // recusar a lista, eles já existem lá, e uma segunda tentativa sem isto os
+  // cadastraria de novo, com outro id — o mesmo estudante duas vezes.
+  S.estudantes.push(...c.novos);
+  save(S);
+  if (modoNuvem) {
+    try { await nuvem.gravarElenco(p.id, c.ids); }
+    catch (e) { recusou(e); return; }
+  }
+  S.elencos = S.elencos || {};
+  S.elencos[p.id] = c.ids;
+  $('#dlg').close();
+  commit();
+  toast(`${c.ids.length} ${c.ids.length === 1 ? 'estudante' : 'estudantes'} nesta aplicação` +
+    (c.novos.length ? ` · ${c.novos.length} ${c.novos.length === 1 ? 'cadastrado agora' : 'cadastrados agora'}` : '') + '.');
+};
 
 ACOES['prova-excluir'] = d => {
   const p = provaPorId(d.id);
@@ -6092,7 +6273,7 @@ function telaCartoes() {
       <td>${totalFolhas(pAtiva.id, e)}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="est-editar" data-id="${e.id}">Editar</button>
-        ${ehCoord() ? `<button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>` : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra ? `<button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>` : ''}
       </td></tr>`).join('');
   const opsTurma = ['todas', ...turmas].map(t =>
     `<option value="${t}" ${cartTurma === t ? 'selected' : ''}>${t === 'todas' ? 'Todas as turmas' : t}</option>`).join('');
@@ -6107,8 +6288,9 @@ function telaCartoes() {
         <span class="sub">${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'} nesta prova · ${folhasTotal} folha(s) a imprimir e digitalizar no filtro atual</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="caixa" style="width:auto" data-mud="cart-turma">${opsTurma}</select>
-        ${ehCoord() ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
-        ${ehCoord() ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
+        ${ehCoord() && pAtiva.aplicacaoExtra ? '<button class="btn" data-acao="elenco-abrir">👥 Estudantes desta aplicação</button>' : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
         ${ehCoord() ? `<button class="btn fantasma" data-acao="cart-extras" ${nRegItens + nAdaItens ? '' : 'disabled'}>🖨 Cartões extras</button>` : ''}
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
@@ -6120,7 +6302,9 @@ function telaCartoes() {
         estas folhas caem na fila de conferência do leitor, para lançamento à mão.</p></div>` : ''; })()}
     ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th>Folhas</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table>`
-      : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
+      : pAtiva.aplicacaoExtra
+        ? `<div class="vazio">Esta aplicação extra ainda não tem estudantes.${ehCoord() ? ' Lance a lista em “👥 Estudantes desta aplicação”.' : ''}</div>`
+        : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn fantasma" data-acao="cart-template">⬇ Exportar pacote da prova (leitor e boletins)</button>
     </div>

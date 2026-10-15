@@ -274,6 +274,11 @@ original costuma ser prova aplicada, com cartão, resposta e boletim.
   (`etapaDaProva`) e o papel e o pacote do leitor não. Ao mostrar a etapa numa
   tela nova, use `etapaDaProva()`, não `p.etapa`. E escreva sempre “aplicação
   extra” por inteiro: “cartão extra” é o cartão de reserva sem nome.
+- **Quem faz a aplicação extra é a lista lançada** (`abrirElenco`), não a série:
+  nasce vazia, e vazio é vazio (`estudantesDaProva` não cai no palpite pela
+  série). `sincronizarElenco` não a toca — sem isso, importar a lista da escola
+  apagaria a escolha. A lista cadastra quem falta e não altera o cadastro de
+  quem já existe.
 - **Remover figura não é apagar o arquivo** (`arquivoCitado`, `img-remover`).
   O registro só muda no “Salvar”, que pode nem vir; apagar na hora deixava
   texto gravado apontando para arquivo inexistente. Só sai do bucket o que

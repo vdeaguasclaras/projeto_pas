@@ -476,6 +476,19 @@ pelo `id` que viaja no pacote (`pas-pacote-<id>.json`, `pas-anulados-<id>.json`)
 O nome é sempre “aplicação extra”, por inteiro, porque “cartão extra” já é o
 cartão de reserva sem nome.
 
+**Quem faz a aplicação extra é uma lista lançada, não a série.** Ela nasce com
+elenco vazio — e vazio é vazio: `estudantesDaProva` deixa de cair no palpite
+pela série, que imprimiria cartão nominal para quem já fez a original. A lista é
+colada no formato da importação da Administração (`lerLinhasEstudantes`): quem
+já está no cadastro casa pela matrícula (texto, depois algarismos) e entra como
+está cadastrado; quem não está é cadastrado; nenhuma outra prova muda. Linha com
+problema impede a gravação, e matrícula que cai em cadastro de outro nome
+aparece na conferência. `sincronizarElenco` — chamado ao importar a lista da
+escola e ao salvar um estudante — não toca prova com `aplicacaoExtra`. A opção
+de trazer os “faltantes” de uma prova foi considerada e descartada: as respostas
+das provas aplicadas em 2026 não estão no sistema (a correção foi no aplicativo
+da secretaria), e para ele todos teriam faltado.
+
 **Por que figura com arquivo próprio, e não a mesma referência.** Referência
 compartilhada faria a cópia depender da original para sempre: trocar a figura de
 um lado, ou limpar a pasta de uma prova antiga, alcançaria o outro — e o outro é
@@ -722,6 +735,12 @@ não os consome.
   [3º TRIM] — “Artista Eduardo Kobra conclui mural na Oscar Freire…” — aponta
   para um arquivo que não existe mais no bucket. Remover a figura quebrada e
   enviar de novo. A causa foi corrigida (ver “Remover não é apagar”).
+- **Elenco de prova já aplicada** (levantado em 15/10/2026): importar a lista da
+  escola, ou salvar um estudante, refaz o elenco de **toda** prova da série,
+  inclusive a já aplicada — o comentário de `sincronizarElenco` dizia o
+  contrário, e foi corrigido para dizer o que o código faz. Na virada do ano,
+  com o estudante mudando de série, isso tiraria gente do elenco de provas
+  antigas. Decidir se prova com data passada deve ficar de fora.
 - **Texto-base sem prova** (levantado em 15/10/2026): há um texto aprovado de
   título “sx” (`23n2pdzmjho`) sem `provaId`. Não aparece em tela nenhuma; parece
   teste esquecido. Apagar, ou dizer de que prova é.
