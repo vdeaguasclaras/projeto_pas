@@ -12,7 +12,7 @@ import { nuvem } from './nuvem.js';
 import { limpar } from './limpar.js';
 import { htmlTabelaPeriodica } from './tabela-periodica.js';
 import {
-  guardarImagem, descartarImagem, prepararImagens, todasAsImagens,
+  guardarImagem, duplicarImagem, arquivoAusente, descartarImagem, prepararImagens, todasAsImagens,
   htmlImagens, pecasDeImagens, htmlEditorImagens
 } from './imagens.js';
 import {
@@ -344,7 +344,27 @@ function provaAtual() {
 }
 const idProvaAtual = () => provaAtual()?.id || null;
 const provaPorId = id => (S.provas || []).find(p => p.id === id) || null;
-const rotuloProva = p => p ? `${p.serie} · ${p.etapa}` : '—';
+// A etapa como as TELAS do sistema a mostram. Aplicação extra é a mesma etapa
+// aplicada de novo — segunda chamada, reaplicação — e é uma prova à parte, com
+// itens, respostas e pacote próprios; sem a marca, ela e a original teriam o
+// mesmo nome no seletor e em toda tela. O papel (caderno, cartão, boletim) e o
+// pacote do leitor imprimem `etapa` como foi escrita.
+//
+// “Aplicação extra”, sempre por inteiro: “cartão extra” já é outra coisa neste
+// sistema — o cartão sem nome, de reserva —, e “a extra” sozinho não diz qual.
+const etapaDaProva = p => p ? `${p.etapa}${p.aplicacaoExtra ? ' · aplicação extra' : ''}` : '';
+const rotuloProva = p => p ? `${p.serie} · ${etapaDaProva(p)}` : '—';
+
+// Duas provas da mesma série, na mesma etapa e com o mesmo tipo de aplicação
+// não se distinguem em tela nenhuma. A etapa é comparada sem diferença de
+// maiúscula e de espaço: “1ª Etapa” e “1ª etapa ” são a mesma para quem lê.
+const normaDaEtapa = e => String(e || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+const provaDeMesmoNome = (c, ignorarId = null) => provasOrdenadas().find(p => p.id !== ignorarId &&
+  p.serie === c.serie && normaDaEtapa(p.etapa) === normaDaEtapa(c.etapa) &&
+  !!p.aplicacaoExtra === !!c.aplicacaoExtra) || null;
+const avisoDeMesmoNome = c => c.aplicacaoExtra
+  ? `Já existe uma aplicação extra de ${c.serie} na ${c.etapa}. Diferencie a etapa — por exemplo, “${c.etapa} (2)”.`
+  : `Já existe uma prova de ${c.serie} na ${c.etapa}. Mude a etapa ou a série — ou, se esta for uma segunda chamada ou reaplicação dela, marque “aplicação extra”.`;
 
 /* ---------------- escopo ---------------- */
 const textosDaProva = provaId => S.textos.filter(t => t.provaId === provaId);
@@ -355,21 +375,32 @@ const textosAprovados = (provaId = idProvaAtual()) =>
 
 // Elenco da prova. O vínculo é materializado (S.elencos); a série serve de
 // palpite quando a prova ainda não teve o elenco montado.
+//
+// A aplicação extra é a exceção: quem a faz é a lista lançada (`abrirElenco`), e
+// lista vazia quer dizer “ninguém lançado ainda”, não “a série inteira”. O
+// palpite pela série imprimiria cartão nominal para quem já fez a original.
 function estudantesDaProva(provaId) {
   const elenco = S.elencos?.[provaId];
-  if (elenco?.length) {
-    const porId = new Map(S.estudantes.map(e => [e.id, e]));
-    return elenco.map(id => porId.get(id)).filter(Boolean);
-  }
   const p = provaPorId(provaId);
+  if (elenco?.length || p?.aplicacaoExtra) {
+    const porId = new Map(S.estudantes.map(e => [e.id, e]));
+    return (elenco || []).map(id => porId.get(id)).filter(Boolean);
+  }
   return p ? S.estudantes.filter(e => e.serie === p.serie) : [];
 }
 
-// Recalcula o elenco a partir da série — usado ao importar a lista e ao criar
-// uma prova. Não mexe em prova cuja data de aplicação já passou.
+// Recalcula o elenco a partir da série — usado ao importar a lista, ao salvar
+// um estudante e ao criar uma prova. Vale para toda prova da série, inclusive
+// a já aplicada (ver “Pendências” no plano de implantação).
+//
+// A aplicação extra fica de fora: a lista dela foi escolhida, e importar a
+// lista da escola ou corrigir o nome de um estudante a apagaria em silêncio,
+// trocando-a pela série inteira.
 function sincronizarElenco(provaId) {
   const p = provaPorId(provaId);
   if (!p) return 0;
+  S.elencos = S.elencos || {};
+  if (p.aplicacaoExtra) return (S.elencos[provaId] || []).length;
   const ids = S.estudantes.filter(e => e.serie === p.serie).map(e => e.id);
   S.elencos = S.elencos || {};
   S.elencos[provaId] = ids;
@@ -602,7 +633,7 @@ function seletorDeProva() {
   const atual = idProvaAtual();
   const ops = lista.map(p => {
     const n = itensDaProva(p.id).length;
-    return `<option value="${esc(p.id)}" ${p.id === atual ? 'selected' : ''}>${esc(p.serie)} — ${esc(p.etapa)}${n ? ` (${n} ${n === 1 ? 'item' : 'itens'})` : ''}</option>`;
+    return `<option value="${esc(p.id)}" ${p.id === atual ? 'selected' : ''}>${esc(p.serie)} — ${esc(etapaDaProva(p))}${n ? ` (${n} ${n === 1 ? 'item' : 'itens'})` : ''}</option>`;
   }).join('');
   return `<label class="sel-prova" title="Prova em que você está trabalhando">
     <span>Prova</span><select data-mud="prova-ativa" aria-label="Prova ativa">${ops}</select></label>`;
@@ -646,7 +677,7 @@ function render() {
   const atual = telaAtual();
   $('#h-titulo').textContent = TELAS[atual].rot;
   $('#h-sub').textContent = p
-    ? `${p.nome} — ${p.etapa} · ${p.serie}` +
+    ? `${p.nome} — ${etapaDaProva(p)} · ${p.serie}` +
       (p.dataAplicacao ? ` · Aplicação: ${dataBR(p.dataAplicacao)}` : '')
     : 'Nenhuma prova cadastrada ainda.';
 
@@ -994,7 +1025,7 @@ function painelDoDocente() {
       : m.criados ? '<span class="chip ok">Tudo aprovado</span>'
       : '<span class="chip">Nada entregue</span>';
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
-      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(etapaDaProva(p))}</span></td>
       <td>${progressoDaMeta(m.aprovados, meta)}${htmlTiposDaMeta(a, m)}</td>
       <td>${m.criados}</td><td>${m.aprovados}</td><td>${m.emRevisao}</td>
       <td>${situacao}</td>
@@ -1074,7 +1105,7 @@ function painelDaRedacao() {
       : lancadas ? `<span class="chip pend">Faltam ${elenco.length - lancadas} lançamentos</span>`
       : '<span class="chip info">Proposta pronta, à espera da aplicação</span>';
     return `<tr class="clic" data-acao="ir-para-redacao" data-id="${esc(p.id)}">
-      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(p.etapa)}</span></td>
+      <td><b>${esc(p.serie)}</b><br><span style="font-size:11px;color:var(--ink-2)">${esc(etapaDaProva(p))}</span></td>
       <td>${!tem ? '—' : escrita ? '<span class="chip ok">escrita</span>' : '<span class="chip falta">em branco</span>'}</td>
       <td>${tem && escrita ? esc(proposta(p.id).tema).slice(0, 48) || '—' : '—'}</td>
       <td>${tem ? `${lancadas}/${elenco.length}` : '—'}</td>
@@ -1182,7 +1213,7 @@ function painelDasProvas() {
     const soma = somaDasMetas(p.id);
     return `<tr class="clic" data-acao="ir-para-prova" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b>${p.id === idProvaAtual() ? ' <span class="chip info">na tela</span>' : ''}</td>
-      <td>${esc(p.etapa)}</td>
+      <td>${esc(etapaDaProva(p))}</td>
       <td>${dataBR(p.dataAplicacao)}</td>
       <td>${b.textos}</td>
       <td>${soma || '<span style="color:var(--ink-2)">—</span>'}</td>
@@ -1410,6 +1441,9 @@ function telaPainel() {
     if (provaTemRedacao(p.id) && !propostaEscrita(p.id))
       conf.push('esta prova tem redação, mas a <b>proposta</b> (tema, comando e textos motivadores) ainda não foi escrita — escreva na tela <a href="#/redacao">Redação</a>');
   } else {
+  if (p.aplicacaoExtra && !elenco.length)
+    conf.push('esta é uma <b>aplicação extra</b> e ainda não tem estudantes — sem a lista, não há cartão para imprimir' +
+      (doPapel ? ' — lance em “👥 Estudantes”' : ''));
   if (b.totalQuestoes && b.slots && b.slots !== b.totalQuestoes)
     conf.push(`os textos-base comportam <b>${b.slots}</b> ${b.slots === 1 ? 'item' : 'itens'}, e a prova regular pede <b>${b.totalQuestoes}</b>`);
   if (!b.totalQuestoes)
@@ -1440,13 +1474,14 @@ function telaPainel() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div>
-        <span class="cab-sobrancelha">${esc(p.nome)} · ${esc(p.etapa)}</span>
+        <span class="cab-sobrancelha">${esc(p.nome)} · ${esc(etapaDaProva(p))}</span>
         <h2>${esc(saudacao())} 👋</h2>
         <span class="sub">${esc(p.serie)} · Aplicação: ${dataBR(p.dataAplicacao)} · ${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'}${p.temRedacao === false ? ' · sem redação' : ' · com redação'}</span>
         ${htmlContagem(p) ? `<div class="cab-contagem">${htmlContagem(p)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${doPapel ? '<button class="btn fantasma" data-acao="cfg">⚙ Configurar prova</button>' : ''}
+        ${doPapel && p.aplicacaoExtra ? '<button class="btn fantasma" data-acao="elenco-abrir">👥 Estudantes</button>' : ''}
         ${doPapel ? '<button class="btn fantasma" data-acao="prova-nova">+ Nova prova</button>' : ''}
         <a class="btn rosa" href="#/caderno" style="text-decoration:none">Gerar cadernos</a>
       </div>
@@ -1508,98 +1543,836 @@ function telaPainel() {
   </div></div>`;
 }
 
-function dlgProva(p, nova = false) {
+/* ---------------- configurar e criar prova ----------------
+   Os campos da prova moram num formulário só, usado para configurar e para
+   criar. `c` é a forma plana desse formulário (`camposDaProva`), não o registro
+   gravado: o diálogo de criação se remonta — trocar de modo, trocar a prova de
+   origem, recusar o “Salvar” —, e diálogo que se remonta lê a cópia de
+   trabalho, nunca o registro. */
+const camposDaProva = p => ({
+  nome: p?.nome || '',
+  serie: p?.serie || SERIES[0],
+  etapa: p?.etapa || '',
+  aplicacaoExtra: !!p?.aplicacaoExtra,
+  dataAplicacao: p?.dataAplicacao || '',
+  duracao: p?.duracao || '',
+  qtd: totalDeQuestoes(p, 'regular'),
+  qtdAda: totalDeQuestoes(p, 'adaptada'),
+  temRedacao: p?.temRedacao !== false,
+  imprimirRedacao: p?.imprimirRedacao !== false
+});
+
+// O que está na TELA, na mesma forma. O `change` de um <input> só dispara ao
+// perder o foco, então o formulário é lido aqui, na hora de gravar ou de
+// remontar, e não confiado aos avisos dos campos.
+function recolherCamposDaProva() {
+  const numero = sel => {
+    const n = parseInt($(sel)?.value, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    nome: $('#cfg-nome').value.trim(),
+    serie: $('#cfg-serie').value,
+    etapa: $('#cfg-etapa').value.trim(),
+    aplicacaoExtra: !!$('#cfg-extra')?.checked,
+    dataAplicacao: $('#cfg-data').value,
+    duracao: $('#cfg-dur').value.trim(),
+    qtd: numero('#cfg-qtd'),
+    qtdAda: numero('#cfg-qtd-ada'),
+    temRedacao: $('#cfg-tem-red').checked,
+    imprimirRedacao: $('#cfg-red').checked
+  };
+}
+
+// Do formulário para o registro da prova.
+const dadosDosCampos = c => ({
+  nome: c.nome, serie: c.serie, etapa: c.etapa, aplicacaoExtra: !!c.aplicacaoExtra,
+  dataAplicacao: c.dataAplicacao, duracao: c.duracao,
+  totalQuestoes: { regular: c.qtd, adaptada: c.qtdAda },
+  temRedacao: c.temRedacao, imprimirRedacao: c.imprimirRedacao
+});
+
+// A recusa do “Criar” marca o campo e diz o motivo ao pé dele, como a do item
+// (`recusarItem`): o diálogo da cópia rola por uma lista de cem itens, e um
+// aviso de passagem não alcança quem está no fim dela.
+let erroDaProva = null;   // { campo, msg }
+const marcaDaProva = campo =>
+  ` data-erro-campo="prova-${campo}" class="campo${erroDaProva?.campo === campo ? ' com-erro' : ''}"`;
+const avisoDaProva = campo => erroDaProva?.campo === campo
+  ? `<p class="campo-erro">⚠ ${esc(erroDaProva.msg)}</p>` : '';
+
+function htmlCamposDaProva(c, { dicaEtapa = '' } = {}) {
   const opsSerie = SERIES.map(s =>
-    `<option ${p.serie === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
-  abrirDlg(`
-    <div class="dlg-cab"><h2>${nova ? 'Nova prova' : 'Configurar a prova'}</h2>
-      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
-    <div class="dlg-corpo">
+    `<option ${c.serie === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
+  return `
       <div class="form-linha">
-        <div class="campo" style="min-width:230px"><label>Nome do simulado</label>
-          <input class="caixa" id="cfg-nome" value="${esc(p.nome || '')}"></div>
+        <div${marcaDaProva('nome')} style="min-width:230px"><label>Nome do simulado</label>
+          <input class="caixa" id="cfg-nome" value="${esc(c.nome)}">${avisoDaProva('nome')}</div>
         <div class="campo"><label>Série</label>
           <select class="caixa" id="cfg-serie">${opsSerie}</select></div>
-        <div class="campo"><label>Etapa</label>
-          <input class="caixa" id="cfg-etapa" value="${esc(p.etapa || '')}"></div>
+        <div${marcaDaProva('etapa')}><label>Etapa</label>
+          <input class="caixa" id="cfg-etapa" value="${esc(c.etapa)}"${
+            dicaEtapa ? ` placeholder="${esc(dicaEtapa)}"` : ''}>${avisoDaProva('etapa')}</div>
       </div>
+      <label class="np-opcao" style="margin:-4px 0 14px">
+        <input type="checkbox" id="cfg-extra" data-mud="cfg-extra" ${c.aplicacaoExtra ? 'checked' : ''}>
+        <span><b>aplicação extra</b> — segunda chamada ou reaplicação de uma etapa que já tem prova. Pode repetir
+          a série e a etapa da original: o sistema a mostra como “${esc(c.etapa || 'etapa')} · aplicação extra”, e
+          as duas não se confundem. No papel, a etapa sai como está escrita.</span></label>
       <div class="form-linha">
         <div class="campo"><label>Data de aplicação</label>
-          <input class="caixa" type="date" id="cfg-data" value="${esc(p.dataAplicacao || '')}"></div>
+          <input class="caixa" type="date" id="cfg-data" value="${esc(c.dataAplicacao)}"></div>
         <div class="campo"><label>Duração</label>
-          <input class="caixa" id="cfg-dur" value="${esc(p.duracao || '')}"></div>
+          <input class="caixa" id="cfg-dur" value="${esc(c.duracao)}"></div>
       </div>
       <div class="form-linha">
         <div class="campo"><label>Questões — prova regular</label>
-          <input class="caixa" type="number" min="1" max="300" id="cfg-qtd"
-            value="${totalDeQuestoes(p, 'regular') ?? ''}" placeholder="a definir"></div>
+          <input class="caixa" type="number" min="1" max="300" id="cfg-qtd" data-mud="cfg-qtd"
+            value="${c.qtd ?? ''}" placeholder="a definir"></div>
         <div class="campo"><label>Questões — prova adaptada</label>
           <input class="caixa" type="number" min="1" max="300" id="cfg-qtd-ada"
-            value="${totalDeQuestoes(p, 'adaptada') ?? ''}" placeholder="a definir"></div>
+            value="${c.qtdAda ?? ''}" placeholder="a definir"></div>
       </div>
       <p style="font-size:12px;color:var(--ink-2);margin:-4px 0 12px">São <b>dois</b> números porque a prova adaptada
         (de inclusão) tem tamanho próprio. O painel compara cada versão com os itens já aprovados nela, e a regular
         também com os espaços dos textos-base. Campo em branco significa <em>a definir</em> — a barra fica sem
         denominador em vez de mostrar zero.</p>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:8px">
-        <input type="checkbox" id="cfg-tem-red" ${p.temRedacao !== false ? 'checked' : ''}> esta prova tem redação</label>
+        <input type="checkbox" id="cfg-tem-red" ${c.temRedacao ? 'checked' : ''}> esta prova tem redação</label>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700">
-        <input type="checkbox" id="cfg-red" ${p.imprimirRedacao !== false ? 'checked' : ''}> imprimir a folha de redação no cartão-resposta
+        <input type="checkbox" id="cfg-red" ${c.imprimirRedacao ? 'checked' : ''}> imprimir a folha de redação no cartão-resposta
         <span style="font-weight:400;color:var(--ink-2)">— uma folha a mais por estudante, com a pauta de ${LINHAS_REDACAO} linhas</span></label>
       <p style="font-size:12px;color:var(--ink-2);margin:10px 0 0">Sem redação, a prova não tem proposta, nem folha de
         redação, nem lançamento de NC/NE/TL. A <b>proposta</b> — tema, comando e textos motivadores — é escrita na tela
-        <b>Redação</b>, e sai nas últimas páginas do caderno.</p>
+        <b>Redação</b>, e sai nas últimas páginas do caderno.</p>`;
+}
+
+function dlgProva(p) {
+  erroDaProva = null;
+  const origem = p.duplicadaDe;
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Configurar a prova</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      ${htmlCamposDaProva(camposDaProva(p))}
+      ${origem ? `<p class="nota-copia" style="margin-top:14px">Esta prova foi criada como cópia de
+        <b>${esc(origem.rotulo)}</b>${origem.em ? `, em ${esc(origem.em)}` : ''}. Ela é independente:
+        o que mudar aqui não muda a original.</p>` : ''}
     </div>
     <div class="dlg-pe">
-      ${!nova && provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
+      ${provasOrdenadas().length > 1 ? `<button class="btn vermelho" style="margin-right:auto" data-acao="prova-excluir" data-id="${esc(p.id)}">Excluir prova</button>` : ''}
       <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
-      <button class="btn" data-acao="cfg-salvar" data-id="${esc(p.id)}" data-nova="${nova ? '1' : ''}">Salvar</button></div>`);
+      <button class="btn" data-acao="cfg-salvar" data-id="${esc(p.id)}">Salvar</button></div>`);
 }
 
 ACOES['cfg'] = () => { const p = provaAtual(); if (p) dlgProva(p); };
-ACOES['prova-nova'] = () => {
-  const usadas = new Set(provasOrdenadas().map(p => p.serie));
-  const livre = SERIES.find(s => !usadas.has(s)) || SERIES[0];
-  dlgProva(provaNova(livre, provasOrdenadas().length), true);
-};
 
 ACOES['cfg-salvar'] = d => {
-  const numero = sel => {
-    const n = parseInt($(sel).value, 10);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  };
-  const dados = {
-    nome: $('#cfg-nome').value.trim(),
-    serie: $('#cfg-serie').value,
-    etapa: $('#cfg-etapa').value.trim(),
-    dataAplicacao: $('#cfg-data').value,
-    duracao: $('#cfg-dur').value.trim(),
-    totalQuestoes: { regular: numero('#cfg-qtd'), adaptada: numero('#cfg-qtd-ada') },
-    temRedacao: $('#cfg-tem-red').checked,
-    imprimirRedacao: $('#cfg-red').checked
-  };
+  const alvo = provaPorId(d.id);
+  if (!alvo) return;
+  const dados = dadosDosCampos(recolherCamposDaProva());
   if (!dados.nome || !dados.etapa) { toast('Nome e etapa são obrigatórios.'); return; }
-
-  let alvo;
-  if (d.nova) {
-    if (provasOrdenadas().some(p => p.serie === dados.serie && p.etapa === dados.etapa)) {
-      toast(`Já existe uma prova de ${dados.serie} na ${dados.etapa}.`); return;
-    }
-    alvo = { ...provaNova(dados.serie, provasOrdenadas().length), ...dados, id: uid() };
-    S.provas.push(alvo);
-    S.provaAtiva = alvo.id;
-    salvarProvaAtiva(alvo.id);
-    sincronizarElenco(alvo.id);
-  } else {
-    alvo = provaPorId(d.id);
-    if (!alvo) return;
-    const mudouSerie = alvo.serie !== dados.serie;
-    Object.assign(alvo, dados);
-    // Trocar a série de uma prova troca quem a faz.
-    if (mudouSerie) sincronizarElenco(alvo.id);
-  }
+  if (provaDeMesmoNome(dados, alvo.id)) { toast(avisoDeMesmoNome(dados)); return; }
+  const mudouSerie = alvo.serie !== dados.serie;
+  const deixouDeSerExtra = !!alvo.aplicacaoExtra && !dados.aplicacaoExtra;
+  Object.assign(alvo, dados);
+  // Trocar a série de uma prova troca quem a faz — menos na aplicação extra,
+  // cuja lista foi lançada à mão. E a prova que deixa de ser aplicação extra
+  // volta à regra de toda prova: a série inteira.
+  if (mudouSerie || deixouDeSerExtra) sincronizarElenco(alvo.id);
   $('#dlg').close(); commit(); PERS.prova(alvo); PERS.elenco(alvo.id);
-  toast(d.nova ? `Prova de ${alvo.serie} criada.` : 'Prova atualizada.');
+  toast(deixouDeSerExtra
+    ? 'Prova atualizada. Ela deixou de ser aplicação extra, e os estudantes voltam a ser os da série.'
+    : 'Prova atualizada.');
+};
+
+/* ================= nova prova: em branco, ou cópia de outra =================
+   A coordenação reaproveita prova: o simulado do 3º trimestre nasce do que já
+   foi aplicado na 1ª etapa, com uns itens trocados e outros mantidos. Até aqui
+   isso era refazer à mão — cadastrar de novo cada texto-base e cada item —, ou
+   mexer na prova aplicada, que é justamente a que não pode mudar: ela tem
+   cartões impressos, respostas lançadas, boletins emitidos e itens anulados.
+
+   Duplicar cria uma PROVA NOVA, com identidade própria em tudo:
+
+   · a prova, os textos-base e os itens ganham `id` novo. Nada na cópia aponta
+     para a original, a não ser `copiadoDe`/`duplicadaDe`, que é só rastro — a
+     tela os usa para dizer de onde a coisa veio, e nenhuma regra os lê;
+   · as FIGURAS ganham arquivo próprio no bucket (`duplicarImagem`). Referência
+     compartilhada faria a cópia depender da original para sempre;
+   · o que é da aplicação fica para trás: data, respostas, notas, metas de
+     alocação, a conversa da revisão, o histórico e a marca de item anulado. A
+     cópia é uma prova que ainda não foi aplicada;
+   · o que é da prova vem junto e é editável como sempre: capa, instruções,
+     tamanho, e — se marcado — a proposta de redação. Ter ou não redação é
+     escolha da cópia, independente do que a original fez.
+
+   O item copiado chega no MESMO status em que estava: o aprovado entra direto
+   no caderno novo, e o que estava em revisão continua na etapa dele. Mexer
+   nele segue o fluxo de sempre, e a original não fica sabendo.
+
+   A versão adaptada de um item (`derivadoDe`) anda junto com ele: marcar um
+   marca o outro. Separá-los deixaria a cópia apontando para um item da prova
+   original, ou a prova adaptada nova sem a adaptação. */
+let rascProva = null;   // { modo, origemId, campos, textos:Set, itens:Set, trazerProposta }
+
+function novaProvaEmBranco() {
+  const usadas = new Set(provasOrdenadas().map(p => p.serie));
+  const livre = SERIES.find(s => !usadas.has(s)) || SERIES[0];
+  return camposDaProva(provaNova(livre, provasOrdenadas().length));
+}
+
+// Os textos da origem na ordem da prova: os aprovados pelo número, depois as
+// sugestões, que ainda não têm número.
+function textosDaOrigem(origemId) {
+  const lista = textosDaProva(origemId);
+  return [
+    ...lista.filter(t => t.status === 'aprovado').sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0)),
+    ...lista.filter(t => t.status !== 'aprovado')
+  ];
+}
+const itensDoTextoNaOrigem = (origemId, textoId) =>
+  S.itens.filter(i => i.provaId === origemId && i.textoId === textoId);
+
+// Os mesmos itens na ordem em que a prova os numera — o caderno agrupa por
+// tipo dentro do bloco, e a ordem gravada sozinha listaria “1, 2, 4, 3”. A
+// adaptação própria vem logo abaixo do original; o que não está na prova
+// montada (ainda não aprovado) vai para o fim do bloco.
+function itensDoTextoNaOrdem(origemId, textoId, numeros) {
+  const lista = itensDoTextoNaOrigem(origemId, textoId);
+  const chave = new Map();
+  lista.forEach((i, k) => {
+    const n = numeros.get(i.id);
+    chave.set(i.id, n?.regular ?? (n?.adaptada != null ? 500 + n.adaptada : 1000 + k));
+  });
+  for (const i of lista)
+    if (i.derivadoDe && chave.has(i.derivadoDe)) chave.set(i.id, chave.get(i.derivadoDe) + 0.5);
+  return lista.slice().sort((a, b) => chave.get(a.id) - chave.get(b.id));
+}
+
+// O item regular e a versão adaptada dele, de um lado ou do outro do vínculo.
+function parNaCopia(item) {
+  const outro = item.derivadoDe ? S.itens.find(i => i.id === item.derivadoDe) : itemAdaptadoDe(item.id);
+  return outro && outro.provaId === item.provaId ? outro : null;
+}
+
+// Marcar um item traz o texto dele junto: item sem o seu texto-base não tem
+// onde ficar na prova.
+function marcarNaCopia(item, dentro) {
+  for (const x of [item, parNaCopia(item)].filter(Boolean)) {
+    if (dentro) { rascProva.itens.add(x.id); rascProva.textos.add(x.textoId); }
+    else rascProva.itens.delete(x.id);
+  }
+}
+
+// O ponto de partida: a prova como ela saiu — textos aprovados e itens
+// aprovados. O item anulado fica de fora (ele foi anulado por um defeito), e o
+// que não chegou a ser aprovado também; os dois continuam na lista para quem
+// quiser marcá-los.
+function selecaoPadrao(origemId) {
+  rascProva.textos = new Set(textosDaProva(origemId).filter(t => t.status === 'aprovado').map(t => t.id));
+  rascProva.itens = new Set();
+  for (const t of textosDaOrigem(origemId))
+    for (const i of itensDoTextoNaOrigem(origemId, t.id))
+      if (i.status === 'aprovado' && !i.anulado && rascProva.textos.has(i.textoId)) marcarNaCopia(i, true);
+}
+
+// `digitados` é o que a pessoa já escreveu na etapa e na data — trocar de prova
+// de origem não pode apagar isso, porque não veio de origem nenhuma.
+function escolherOrigem(origemId, digitados = { etapa: '', dataAplicacao: '' }) {
+  const origem = provaPorId(origemId);
+  rascProva.origemId = origem?.id || null;
+  if (!origem) return;
+  // A cópia começa igual à original no que é configuração, e em branco no que
+  // é da aplicação. A etapa vem vazia de propósito: série e etapa são o nome da
+  // prova no seletor, e a cópia não pode se chamar como a original.
+  rascProva.campos = { ...camposDaProva(origem),
+                       etapa: digitados.etapa, dataAplicacao: digitados.dataAplicacao };
+  rascProva.trazerProposta = true;
+  selecaoPadrao(origem.id);
+}
+
+ACOES['prova-nova'] = () => {
+  if (!ehCoord()) return;
+  erroDaProva = null;
+  rascProva = { modo: 'zero', origemId: null, campos: novaProvaEmBranco(),
+                textos: new Set(), itens: new Set(), trazerProposta: true };
+  dlgNovaProva();
+};
+
+function dlgNovaProva() {
+  const r = rascProva;
+  const origem = r.modo === 'duplicar' ? provaPorId(r.origemId) : null;
+  const haOrigem = provasOrdenadas().length > 0;
+  const opcaoModo = (valor, titulo, desc) => `
+        <label class="capa-arranjo-op${r.modo === valor ? ' sel' : ''}">
+          <input type="radio" name="np-modo" value="${valor}" data-mud="np-modo" ${r.modo === valor ? 'checked' : ''}>
+          <span class="capa-arranjo-txt"><strong>${titulo}</strong>${desc}</span></label>`;
+  const opsOrigem = provasOrdenadas().map(p => {
+    const n = itensDaProva(p.id).length;
+    return `<option value="${esc(p.id)}" ${p.id === r.origemId ? 'selected' : ''}>${
+      esc(rotuloProva(p))} — ${esc(p.nome)} (${n} ${n === 1 ? 'item' : 'itens'})</option>`;
+  }).join('');
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Nova prova</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      ${haOrigem ? `<div class="campo" style="margin-bottom:14px"><label>Como começar</label>
+        <div class="capa-arranjos np-modos">
+          ${opcaoModo('zero', 'Prova em branco', 'Textos-base e itens são escritos do começo pela equipe.')}
+          ${opcaoModo('duplicar', 'Duplicar uma prova existente',
+            'Aproveita textos-base e itens de outra prova — todos ou só alguns. A cópia é uma prova nova: o que mudar nela não muda a original.')}
+        </div></div>` : ''}
+      ${origem ? `<div${marcaDaProva('origem')} style="margin-bottom:14px"><label>Prova de origem</label>
+        <select class="caixa" data-mud="np-origem">${opsOrigem}</select>${avisoDaProva('origem')}</div>` : ''}
+      ${htmlCamposDaProva(r.campos, { dicaEtapa: origem ? `diferente de “${origem.etapa}”` : '' })}
+      ${origem ? htmlEscolhaDaCopia(origem) : ''}
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="np-criar">${origem ? 'Criar a cópia' : 'Criar prova'}</button></div>`, !!origem);
+}
+
+function htmlEscolhaDaCopia(origem) {
+  const r = rascProva;
+  const numeros = new Map(itensDaProvaComNumeros(origem.id).map(x => [x.item.id, x.numeros]));
+  const linhaItem = item => {
+    const n = numeros.get(item.id);
+    const dentro = r.itens.has(item.id);
+    return `
+          <label class="adap-item${dentro ? ' dentro' : ''}">
+            <input type="checkbox" data-mud="np-item" data-id="${esc(item.id)}" ${dentro ? 'checked' : ''}>
+            <span class="adap-n" title="${n ? esc(numerosDoItem(n)) : 'fora da prova montada'}">${n?.regular ?? (n?.adaptada ? '↳' : '—')}</span>
+            <span class="t t${item.tipo}">${item.tipo}</span>
+            ${discChip(item.componente)}
+            <span class="adap-enun">${esc(simples(item.enunciado).slice(0, 90))}</span>
+            ${item.derivadoDe ? '<span class="adap-marca">↳ adaptação</span>' : ''}
+            ${item.anulado ? '<span class="adap-marca np-anulado">✳ anulado na original</span>' : ''}
+            ${item.status !== 'aprovado' ? `<span class="adap-marca np-status">${esc(STATUS_ITEM[item.status]?.rot || item.status)}</span>` : ''}
+          </label>`;
+  };
+  const blocos = textosDaOrigem(origem.id).map(t => {
+    const itens = itensDoTextoNaOrdem(origem.id, t.id, numeros);
+    const vem = r.textos.has(t.id);
+    const rot = t.status === 'aprovado' ? `Texto ${t.numero ?? '?'}` : 'Sugestão';
+    return `
+        <div class="adap-bloco${vem ? '' : ' fora'}">
+          <div class="adap-bloco-cab">
+            <input type="checkbox" data-mud="np-texto" data-id="${esc(t.id)}" ${vem ? 'checked' : ''}
+              title="Copiar este texto-base" aria-label="Copiar ${esc(rot)}">
+            <b>${esc(rot)} — ${esc((t.titulo || '').slice(0, 56))}</b>
+            <span class="adap-conta" id="np-c-${esc(t.id)}">${itens.filter(i => r.itens.has(i.id)).length} de ${itens.length}</span>
+            ${itens.length ? `<span class="adap-bloco-acoes">
+              <button class="btn mini fantasma" data-acao="np-bloco" data-id="${esc(t.id)}" data-v="1">todos</button>
+              <button class="btn mini fantasma" data-acao="np-bloco" data-id="${esc(t.id)}" data-v="0">nenhum</button>
+            </span>` : ''}
+          </div>
+          ${itens.map(linhaItem).join('')}
+        </div>`;
+  }).join('');
+  const temProposta = propostaEscrita(origem.id);
+  return `
+      <div class="np-copia">
+        <h3>O que vem da prova de origem</h3>
+        <p class="np-explica">Vêm marcados os textos-base e os <b>itens aprovados</b> — a prova como ela saiu.
+          Desmarque o que não serve; marque o que quiser trazer a mais. Texto-base marcado sem nenhum item vem
+          vazio, pronto para receber itens novos. A versão adaptada de um item acompanha o item.</p>
+        <div id="np-resumo">${htmlResumoDaCopia(r.campos.qtd)}</div>
+        <div class="adap-barra">
+          <button class="btn mini fantasma" data-acao="np-todos" data-v="aprovados">Só os aprovados</button>
+          <button class="btn mini fantasma" data-acao="np-todos" data-v="1">Marcar tudo</button>
+          <button class="btn mini fantasma" data-acao="np-todos" data-v="0">Desmarcar tudo</button>
+        </div>
+        <div class="adap-lista">${blocos || '<div class="vazio" style="padding:14px">A prova de origem não tem textos-base.</div>'}</div>
+        ${temProposta ? `<label class="np-opcao"><input type="checkbox" data-mud="np-proposta" ${r.trazerProposta ? 'checked' : ''}>
+          <span>trazer também a <b>proposta de redação</b> (“${esc(proposta(origem.id).tema || 'sem tema')}”) —
+          vale se a nova prova tiver redação</span></label>` : ''}
+        <p class="adap-nota">Vêm também a capa, as instruções e o tamanho da prova. <b>Não vêm</b>: data de aplicação,
+          respostas e notas lançadas, metas de alocação, a conversa da revisão, o histórico dos itens e a marca de item
+          anulado — isso tudo é da aplicação original. Os estudantes da nova prova são os da série escolhida acima.</p>
+      </div>`;
+}
+
+// `meta` é o tamanho da regular. Ao montar o diálogo ele vem da cópia de
+// trabalho — o campo que está na tela nessa hora é o do diálogo ANTERIOR —, e
+// ao repintar vem do próprio campo, que fica acima da lista e pode estar sendo
+// editado.
+function htmlResumoDaCopia(meta) {
+  const r = rascProva;
+  const itens = S.itens.filter(i => i.provaId === r.origemId && r.itens.has(i.id));
+  const aprovados = itens.filter(i => i.status === 'aprovado');
+  const nReg = aprovados.filter(i => i.versao !== 'adaptada').length;
+  const nAda = aprovados.filter(i => i.versao !== 'regular').length;
+  const outros = itens.length - aprovados.length;
+  const porTipo = {};
+  for (const i of itens) porTipo[i.tipo] = (porTipo[i.tipo] || 0) + 1;
+  const tipos = Object.keys(TIPOS).filter(t => porTipo[t])
+    .map(t => `<span class="t t${t}">${t}</span> ${porTipo[t]}`).join(' · ');
+  const nTextos = r.textos.size;
+  return `
+        <div class="adap-resumo${meta && meta === nReg ? ' certo' : ''}">
+          <div class="adap-numero"><b>${itens.length}</b><span>${itens.length === 1 ? 'item' : 'itens'}</span></div>
+          <div class="adap-detalhe">
+            <p><b>${nTextos}</b> ${nTextos === 1 ? 'texto-base' : 'textos-base'} · <b>${nReg}</b> aprovados na prova
+              regular e <b>${nAda}</b> na adaptada</p>
+            <p class="adap-linha">Tamanho da regular, no campo acima: ${meta ? `<b>${meta}</b>` : '<em>a definir</em>'}${
+              meta === nReg ? ' · <b class="ok">bate com a seleção</b>'
+                : ` <button class="btn mini fantasma" data-acao="np-usar-qtd" data-n="${nReg}">usar ${nReg}</button>`}</p>
+            ${outros ? `<p class="adap-linha">${outros} ${outros === 1 ? 'item ainda não aprovado vem' : 'itens ainda não aprovados vêm'}
+              na etapa da revisão em que ${outros === 1 ? 'está' : 'estão'}</p>` : ''}
+            ${tipos ? `<p class="adap-linha">Por tipo: ${tipos}</p>` : ''}
+          </div>
+        </div>`;
+}
+
+// Redesenha só o que a marcação muda. Remontar o diálogo inteiro levaria quem
+// está no meio da lista de volta ao topo a cada clique.
+function repintarCopia() {
+  const r = rascProva;
+  for (const cx of $$('[data-mud="np-item"]')) {
+    const dentro = r.itens.has(cx.dataset.id);
+    cx.checked = dentro;
+    cx.closest('.adap-item')?.classList.toggle('dentro', dentro);
+  }
+  for (const cx of $$('[data-mud="np-texto"]')) {
+    const id = cx.dataset.id;
+    cx.checked = r.textos.has(id);
+    cx.closest('.adap-bloco')?.classList.toggle('fora', !r.textos.has(id));
+    const conta = document.getElementById(`np-c-${id}`);
+    const ids = itensDoTextoNaOrigem(r.origemId, id).map(i => i.id);
+    if (conta) conta.textContent = `${ids.filter(x => r.itens.has(x)).length} de ${ids.length}`;
+  }
+  const resumo = $('#np-resumo');
+  if (resumo) resumo.innerHTML = htmlResumoDaCopia(parseInt($('#cfg-qtd')?.value, 10) || null);
+}
+
+MUDS['np-modo'] = (d, el) => {
+  erroDaProva = null;
+  rascProva.modo = el.value;
+  // Cada modo tem o seu ponto de partida: em branco é a série livre, cópia é a
+  // prova de origem.
+  if (el.value === 'duplicar') escolherOrigem(rascProva.origemId || idProvaAtual());
+  else rascProva.campos = novaProvaEmBranco();
+  dlgNovaProva();
+};
+MUDS['np-origem'] = (d, el) => {
+  erroDaProva = null;
+  const { etapa, dataAplicacao } = recolherCamposDaProva();
+  escolherOrigem(el.value, { etapa, dataAplicacao });
+  dlgNovaProva();
+};
+MUDS['np-item'] = (d, el) => {
+  const item = S.itens.find(i => i.id === d.id);
+  if (item) marcarNaCopia(item, el.checked);
+  repintarCopia();
+};
+MUDS['np-texto'] = (d, el) => {
+  if (el.checked) rascProva.textos.add(d.id);
+  else {
+    rascProva.textos.delete(d.id);
+    for (const i of itensDoTextoNaOrigem(rascProva.origemId, d.id)) marcarNaCopia(i, false);
+  }
+  repintarCopia();
+};
+MUDS['np-proposta'] = (d, el) => { rascProva.trazerProposta = el.checked; };
+MUDS['cfg-qtd'] = () => { if (rascProva && $('#np-resumo')) repintarCopia(); };
+// Aplicação extra de uma cópia é, quase sempre, a MESMA etapa da original — a
+// etapa vazia já vem preenchida com ela ao marcar.
+MUDS['cfg-extra'] = (d, el) => {
+  const etapa = $('#cfg-etapa');
+  const origem = $('#dlg .np-copia') && rascProva?.modo === 'duplicar' ? provaPorId(rascProva.origemId) : null;
+  if (el.checked && origem && etapa && !etapa.value.trim()) etapa.value = origem.etapa;
+};
+ACOES['np-usar-qtd'] = d => { $('#cfg-qtd').value = d.n; repintarCopia(); };
+ACOES['np-bloco'] = d => {
+  for (const i of itensDoTextoNaOrigem(rascProva.origemId, d.id)) marcarNaCopia(i, d.v === '1');
+  repintarCopia();
+};
+ACOES['np-todos'] = d => {
+  const r = rascProva;
+  if (d.v === 'aprovados') selecaoPadrao(r.origemId);
+  else if (d.v === '1') {
+    for (const t of textosDaOrigem(r.origemId)) {
+      r.textos.add(t.id);
+      for (const i of itensDoTextoNaOrigem(r.origemId, t.id)) r.itens.add(i.id);
+    }
+  } else { r.textos.clear(); r.itens.clear(); }
+  repintarCopia();
+};
+
+function recusarProva(campo, msg) {
+  erroDaProva = { campo, msg };
+  // Nesta ordem: remontar devolve o aviso ao corpo da página (`abrirDlg`), então
+  // ele é dito depois, com o diálogo novo de pé.
+  dlgNovaProva();
+  toast(msg);
+  const alvo = $(`[data-erro-campo="prova-${campo}"]`);
+  if (alvo) {
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    alvo.querySelector('input, select')?.focus({ preventScroll: true });
+  }
+  return false;
+}
+
+ACOES['np-criar'] = async (d, botao) => {
+  const r = rascProva;
+  if (!r || !ehCoord()) return;
+  r.campos = recolherCamposDaProva();
+  const c = r.campos;
+  const origem = r.modo === 'duplicar' ? provaPorId(r.origemId) : null;
+  if (r.modo === 'duplicar' && !origem) return recusarProva('origem', 'Escolha a prova de origem.');
+  if (!c.nome) return recusarProva('nome', 'Dê um nome à prova: ele sai na capa e no cabeçalho do caderno.');
+  if (!c.etapa) return recusarProva('etapa', origem
+    ? 'Diga a etapa da nova prova. Série e etapa são o nome dela no seletor, e a cópia não pode se chamar como a original.'
+    : 'Diga a etapa da prova: ela sai no cabeçalho do caderno e identifica a prova no seletor.');
+  if (provaDeMesmoNome(c)) return recusarProva('etapa', avisoDeMesmoNome(c));
+  erroDaProva = null;
+
+  const nova = { ...provaNova(c.serie, provasOrdenadas().length), ...dadosDosCampos(c), id: uid() };
+  if (!origem) {
+    S.provas.push(nova);
+    S.provaAtiva = nova.id;
+    salvarProvaAtiva(nova.id);
+    sincronizarElenco(nova.id);
+    // Aplicação extra nasce sem ninguém: quem a faz é a lista lançada a seguir.
+    if (nova.aplicacaoExtra) S.elencos[nova.id] = [];
+    $('#dlg').close(); commit(); PERS.prova(nova); PERS.elenco(nova.id);
+    if (nova.aplicacaoExtra) abrirElenco(nova.id, { aviso: `Prova de ${nova.serie} criada.` });
+    else toast(`Prova de ${nova.serie} criada.`);
+    return;
+  }
+
+  // A cópia é gravada esperando a resposta: o diálogo só fecha quando o banco
+  // aceitou tudo, e diz o motivo, com a escolha ainda na tela, quando recusou.
+  const rotulo = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Copiando…';
+  let feito;
+  try {
+    feito = await duplicarProva(origem, nova, r);
+  } catch (e) {
+    botao.disabled = false;
+    botao.textContent = rotulo;
+    toast(`⚠ A cópia não foi criada — ${e?.message || e}. Nada foi gravado.`);
+    return;
+  }
+  S.provaAtiva = nova.id;
+  salvarProvaAtiva(nova.id);
+  $('#dlg').close();
+  commit();
+  const { textos, itens, faltando } = feito;
+  const resumo = `${itens.length} ${itens.length === 1 ? 'item' : 'itens'} e ${textos.length} ${
+    textos.length === 1 ? 'texto-base' : 'textos-base'}`;
+  const criada = `Prova de ${nova.serie} criada como cópia de ${rotuloProva(origem)}: ${resumo}.`;
+  if (!faltando.length) {
+    if (nova.aplicacaoExtra) abrirElenco(nova.id, { aviso: criada });
+    else toast(criada);
+    return;
+  }
+  // Figura que já não existia na original não tem de onde ser copiada. Isso
+  // precisa ser dito de um jeito que fique — um aviso de passagem some, e a
+  // figura só faria falta no caderno impresso. O aviso de passagem que ainda
+  // estiver no ar é de uma tentativa anterior (“a cópia não foi criada”), e sai:
+  // ao lado deste diálogo, ele afirmaria o contrário.
+  $('#toast')?.classList.remove('on');
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Prova criada, com figura faltando</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p style="margin-top:0">A cópia de <b>${esc(rotuloProva(origem))}</b> foi criada com ${resumo}. Mas
+        ${faltando.length === 1 ? 'uma figura já não existia' : `${faltando.length} figuras já não existiam`} no
+        banco, <b>na prova de origem</b>, e por isso ${faltando.length === 1 ? 'continua faltando' : 'continuam faltando'}
+        também na cópia:</p>
+      <ul style="font-size:13px;line-height:1.7">${faltando.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+      <p style="font-size:13px;color:var(--ink-2)">Abra cada um, remova a figura quebrada e envie o arquivo de novo —
+        nas duas provas, se a original ainda for impressa.</p>
+    </div>
+    <div class="dlg-pe">${nova.aplicacaoExtra
+      ? `<button class="btn" data-acao="elenco-abrir" data-aviso="${esc(criada)}">Lançar os estudantes desta aplicação</button>`
+      : '<button class="btn" data-acao="fechar-dlg">Entendi</button>'}</div>`);
+};
+
+// Monta a cópia, copia as figuras e grava. Se qualquer passo falhar, desfaz o
+// que chegou a ser gravado e lança o motivo: meia cópia — prova sem itens,
+// itens sem prova — seria pior que nenhuma, e ficaria no seletor de todo mundo.
+async function duplicarProva(origem, nova, r) {
+  const clone = x => JSON.parse(JSON.stringify(x));
+
+  for (const k of ['capaArranjo', 'capaImagem', 'instrucoes'])
+    if (origem[k] !== undefined) nova[k] = clone(origem[k]);
+  if (nova.temRedacao && r.trazerProposta && propostaEscrita(origem.id))
+    nova.redacao = clone(origem.redacao);
+  nova.duplicadaDe = {
+    id: origem.id, rotulo: `${rotuloProva(origem)} — ${origem.nome}`,
+    em: new Date().toLocaleDateString('pt-BR')
+  };
+
+  // Textos: os aprovados renumerados em sequência — tirar o texto 3 não pode
+  // deixar a prova nova pulando do 2 para o 4.
+  const novoTexto = new Map();
+  const ondeTexto = new Map();   // como a mensagem chama o texto: pelo número da ORIGEM
+  let numero = 0;
+  const textos = textosDaOrigem(origem.id).filter(t => r.textos.has(t.id)).map(t => {
+    const copia = clone(t);
+    copia.id = uid();
+    copia.provaId = nova.id;
+    if (copia.status === 'aprovado') copia.numero = ++numero;
+    copia.copiadoDe = { provaId: origem.id, textoId: t.id };
+    novoTexto.set(t.id, copia.id);
+    ondeTexto.set(copia.id, `texto ${t.status === 'aprovado' ? t.numero : 'sugerido'} (${t.titulo || 'sem título'})`);
+    return copia;
+  });
+
+  // Itens: na ordem em que estão na original, que é a ordem dentro de cada tipo
+  // no caderno.
+  const numeros = new Map(itensDaProvaComNumeros(origem.id).map(x => [x.item.id, x.numeros]));
+  const escolhidos = S.itens.filter(i =>
+    i.provaId === origem.id && r.itens.has(i.id) && novoTexto.has(i.textoId));
+  const novoItem = new Map(escolhidos.map(i => [i.id, uid()]));
+  const ondeEsta = new Map();
+  const itens = escolhidos.map((i, ordem) => {
+    const copia = clone(i);
+    copia.id = novoItem.get(i.id);
+    copia.provaId = nova.id;
+    copia.textoId = novoTexto.get(i.textoId);
+    if (copia.derivadoDe) {
+      if (novoItem.has(copia.derivadoDe)) copia.derivadoDe = novoItem.get(copia.derivadoDe);
+      else delete copia.derivadoDe;
+    }
+    copia.ordem = ordem;
+    copia.comentarios = [];
+    copia.historico = [];
+    delete copia.anulado; delete copia.anuladoPor; delete copia.anuladoEm;
+    copia.copiadoDe = { provaId: origem.id, itemId: i.id };
+    const n = numeros.get(i.id);
+    ondeEsta.set(copia.id, n ? `item ${numerosDoItem(n)} (${i.componente})` : `item de ${i.componente} ainda não aprovado`);
+    return copia;
+  });
+
+  // Figuras: cada uma ganha arquivo próprio na pasta da prova nova.
+  const vagas = [];
+  for (const t of textos)
+    (t.imagens || []).forEach((img, k) =>
+      vagas.push({ img, dono: 'textos', onde: ondeTexto.get(t.id), por: n => { t.imagens[k] = n; } }));
+  for (const i of itens) {
+    (i.imagens || []).forEach((img, k) =>
+      vagas.push({ img, dono: 'itens', onde: ondeEsta.get(i.id), por: n => { i.imagens[k] = n; } }));
+    (i.imagensOpcoes || []).forEach((lista, o) => (lista || []).forEach((img, k) =>
+      vagas.push({ img, dono: 'itens', onde: `${ondeEsta.get(i.id)}, alternativa ${'ABCD'[o]}`,
+                   por: n => { i.imagensOpcoes[o][k] = n; } })));
+  }
+  const copiadas = [];
+  const apagarCopiadas = () => Promise.allSettled(copiadas.map(c => nuvem.apagarImagem(c)));
+  const faltando = [];
+  let falha = null;
+  const resultados = await Promise.allSettled(vagas.map(v =>
+    duplicarImagem(v.img, { modoNuvem, provaId: nova.id, dono: v.dono, uid })));
+  resultados.forEach((res, k) => {
+    const v = vagas[k];
+    if (res.status === 'fulfilled') {
+      if (res.value.caminho && res.value.caminho !== v.img.caminho) copiadas.push(res.value.caminho);
+      v.por(res.value);
+    } else if (arquivoAusente(res.reason)) {
+      // Já quebrada na original: a referência fica como estava, apontando para
+      // o mesmo nada, e quem duplicou fica sabendo.
+      faltando.push(v.onde);
+    } else falha = falha || { onde: v.onde, erro: res.reason };
+  });
+  if (falha) {
+    await apagarCopiadas();
+    throw new Error(`a figura do ${falha.onde} não pôde ser copiada (${falha.erro?.message || falha.erro})`);
+  }
+
+  // A aplicação extra nasce sem estudantes: quem a faz é outro grupo, lançado
+  // depois. As demais seguem a regra de toda prova nova — a série inteira.
+  const elenco = nova.aplicacaoExtra ? [] : S.estudantes.filter(e => e.serie === nova.serie).map(e => e.id);
+  if (modoNuvem) {
+    try {
+      await nuvem.gravarLinha('provas', nova);
+      await nuvem.gravarLinhas('textos', textos);
+      await nuvem.gravarLinhas('itens', itens);
+      await nuvem.gravarElenco(nova.id, elenco);
+    } catch (e) {
+      await Promise.allSettled([
+        nuvem.removerLinhas('itens', itens.map(i => i.id)),
+        nuvem.removerLinhas('textos', textos.map(t => t.id))
+      ]);
+      await nuvem.removerLinha('provas', nova.id).catch(() => {});
+      await apagarCopiadas();
+      throw e;
+    }
+  }
+
+  S.provas.push(nova);
+  S.textos.push(...textos);
+  S.itens.push(...itens);
+  S.elencos = S.elencos || {};
+  S.elencos[nova.id] = elenco;
+  return { textos, itens, faltando };
+}
+
+// O texto-base e o item que vieram de uma prova duplicada dizem de onde vieram
+// — e que são outros. Quem abre a cópia de um item já aplicado precisa saber
+// que pode mexer nele sem alcançar a prova que já saiu.
+function htmlOrigemDaCopia(registro, oque = 'item') {
+  const o = registro?.copiadoDe;
+  if (!o) return '';
+  const pv = provaPorId(o.provaId);
+  return `<p class="nota-copia">Copiado da prova <b>${esc(pv ? rotuloProva(pv) : 'de origem, que já foi excluída')}</b>,
+    quando ela foi duplicada. É ${oque === 'item' ? 'um item independente' : 'um texto-base independente'}: o que
+    mudar aqui não muda o ${oque === 'item' ? 'item' : 'texto'} original.</p>`;
+}
+
+/* ================= a lista de quem faz a aplicação extra =================
+   Toda prova é feita pela série dela, e o elenco se refaz sozinho a cada lista
+   importada (`sincronizarElenco`). A aplicação extra não: quem a faz é outro
+   grupo, e a coordenação LANÇA a lista dele aqui, no mesmo formato da
+   importação da Administração. Ela nasce sem ninguém. Só quem está na lista
+   recebe cartão nominal, entra na correção e vai no pacote do leitor.
+
+   O que a lista faz, e o que não faz:
+   · quem já está no cadastro é reconhecido pela matrícula — texto exato, depois
+     os algarismos, como na importação de respostas — e entra na lista COMO ESTÁ
+     cadastrado. Nome, turma, série e versão não mudam por aqui: a versão é do
+     estudante e vale para toda prova, e a lista de uma aplicação extra não é o
+     lugar de trocá-la;
+   · quem não está no cadastro é cadastrado;
+   · nenhuma outra prova muda. Esta lista não é a lista da escola, e não refaz o
+     elenco de prova nenhuma além desta;
+   · linha com problema impede a gravação. Quem ficasse de fora por um erro de
+     digitação não teria cartão no dia da prova, e ninguém perceberia antes. */
+const textoDaListaExtra = () => $('#el-lista')?.value || '';
+
+// Liga cada linha da lista a um estudante do cadastro, ou a um cadastro novo.
+function conferirListaExtra(provaId) {
+  const { bons, ruins } = lerLinhasEstudantes(textoDaListaExtra());
+  const problemas = ruins.filter(r => r.linha !== '—');      // “vale a última” é aviso, não erro
+  const porTexto = new Map(S.estudantes.map(e => [String(e.matricula).trim(), e]));
+  const porDigitos = new Map();
+  for (const e of S.estudantes) {
+    const dg = digitosDaMatricula(e.matricula);
+    if (dg) porDigitos.set(dg, porDigitos.has(dg) ? null : e);
+  }
+  // Matrícula que cai num cadastro de OUTRO nome é, quase sempre, matrícula
+  // digitada errado — e a prova iria para a pessoa errada. Não impede, porque
+  // nome muda (casamento, grafia), mas aparece na conferência.
+  const nomeSimples = n => String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+  const ja = [], novos = [], divergentes = [];
+  for (const b of bons) {
+    const e = porTexto.get(b.matricula) || porDigitos.get(digitosDaMatricula(b.matricula));
+    if (e) {
+      if (!ja.includes(e)) ja.push(e);
+      if (nomeSimples(e.nome) !== nomeSimples(b.nome)) divergentes.push({ lista: b, cadastro: e });
+    } else novos.push({ id: uid(), ...b });
+  }
+  const manter = !!$('#el-manter')?.checked;
+  const ids = [...new Set([...(manter ? S.elencos?.[provaId] || [] : []),
+                           ...ja.map(e => e.id), ...novos.map(e => e.id)])];
+  return { bons, ruins, problemas, ja, novos, divergentes, ids, manter };
+}
+
+function htmlConferenciaDaLista(c) {
+  if (!textoDaListaExtra().trim()) return '';
+  return `
+      <div class="cartao" style="margin-top:12px">
+        <h3>Conferência</h3>
+        <p style="font-size:13px;margin:0 0 6px"><b>${c.bons.length}</b> ${c.bons.length === 1 ? 'linha válida' : 'linhas válidas'}
+          — ${c.ja.length} já ${c.ja.length === 1 ? 'cadastrado' : 'cadastrados'} (entram como estão no cadastro) e
+          ${c.novos.length} ${c.novos.length === 1 ? 'novo, que será cadastrado' : 'novos, que serão cadastrados'}.
+          ${c.manter ? `Somados aos que já estão, a lista fica com <b>${c.ids.length}</b>.`
+            : `A lista desta aplicação passa a ter <b>${c.ids.length}</b>, no lugar da atual.`}</p>
+        ${c.divergentes.length ? `<p style="font-size:13px;margin:10px 0 6px;color:#b45309"><b>Confira a matrícula</b> —
+          ${c.divergentes.length === 1 ? 'este nome não bate' : 'estes nomes não batem'} com o cadastro. Se a matrícula
+          estiver errada, a prova vai para outra pessoa:</p>
+          <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${c.divergentes.map(x =>
+            `<li>“${esc(x.lista.nome)}” (${esc(x.lista.matricula)}) — no cadastro é <b>${esc(x.cadastro.nome)}</b>,
+              ${esc(x.cadastro.serie)} · ${esc(x.cadastro.turma)}</li>`).join('')}</ul>` : ''}
+        ${c.ruins.length ? `<p style="font-size:13px;margin:10px 0 6px;color:${c.problemas.length ? 'var(--vermelho)' : 'var(--ink-2)'}">
+          ${c.problemas.length ? `<b>${c.problemas.length}</b> ${c.problemas.length === 1 ? 'linha com problema' : 'linhas com problema'} —
+            corrija antes de salvar:` : 'Avisos:'}</p>
+          <ul style="margin:0;padding-left:18px;font-size:12.5px;line-height:1.7">${
+            c.ruins.slice(0, 12).map(r => `<li>linha ${r.linha}: ${esc(r.porque)} —
+              <span style="font-family:var(--mono)">${esc(String(r.texto).slice(0, 60))}</span></li>`).join('')
+          }${c.ruins.length > 12 ? `<li>…e mais ${c.ruins.length - 12}</li>` : ''}</ul>` : ''}
+      </div>`;
+}
+
+function abrirElenco(provaId, { aviso = '' } = {}) {
+  const p = provaPorId(provaId);
+  if (!p || !ehCoord()) return;
+  const atual = estudantesDaProva(p.id).slice().sort((a, b) =>
+    String(a.turma || '').localeCompare(String(b.turma || ''), 'pt-BR') ||
+    String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Estudantes desta aplicação — ${esc(rotuloProva(p))}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      ${aviso ? `<p class="nota-copia">${esc(aviso)} Como é uma <b>aplicação extra</b>, ela começa sem
+        estudantes: lance aqui a lista de quem vai fazê-la. Dá para voltar a ela depois, pelo Painel ou pela tela de
+        Cartões-resposta.</p>` : ''}
+      <p class="np-explica">Só quem estiver nesta lista recebe cartão-resposta nominal, entra na correção e vai no
+        pacote do leitor. Cole uma linha por estudante, como na importação da Administração:</p>
+      <p class="el-formato">nome completo;matrícula;turma;série;versão</p>
+      <p class="np-explica">Quem já está no cadastro é reconhecido pela matrícula e entra como está cadastrado; quem
+        não está é cadastrado. As outras provas não mudam.</p>
+      <textarea class="caixa" id="el-lista" rows="7"
+        placeholder="Antonia Silva de Oliveira;225100142;1ª B;1ª série EM;regular&#10;Elisa Fontes Marques;225100231;9º D;9º ano;adaptada"></textarea>
+      <label class="np-opcao"><input type="checkbox" id="el-manter">
+        <span>manter quem já está na lista — <b>acrescentar</b> estes, em vez de substituir a lista</span></label>
+      <div id="el-previa"></div>
+      <h3 class="el-titulo">Na lista agora: ${atual.length} ${atual.length === 1 ? 'estudante' : 'estudantes'}</h3>
+      ${atual.length ? `<div class="el-atual"><table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Série</th><th>Versão</th></tr></thead>
+        <tbody>${atual.map(e => `<tr><td>${esc(e.nome)}</td><td style="font-family:var(--mono)">${esc(e.matricula)}</td>
+          <td>${esc(e.turma)}</td><td>${esc(e.serie)}</td><td style="text-transform:capitalize">${esc(e.versao)}</td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="vazio">Ninguém ainda — sem estudantes, esta aplicação não tem cartão para imprimir.</div>'}
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" style="margin-right:auto" data-acao="el-conferir" data-id="${esc(p.id)}">Conferir</button>
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      <button class="btn" data-acao="el-salvar" data-id="${esc(p.id)}">Salvar a lista</button></div>`);
+}
+ACOES['elenco-abrir'] = d => abrirElenco(idProvaAtual(), { aviso: d.aviso || '' });
+
+ACOES['el-conferir'] = d => { $('#el-previa').innerHTML = htmlConferenciaDaLista(conferirListaExtra(d.id)); };
+
+// Gravada esperando a resposta: é uma lista que a pessoa acabou de lançar, e o
+// diálogo só fecha quando o banco a aceitou.
+ACOES['el-salvar'] = async (d, botao) => {
+  const p = provaPorId(d.id);
+  if (!p || !ehCoord()) return;
+  if (!textoDaListaExtra().trim()) { toast('Cole a lista de estudantes — ou feche, se não quer mudar a atual.'); return; }
+  const c = conferirListaExtra(p.id);
+  $('#el-previa').innerHTML = htmlConferenciaDaLista(c);
+  if (c.problemas.length || !c.bons.length) {
+    toast(c.bons.length ? 'Corrija as linhas com problema antes de salvar.' : 'Nenhuma linha válida na lista.');
+    $('#el-previa').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+  const recusou = e => {
+    botao.disabled = false;
+    toast('⚠ O banco recusou a lista: ' + (e?.message || e));
+  };
+  if (modoNuvem) {
+    botao.disabled = true;
+    try { await nuvem.gravarLinhas('estudantes', c.novos); }
+    catch (e) { recusou(e); return; }
+  }
+  // Os cadastrados agora entram no estado ANTES da lista ser gravada: se o banco
+  // recusar a lista, eles já existem lá, e uma segunda tentativa sem isto os
+  // cadastraria de novo, com outro id — o mesmo estudante duas vezes.
+  S.estudantes.push(...c.novos);
+  save(S);
+  if (modoNuvem) {
+    try { await nuvem.gravarElenco(p.id, c.ids); }
+    catch (e) { recusou(e); return; }
+  }
+  S.elencos = S.elencos || {};
+  S.elencos[p.id] = c.ids;
+  $('#dlg').close();
+  commit();
+  toast(`${c.ids.length} ${c.ids.length === 1 ? 'estudante' : 'estudantes'} nesta aplicação` +
+    (c.novos.length ? ` · ${c.novos.length} ${c.novos.length === 1 ? 'cadastrado agora' : 'cadastrados agora'}` : '') + '.');
 };
 
 ACOES['prova-excluir'] = d => {
@@ -1803,7 +2576,7 @@ function telaAlocacao() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Alocação — ${esc(p.serie)}</h2>
-        <span class="sub">${esc(p.etapa)} · quantos itens cada docente deve entregar nesta prova</span></div>
+        <span class="sub">${esc(etapaDaProva(p))} · quantos itens cada docente deve entregar nesta prova</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn fantasma" data-acao="aloc-dividir">Dividir igualmente</button>
         <button class="btn fantasma" data-acao="aloc-copiar">Copiar de outra prova</button>
@@ -2031,7 +2804,7 @@ ACOES['aloc-copiar'] = () => {
     <div class="dlg-corpo">
       <div class="campo"><label>Copiar as metas de</label>
         <select class="caixa" id="aloc-de">${outras.map(x =>
-          `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(x.etapa)} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
+          `<option value="${esc(x.id)}">${esc(x.serie)} — ${esc(etapaDaProva(x))} (${somaDasMetas(x.id)} itens)</option>`).join('')}</select></div>
       <p style="font-size:12.5px;color:var(--ink-2);margin:10px 0 0">Substitui as metas desta prova pelas da prova
         escolhida, docente por docente, junto com a divisão por tipo de quem tiver uma. Útil quando a distribuição entre
         as séries é a mesma. Os recados não são copiados.</p>
@@ -2138,7 +2911,7 @@ function telaTextos() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Textos-base — ${esc(pAtiva.serie)}</h2>
-        <span class="sub">${esc(pAtiva.etapa)} · Clique em um espaço livre para alocar um item seu · clique em um item para abri-lo</span></div>
+        <span class="sub">${esc(etapaDaProva(pAtiva))} · Clique em um espaço livre para alocar um item seu · clique em um item para abri-lo</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span class="chip info">Sua produção nesta prova: ${minhaProducao(pAtiva.id).criados} ${minhaProducao(pAtiva.id).criados === 1 ? 'item' : 'itens'}</span>
         ${ehQualquerCoord()
@@ -2215,6 +2988,7 @@ function dlgTexto(t, { preservar = false } = {}) {
       ${somenteLeitura ? `<div class="cartao aviso" style="margin:0 0 14px">
         <p style="font-size:13px;margin:0">Este texto-base já foi aprovado e vale para a prova inteira: só a
           coordenação o altera. Se algo precisa mudar, fale com a coordenação da sua área.</p></div>` : ''}
+      ${novo ? '' : htmlOrigemDaCopia(t, 'texto')}
       <div class="form-linha">
         <div class="campo" style="min-width:260px"><label>Título</label>
           <input class="caixa" id="tx-titulo" value="${esc(r.titulo)}" placeholder="ex.: “O Cerrado e as veredas” — Guimarães Rosa (adapt.)"${somenteLeitura ? ' disabled' : ''}></div>
@@ -2665,6 +3439,8 @@ ACOES['it-adaptar'] = async () => {
   copia.adaptadoPor = S.perfil.nome;
   // As figuras são referências ao mesmo arquivo no bucket, e é o que se quer:
   // a cópia começa com a figura do original e quem adapta troca se precisar.
+  // Tirar a figura da cópia não apaga o arquivo enquanto o original o citar
+  // (`arquivoCitado`, em `img-remover`).
   S.itens.push(copia);
   // O original deixa a prova adaptada para a cópia.
   if (base.versao === 'ambas') { base.versao = 'regular'; PERS.item(base); }
@@ -3034,6 +3810,7 @@ function dlgItem() {
               gráfico. Sai no caderno depois do enunciado${rasc.tipo === 'C' ? ' e antes das opções — a figura que pertence a uma <b>alternativa</b> vai no campo dela, logo abaixo' : ''}.</p></div>
           ${opcoesHtml}${respostaHtml}
 
+          ${htmlOrigemDaCopia(rasc)}
           ${htmlHistoricoDoItem(rasc)}
 
           <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 10px">Conversa da revisão</h3>
@@ -3156,13 +3933,28 @@ MUDS['img-escala']  = (d, el) => {
   reabrirFormularioDe(d.campo);        // a miniatura mostra o tamanho escolhido
 };
 
+// Algum registro GRAVADO ainda cita este arquivo? `S` guarda o que foi salvo; a
+// cópia de trabalho do diálogo (`rasc`, `rascTexto`) fica fora da conta.
+const arquivoCitado = caminho => !!caminho && [...S.textos, ...S.itens].some(r =>
+  [r.imagens, ...(r.imagensOpcoes || [])].some(l => todasAsImagens(l).some(i => i.caminho === caminho)));
+
 ACOES['img-remover'] = async d => {
   const lista = listaDeImagens(d.campo);
   const [fora] = lista.splice(+d.i, 1);
   reabrirFormularioDe(d.campo);
-  // Só apaga do bucket depois de a figura sair do registro: arquivo órfão é
-  // lixo, registro apontando para arquivo apagado é figura quebrada no caderno.
-  await descartarImagem(fora);
+  // Tirar a figura da cópia de trabalho não é tirá-la do registro: isso só
+  // acontece no “Salvar”, que pode nem vir — a pessoa cancela, ou o banco
+  // recusa. Esta linha apagava o arquivo na hora, e quem removia e desistia
+  // deixava o texto gravado apontando para um arquivo que não existe mais — é
+  // o estado em que o texto 4 da 2ª série [3º TRIM] foi encontrado, em outubro
+  // de 2026, com a figura sumida do caderno. E valia também para a figura que a
+  // versão adaptada herda do item regular: remover na cópia apagava a do original.
+  //
+  // Então só sai do bucket o arquivo que NENHUM registro gravado cita — na
+  // prática, o que acabou de ser enviado neste diálogo e nunca foi salvo. O que
+  // já estava gravado vira órfão quando o “Salvar” confirmar a remoção: arquivo
+  // órfão é lixo, registro apontando para arquivo apagado é figura quebrada.
+  if (!arquivoCitado(fora?.caminho)) await descartarImagem(fora);
   toast('Figura removida.');
 };
 
@@ -4266,7 +5058,7 @@ function telaCaderno() {
     <div class="miolo" style="padding-bottom:0">
       <div class="cab-tela">
         <div><h2>Caderno de provas — ${esc(pAtiva.serie)}</h2>
-          <span class="sub">${esc(pAtiva.etapa)} · ${pv.length - naPrevia} itens aprovados nesta versão${
+          <span class="sub">${esc(etapaDaProva(pAtiva))} · ${pv.length - naPrevia} itens aprovados nesta versão${
             naPrevia ? ` · ${naPrevia} em revisão à mostra` : ''} · numeração contínua · diagramação no padrão PAS${
             provaTemRedacao(pAtiva.id) ? (comRedacao ? ' · com a proposta de redação' : ' · proposta de redação ainda em branco') : ' · sem redação'}</span></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -4838,7 +5630,7 @@ function telaRedacao() {
     const lancadas = elenco.filter(e => redLancada(redacaoDe(p.id, e.id))).length;
     return `<tr class="clic" data-acao="ir-para-redacao" data-id="${esc(p.id)}">
       <td><b>${esc(p.serie)}</b>${p.id === pAtiva.id ? ' <span class="chip info">na tela</span>' : ''}</td>
-      <td>${esc(p.etapa)}</td>
+      <td>${esc(etapaDaProva(p))}</td>
       <td>${tem ? '✓' : '<span style="color:var(--ink-2)">sem redação</span>'}</td>
       <td>${!tem ? '—' : ok
         ? `<span class="chip ok">escrita</span>`
@@ -4853,7 +5645,7 @@ function telaRedacao() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Redação — ${esc(pAtiva.serie)}</h2>
-        <span class="sub">${esc(pAtiva.etapa)} · a proposta que o estudante lê e a nota que ele recebe</span></div>
+        <span class="sub">${esc(etapaDaProva(pAtiva))} · a proposta que o estudante lê e a nota que ele recebe</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${podeEscrever && temRed
           ? `<button class="btn ${escrita ? 'fantasma' : 'rosa'}" data-acao="cad-redacao">✍ ${escrita ? 'Editar a proposta' : 'Escrever a proposta'}</button>`
@@ -4863,7 +5655,7 @@ function telaRedacao() {
       </div>
     </div>
 
-    ${!temRed ? `<div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(pAtiva.etapa)}) está marcada como
+    ${!temRed ? `<div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(etapaDaProva(pAtiva))}) está marcada como
       <b>sem redação</b>.${ehCoord() ? ' Isso se muda no Painel, em “⚙ Configurar prova”.' : ''}
       Troque de prova no seletor do menu à esquerda para trabalhar em outra série.</div>`
     : `
@@ -5481,7 +6273,7 @@ function telaCartoes() {
       <td>${totalFolhas(pAtiva.id, e)}</td>
       <td style="white-space:nowrap">
         <button class="btn mini fantasma" data-acao="est-editar" data-id="${e.id}">Editar</button>
-        ${ehCoord() ? `<button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>` : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra ? `<button class="btn mini vermelho" data-acao="est-remover" data-id="${e.id}">Remover</button>` : ''}
       </td></tr>`).join('');
   const opsTurma = ['todas', ...turmas].map(t =>
     `<option value="${t}" ${cartTurma === t ? 'selected' : ''}>${t === 'todas' ? 'Todas as turmas' : t}</option>`).join('');
@@ -5496,8 +6288,9 @@ function telaCartoes() {
         <span class="sub">${elenco.length} ${elenco.length === 1 ? 'estudante' : 'estudantes'} nesta prova · ${folhasTotal} folha(s) a imprimir e digitalizar no filtro atual</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select class="caixa" style="width:auto" data-mud="cart-turma">${opsTurma}</select>
-        ${ehCoord() ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
-        ${ehCoord() ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
+        ${ehCoord() && pAtiva.aplicacaoExtra ? '<button class="btn" data-acao="elenco-abrir">👥 Estudantes desta aplicação</button>' : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
         ${ehCoord() ? `<button class="btn fantasma" data-acao="cart-extras" ${nRegItens + nAdaItens ? '' : 'disabled'}>🖨 Cartões extras</button>` : ''}
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
@@ -5509,7 +6302,9 @@ function telaCartoes() {
         estas folhas caem na fila de conferência do leitor, para lançamento à mão.</p></div>` : ''; })()}
     ${linhas ? `<table><thead><tr><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th><th>Folhas</th><th></th></tr></thead>
       <tbody>${linhas}</tbody></table>`
-      : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
+      : pAtiva.aplicacaoExtra
+        ? `<div class="vazio">Esta aplicação extra ainda não tem estudantes.${ehCoord() ? ' Lance a lista em “👥 Estudantes desta aplicação”.' : ''}</div>`
+        : `<div class="vazio">Nenhum estudante no elenco da prova de ${esc(pAtiva.serie)}.${ehCoord() ? ' Importe a lista em Administração — a série do CSV é o que liga cada estudante à sua prova.' : ''}</div>`}
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn fantasma" data-acao="cart-template">⬇ Exportar pacote da prova (leitor e boletins)</button>
     </div>
@@ -6107,8 +6902,8 @@ function telaCorrecaoRedacao() {
     $('#app').innerHTML = `
     <div class="quadro"><div class="miolo">
       <div class="cab-tela"><div><h2>Redação — lançamento</h2>
-        <span class="sub">${esc(pAtiva.serie)} · ${esc(pAtiva.etapa)}</span></div></div>
-      <div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(pAtiva.etapa)}) <b>não tem redação</b>.
+        <span class="sub">${esc(pAtiva.serie)} · ${esc(etapaDaProva(pAtiva))}</span></div></div>
+      <div class="vazio">A prova de ${esc(pAtiva.serie)} (${esc(etapaDaProva(pAtiva))}) <b>não tem redação</b>.
         Se você corrige a redação de outra série, troque de prova no seletor do menu à esquerda.</div>
     </div></div>`;
     return;
@@ -6116,7 +6911,7 @@ function telaCorrecaoRedacao() {
   $('#app').innerHTML = `
   <div class="quadro"><div class="miolo">
     <div class="cab-tela"><div><h2>Redação — lançamento · ${esc(pAtiva.serie)}</h2>
-      <span class="sub">${esc(pAtiva.etapa)} · NR = NC − 2·NE/TL, pela planilha oficial · cada campo é salvo ao sair dele</span></div></div>
+      <span class="sub">${esc(etapaDaProva(pAtiva))} · NR = NC − 2·NE/TL, pela planilha oficial · cada campo é salvo ao sair dele</span></div></div>
     <div id="red-resumo">${htmlResumoRedacao(pAtiva.id)}</div>
     <div class="red-corr">
       <div class="cartao">
@@ -6280,7 +7075,7 @@ function telaCorrecao() {
   <div class="quadro"><div class="miolo">
     <div class="cab-tela">
       <div><h2>Correção e boletins — ${esc(pAtiva.serie)}</h2>
-        <span class="sub">${esc(pAtiva.etapa)} · lançamento manual, importação do leitor local e relatórios</span></div>
+        <span class="sub">${esc(etapaDaProva(pAtiva))} · lançamento manual, importação do leitor local e relatórios</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn fantasma" data-acao="resp-importar">⬆ Importar respostas (CSV do leitor)</button>
         <button class="btn fantasma" data-acao="notas-exportar">⬇ Planilha de notas (CSV)</button>
@@ -6628,7 +7423,7 @@ function telaAdministracao() {
   const porSerie = SERIES.map(s => {
     const n = S.estudantes.filter(e => e.serie === s).length;
     const provasDaSerie = provasOrdenadas().filter(p => p.serie === s);
-    const elencos = provasDaSerie.map(p => `${esc(p.etapa)}: ${(S.elencos?.[p.id] || []).length}`).join(' · ');
+    const elencos = provasDaSerie.map(p => `${esc(etapaDaProva(p))}: ${(S.elencos?.[p.id] || []).length}`).join(' · ');
     return `<tr><td><b>${esc(s)}</b></td><td>${n}</td>
       <td>${provasDaSerie.length ? elencos : '<span style="color:var(--ink-2)">nenhuma prova desta série</span>'}</td></tr>`;
   }).join('');

@@ -1313,6 +1313,30 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
 .adap-enun{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
 .adap-marca{font-size:10.5px;font-weight:700;color:var(--roxo);white-space:nowrap}
 
+/* ===== nova prova: duplicar uma existente =====
+   A mesma lista da prova adaptada, com uma camada a mais: o texto-base também
+   se marca, porque ele pode vir vazio para receber itens novos. */
+.np-copia{margin-top:16px;padding-top:14px;border-top:1px solid var(--borda)}
+.np-copia h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:0 0 6px}
+.np-explica{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin:0 0 10px}
+.adap-bloco-cab input{flex:none;margin:0;accent-color:var(--azul)}
+.adap-bloco.fora .adap-bloco-cab b{color:var(--ink-2);font-weight:600}
+.np-anulado{color:var(--erro)}
+.np-status{color:var(--ink-2)}
+label.np-opcao{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;margin:12px 0 0;cursor:pointer}
+label.np-opcao input{margin-top:3px;flex:none}
+/* De onde veio a cópia — rastro, não pendência: roxo, como o vínculo de versão. */
+.nota-copia{font-size:12.5px;color:var(--ink-2);line-height:1.55;margin:0 0 12px;
+  border-left:3px solid var(--roxo);padding-left:8px}
+
+/* ===== a lista de estudantes da aplicação extra ===== */
+.el-formato{font-family:var(--mono);font-size:12.5px;background:var(--fundo);border:1px solid var(--borda);
+  border-radius:8px;padding:9px 12px;margin:0 0 10px;overflow-wrap:anywhere}
+#el-lista{font-family:var(--mono);font-size:12.5px;resize:vertical}
+.el-titulo{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);margin:16px 0 8px}
+.el-atual{max-height:38vh;overflow:auto;border:1px solid var(--borda);border-radius:10px}
+.el-atual table{margin:0}
+
 /* Vínculo entre o item regular e a versão adaptada dele. */
 .vinculo-versao{border-left:4px solid var(--roxo);margin-bottom:12px}
 .vinculo-versao.neutro{border-left-color:var(--borda)}

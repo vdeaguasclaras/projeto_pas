@@ -174,6 +174,10 @@ async function gravarLinhas(tabela, lista) {
 async function removerLinha(tabela, id) {
   checar(await sb.from(tabela).delete().eq('id', id));
 }
+async function removerLinhas(tabela, ids) {
+  if (!ids.length) return;
+  checar(await sb.from(tabela).delete().in('id', ids));
+}
 
 // Respostas: a chave é (prova, estudante) desde a migração 0007.
 async function gravarResposta(provaId, estId, dados) {
@@ -218,6 +222,15 @@ async function assinarImagens(caminhos, segundos = 3600) {
 async function apagarImagem(caminho) {
   const { error } = await sb.storage.from(BUCKET).remove([caminho]);
   if (error) throw error;
+}
+
+// Cópia feita pelo próprio Storage, sem os bytes passarem pelo navegador. Exige
+// ler a origem e escrever o destino — as duas coisas a equipe já pode
+// (migração 0011).
+async function copiarImagem(de, para) {
+  const { error } = await sb.storage.from(BUCKET).copy(de, para);
+  if (error) throw error;
+  return para;
 }
 
 // A meta que vale: a soma dos tipos quando a meta é dividida por tipo de item,
@@ -291,9 +304,9 @@ async function substituirTudo(S) {
 
 export const nuvem = {
   conectado, usuario, iniciar, entrar, sair, trocarSenha,
-  carregarTudo, gravarLinha, gravarLinhas, removerLinha, gravarElenco,
+  carregarTudo, gravarLinha, gravarLinhas, removerLinha, removerLinhas, gravarElenco,
   gravarAlocacao, gravarAlocacoes,
-  enviarImagem, assinarImagens, apagarImagem,
+  enviarImagem, assinarImagens, apagarImagem, copiarImagem,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
   marcarSenhaTrocada, marcarTutorialVisto, comentarItem,

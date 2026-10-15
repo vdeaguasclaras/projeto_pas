@@ -15,6 +15,10 @@ textos, itens, capa, instruções, **proposta de redação** e elenco. O seletor
 menu lateral diz em qual se está trabalhando. O estudante pertence a uma
 **série**, e é ela que o liga à prova.
 
+Uma prova nova pode nascer em branco ou como **cópia de outra** — todos os
+itens ou só alguns, com ou sem redação. A cópia é independente: mexer nela não
+muda a original, que pode ser uma prova já aplicada.
+
 A navegação é por **menu lateral**, que vira gaveta em tela estreita.
 
 A coordenação **aloca** quantos itens cada docente deve entregar em cada prova, e

@@ -46,9 +46,10 @@ aberta pelo botão **☰** ao lado do título.
 
 **1 · Painel** — quanto já foi produzido, o que está em revisão e a entrega de
 cada componente curricular. A coordenação também configura aqui a prova — nome,
-etapa, série, data, duração e a **quantidade de questões de cada versão** — e vê
-as quatro provas lado a lado. O docente abre esta tela com a sua lista do que tem
-para entregar.
+etapa, série, data, duração e a **quantidade de questões de cada versão** —, vê
+as provas lado a lado e cria provas novas, em branco ou **duplicando uma que já
+existe** (ver “Coordenação: criar uma prova, ou duplicar uma existente”). O
+docente abre esta tela com a sua lista do que tem para entregar.
 
 No alto fica a **contagem para a aplicação** da prova que está na tela — “faltam
 40 dias”, “a aplicação é amanhã”, “aplicada há 9 dias”. Ela vem da data em
@@ -692,6 +693,14 @@ coluna não ganha nada em ter 4000 pixels de largura.
 > está na tela ao anexar, remover ou redimensionar figura. Se você tentou e
 > desistiu, pode refazer o cadastro normalmente.
 
+> **Se uma figura sumiu do caderno depois que alguém a removeu e desistiu:**
+> também era defeito, corrigido em outubro de 2026. “Remover” apagava o arquivo
+> na hora, antes do “Salvar” — quem removia e depois cancelava deixava o texto
+> apontando para um arquivo que não existia mais. Hoje “Remover” só tira a figura
+> do formulário: o arquivo gravado continua no banco, e cancelar deixa tudo como
+> estava. Figura que já sumiu não volta sozinha:
+> abra o texto ou o item, remova a figura quebrada e envie o arquivo de novo.
+
 As figuras ficam no banco da escola, e **só quem está na equipe consegue
 abri-las** — conteúdo de prova é sigiloso até a aplicação.
 
@@ -716,6 +725,100 @@ inclusão. São dois eixos diferentes.
 Cada prova tem nome, etapa, data, duração, **quantidade de questões (uma por versão)** e a escolha
 de **ter ou não redação** — tudo em “⚙ Configurar prova”. A capa, as instruções
 do caderno e a **proposta de redação** também são de cada prova.
+
+## Coordenação: criar uma prova, ou duplicar uma existente
+
+No Painel, **+ Nova prova** pergunta primeiro **como começar**:
+
+- **Prova em branco** — como sempre foi: a prova nasce vazia, e textos-base e
+  itens são escritos pela equipe.
+- **Duplicar uma prova existente** — para aproveitar uma prova já montada (ou já
+  aplicada) em outra ação: o simulado do trimestre seguinte, uma reaplicação,
+  uma turma que não fez.
+
+Ao escolher duplicar:
+
+1. Escolha a **prova de origem**. O formulário se preenche com o que é dela —
+   nome, série, duração, tamanho, ter ou não redação —, menos a **data** e a
+   **etapa**, que ficam em branco: a etapa é o que distingue a cópia da original
+   no seletor de provas, e duas provas da mesma série não podem ter a mesma.
+   **Exceção: aplicação extra.** Para uma segunda chamada ou reaplicação da
+   *mesma* etapa, marque **aplicação extra** logo abaixo da etapa — ela já vem
+   preenchida com a etapa da original. As duas convivem: o sistema mostra a
+   nova como “1ª Etapa · aplicação extra” no seletor, no Painel e em todas as
+   telas. No **papel** (caderno, cartão, boletim) a etapa sai como está escrita.
+   A aplicação extra é feita por **outro grupo**, então ela começa **sem
+   estudantes** — ver “Os estudantes da aplicação extra”, logo abaixo.
+2. Embaixo vem a lista do que copiar, **agrupada por texto-base**, na ordem da
+   prova. Vêm marcados os textos-base e os **itens aprovados** — a prova como ela
+   saiu. Desmarque o que não serve, ou use **todos / nenhum** em cada bloco.
+   - Desmarcar um **texto-base** tira os itens dele junto. Um texto-base marcado
+     **sem nenhum item** vem vazio, pronto para receber itens novos.
+   - Itens **ainda não aprovados** e itens **anulados na original** aparecem
+     desmarcados; marque-os se quiser trazê-los. O item vem na etapa da revisão
+     em que estava.
+   - A **versão adaptada** de um item acompanha o item: marcar um marca o outro.
+   - O quadro no alto conta o que vai na cópia. Se o tamanho da prova regular
+     não bater com a seleção, o botão **usar N** acerta o campo.
+3. **Redação**: marque ou desmarque “esta prova tem redação” à vontade — a cópia
+   pode ter redação mesmo que a original não tivesse. Se a original tinha
+   proposta escrita, dá para trazê-la junto; senão, escreva a nova na tela
+   **Redação**.
+4. **Criar a cópia.** A prova nova abre já selecionada.
+
+**A cópia é outra prova.** Editar, aprovar, devolver, acrescentar ou excluir
+itens nela segue o fluxo normal e **não mexe na original** — que continua com os
+mesmos itens, cartões, respostas e boletins. Quem abre um item copiado vê de que
+prova ele veio. As figuras também são copiadas: cada prova fica com os seus
+arquivos.
+
+**O que vem:** textos-base e itens marcados (com figuras), capa, instruções,
+tamanho da prova e, se marcada, a proposta de redação.
+**O que não vem:** data de aplicação, respostas e notas lançadas, metas de
+alocação, a conversa da revisão, o histórico dos itens e a marca de item
+anulado — tudo isso é da aplicação original. Os estudantes da cópia são os da
+série escolhida, como em qualquer prova nova — menos na aplicação extra, que
+começa vazia.
+
+Se o sistema não conseguir gravar a cópia inteira, **não grava nada** e diz o
+motivo, com a sua seleção ainda na tela — nunca fica meia prova no seletor.
+
+### Os estudantes da aplicação extra
+
+Toda prova é feita pela série inteira, e a lista se refaz sozinha quando a
+lista da escola é importada. A **aplicação extra** é a exceção: quem a faz é a
+lista que você lança. Ao criá-la, o sistema já abre **👥 Estudantes desta
+aplicação** (depois, o botão está no Painel e na tela de Cartões-resposta).
+
+1. Cole a lista, uma linha por estudante, **no mesmo formato da importação da
+   Administração**: `nome completo;matrícula;turma;série;versão`.
+2. Clique em **Conferir**. O sistema diz quantos já estão no cadastro, quantos
+   são novos e se alguma linha tem problema. Se a matrícula de uma linha
+   pertencer a alguém **com outro nome** no cadastro, isso aparece em destaque:
+   quase sempre é matrícula digitada errado, e a prova iria para outra pessoa.
+3. **Salvar a lista.** Linha com problema impede a gravação — quem ficasse de
+   fora por um erro de digitação não teria cartão no dia.
+
+O que a lista faz:
+
+- quem **já está no cadastro** entra **como está cadastrado** — nome, turma,
+  série e versão (regular/adaptada) não mudam por aqui; para corrigir, use a
+  Administração;
+- quem **não está** é cadastrado com os dados da linha;
+- a lista nova **substitui** a anterior; marque *manter quem já está na lista*
+  para **acrescentar** em vez de substituir;
+- **nenhuma outra prova muda**, e importar a lista da escola depois não apaga a
+  lista da aplicação extra.
+
+Só quem está na lista recebe cartão-resposta nominal, entra na correção e vai
+no pacote do leitor. Desmarcar “aplicação extra” em “⚙ Configurar prova” devolve
+a prova à regra de sempre: a série inteira.
+
+> **Aplicação extra não é cartão extra.** “Cartão extra” é o cartão de reserva,
+> sem nome, que se imprime na tela de Cartões-resposta. “Aplicação extra” é uma
+> prova inteira, à parte. Use sempre o nome completo para não confundir as duas
+> na secretaria. A marca também fica em “⚙ Configurar prova”, para corrigir uma
+> prova marcada errado.
 
 ## Coordenação: subir a lista de estudantes
 

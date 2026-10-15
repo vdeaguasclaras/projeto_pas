@@ -85,6 +85,16 @@ Sem nuvem (“usar sem conexão”) não há Storage, e a figura vira data URI c
 de 400 kB — o depósito ali é o localStorage. É o que permite demonstrar e testar
 o recurso sem banco.
 
+**Remover não é apagar.** “Remover” tira a figura da cópia de trabalho do
+diálogo, e o registro só muda no “Salvar” — que pode nem vir. Até outubro de
+2026 o arquivo era apagado do bucket na hora: quem removia e cancelava (ou tinha
+o “Salvar” recusado) deixava o registro apontando para um arquivo inexistente, e
+o texto 4 da prova da 2ª série [3º TRIM] foi encontrado assim. Hoje só sai do
+bucket o arquivo que **nenhum registro gravado cita** (`arquivoCitado`, em
+`img-remover`) — na prática, o que acabou de ser enviado e nunca foi salvo. O
+que já estava gravado vira órfão quando a remoção é salva: arquivo órfão é lixo,
+registro apontando para arquivo apagado é figura que falta no caderno.
+
 ## Alocação por docente
 
 A meta de cada docente vive em `public.alocacoes`, com chave `(prova_id, email)`
@@ -427,6 +437,79 @@ A paginação continua correta porque `medirPecas` mede a altura de cada peça c
 a fórmula **já desenhada**: uma fração que estica a linha é paginada pela altura
 real, não pela estimada.
 
+## Duplicar uma prova
+
+A coordenação reaproveita prova — o simulado do 3º trimestre nasce do que foi
+aplicado na 1ª etapa, com itens trocados e outros mantidos. Até aqui isso era
+recadastrar texto por texto e item por item, ou mexer na prova aplicada, que é
+justamente a que não pode mudar: ela tem cartões impressos, respostas lançadas,
+boletins emitidos e itens anulados.
+
+“+ Nova prova” passou a oferecer **Duplicar uma prova existente**. A escolha é
+feita sobre a lista inteira da prova de origem, agrupada por texto-base (o mesmo
+desenho de “Montar a prova adaptada”), e vem marcada com os textos e os itens
+aprovados — a prova como saiu. A cópia é uma **prova nova em tudo**:
+
+| | na cópia |
+|---|---|
+| prova, textos-base, itens | `id` novo; `copiadoDe` / `duplicadaDe` são só rastro, que a tela mostra e nenhuma regra lê |
+| figuras | **arquivo próprio** na pasta da prova nova (`duplicarImagem`, cópia feita pelo Storage) |
+| numeração dos textos | refeita em sequência — tirar o texto 3 não deixa a prova pulando do 2 para o 4 |
+| status do item | o mesmo da origem: aprovado entra direto no caderno, em revisão continua na etapa |
+| `derivadoDe` | religado à cópia do original; regular e adaptado andam juntos na escolha |
+| pendência da leitura final (`aguardaLeituraFinal`) | vem — o conteúdo copiado é o que ainda não foi relido |
+| capa, instruções, tamanho | vêm, editáveis |
+| proposta de redação | vem se marcada; ter ou não redação é escolha da cópia |
+| data, respostas, alocações, conversa, histórico, anulação | **não vêm** — são da aplicação |
+| elenco | os estudantes da série escolhida, como em toda prova nova |
+
+**Aplicação extra.** A regra de sempre é uma prova por série e etapa — é o nome
+dela no seletor, e duas iguais não se distinguem. Uma segunda chamada ou
+reaplicação é, de propósito, a *mesma* etapa; para ela existe a marca
+`aplicacaoExtra` no registro da prova, e a regra passou a ser **série + etapa +
+tipo de aplicação** (`provaDeMesmoNome`, com a etapa comparada sem caixa e sem
+espaço sobrando). A marca é campo próprio, e não texto colado na etapa, porque
+quem decide onde ela aparece é o sistema: em toda **tela** (`etapaDaProva`,
+`rotuloProva`) ela aparece; no **papel** e no **pacote do leitor**, não — a
+etapa sai como está escrita. Para o leitor isso não é risco: ele separa provas
+pelo `id` que viaja no pacote (`pas-pacote-<id>.json`, `pas-anulados-<id>.json`).
+O nome é sempre “aplicação extra”, por inteiro, porque “cartão extra” já é o
+cartão de reserva sem nome.
+
+**Quem faz a aplicação extra é uma lista lançada, não a série.** Ela nasce com
+elenco vazio — e vazio é vazio: `estudantesDaProva` deixa de cair no palpite
+pela série, que imprimiria cartão nominal para quem já fez a original. A lista é
+colada no formato da importação da Administração (`lerLinhasEstudantes`): quem
+já está no cadastro casa pela matrícula (texto, depois algarismos) e entra como
+está cadastrado; quem não está é cadastrado; nenhuma outra prova muda. Linha com
+problema impede a gravação, e matrícula que cai em cadastro de outro nome
+aparece na conferência. `sincronizarElenco` — chamado ao importar a lista da
+escola e ao salvar um estudante — não toca prova com `aplicacaoExtra`. A opção
+de trazer os “faltantes” de uma prova foi considerada e descartada: as respostas
+das provas aplicadas em 2026 não estão no sistema (a correção foi no aplicativo
+da secretaria), e para ele todos teriam faltado.
+
+**Por que figura com arquivo próprio, e não a mesma referência.** Referência
+compartilhada faria a cópia depender da original para sempre: trocar a figura de
+um lado, ou limpar a pasta de uma prova antiga, alcançaria o outro — e o outro é
+uma prova já aplicada. Figura que **já não existia** na origem não tem de onde
+ser copiada: a cópia sai assim mesmo, com a referência como estava, e um diálogo
+(não um aviso de passagem) lista o que falta.
+
+**A gravação é esperada e tudo-ou-nada.** Figuras primeiro; depois prova,
+textos, itens e elenco, nessa ordem. Se qualquer passo falhar, o que chegou a
+ser gravado é removido (linhas e arquivos), e o diálogo continua aberto com a
+seleção e o motivo. Meia cópia — prova sem itens, itens sem prova — seria pior
+que nenhuma, e apareceria no seletor de todo mundo.
+
+**Permissões.** Criar prova é da coordenação geral (política de `provas`,
+migração 0007), e é ela quem pode gravar item já aprovado em nome de outro autor
+(0014). Nenhuma política nova: conferido com o papel de verdade que a
+coordenação grava prova, texto aprovado, item aprovado de outro autor e elenco,
+e que docente continua recusado na prova (RLS) e no item aprovado (gatilho do
+fluxo). A cópia de figura precisa de ler a origem e escrever o destino no bucket
+— as duas coisas a equipe já pode (0011).
+
 ## Fase 5 — pontuação
 
 Hoje o escore bruto usa a simplificação documentada na própria tela: tipo A
@@ -648,3 +731,16 @@ não os consome.
 - **Contas da equipe**: criar pela tela “9 · Administração” conforme os docentes
   entrarem no projeto. A coordenação inicial é
   `vde.aguasclaras@maristabrasil.org`.
+- **Figura a reenviar** (levantado em 15/10/2026): o texto 4 da prova da 2ª série
+  [3º TRIM] — “Artista Eduardo Kobra conclui mural na Oscar Freire…” — aponta
+  para um arquivo que não existe mais no bucket. Remover a figura quebrada e
+  enviar de novo. A causa foi corrigida (ver “Remover não é apagar”).
+- **Elenco de prova já aplicada** (levantado em 15/10/2026): importar a lista da
+  escola, ou salvar um estudante, refaz o elenco de **toda** prova da série,
+  inclusive a já aplicada — o comentário de `sincronizarElenco` dizia o
+  contrário, e foi corrigido para dizer o que o código faz. Na virada do ano,
+  com o estudante mudando de série, isso tiraria gente do elenco de provas
+  antigas. Decidir se prova com data passada deve ficar de fora.
+- **Texto-base sem prova** (levantado em 15/10/2026): há um texto aprovado de
+  título “sx” (`23n2pdzmjho`) sem `provaId`. Não aparece em tela nenhuma; parece
+  teste esquecido. Apagar, ou dizer de que prova é.

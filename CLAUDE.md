@@ -251,6 +251,39 @@ prova regular não muda** — o item desmarcado continua nela, com o mesmo núme
 - `versao` já está em `campos_do_item()` (migração 0017), então cada entrada e
   saída da adaptada fica registrada no histórico do item sem nada a fazer.
 
+## Duplicar prova: a cópia não aponta para a original
+
+“+ Nova prova” tem dois modos, em branco e **duplicar** (`dlgNovaProva`,
+`duplicarProva`). A cópia é prova nova em tudo — `id` novo para prova, textos e
+itens; `copiadoDe`/`duplicadaDe` são só rastro, que nenhuma regra lê — porque a
+original costuma ser prova aplicada, com cartão, resposta e boletim.
+
+- **Figura copiada ganha arquivo próprio** (`duplicarImagem`, cópia no
+  Storage), não a mesma referência. Figura já ausente na origem não derruba a
+  cópia: ela segue, e um diálogo lista o que falta.
+- **Fica para trás o que é da aplicação**: data, respostas, alocações, conversa,
+  histórico e a marca de anulado. Ao acrescentar campo ao item ou à prova,
+  decida de que lado ele está.
+- **Tudo-ou-nada e esperado**: se um passo falha, o que foi gravado (linhas e
+  arquivos) é removido, e o diálogo fica aberto com a seleção. Regular e
+  adaptado (`derivadoDe`) andam juntos na escolha — separá-los deixaria a cópia
+  apontando para a prova original.
+- **Uma prova por série + etapa + tipo de aplicação** (`provaDeMesmoNome`). A
+  **aplicação extra** (`aplicacaoExtra`: segunda chamada, reaplicação) repete a
+  série e a etapa da original e se distingue pela marca, que toda TELA mostra
+  (`etapaDaProva`) e o papel e o pacote do leitor não. Ao mostrar a etapa numa
+  tela nova, use `etapaDaProva()`, não `p.etapa`. E escreva sempre “aplicação
+  extra” por inteiro: “cartão extra” é o cartão de reserva sem nome.
+- **Quem faz a aplicação extra é a lista lançada** (`abrirElenco`), não a série:
+  nasce vazia, e vazio é vazio (`estudantesDaProva` não cai no palpite pela
+  série). `sincronizarElenco` não a toca — sem isso, importar a lista da escola
+  apagaria a escolha. A lista cadastra quem falta e não altera o cadastro de
+  quem já existe.
+- **Remover figura não é apagar o arquivo** (`arquivoCitado`, `img-remover`).
+  O registro só muda no “Salvar”, que pode nem vir; apagar na hora deixava
+  texto gravado apontando para arquivo inexistente. Só sai do bucket o que
+  nenhum registro gravado cita.
+
 ## Gravação: a tela não pode afirmar o que o banco negou
 
 `PERS.item()` e companhia gravam soltos, com `.catch` num toast. Isso é aceitável
