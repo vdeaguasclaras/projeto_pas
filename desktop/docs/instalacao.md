@@ -65,6 +65,13 @@ Para publicar uma versão nova, no repositório:
   `leitor-v2`… O mesmo `.zip` vira uma **Release**, que não expira e tem
   endereço fixo para mandar por e-mail.
 
+> **A Release nasce só com o “Source code”, e isso é normal.** O `.exe` não fica
+> versionado no repositório: publicar a etiqueta é o que MANDA montá-lo, e o
+> `PAS-Leitor-windows.zip` (uns 100 MB) é anexado pela máquina do GitHub quando o
+> workflow termina — cerca de dois minutos depois. Quem publica e olha na hora vê
+> uma Release sem programa; recarregue a página. Se passar disso, veja em
+> **Actions** se a execução falhou.
+
 Na máquina da secretaria:
 
 1. Baixar o `PAS-Leitor-windows.zip` da aba **Releases**.
