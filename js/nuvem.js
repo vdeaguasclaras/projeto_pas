@@ -111,6 +111,14 @@ async function anularItem(itemId, anular) {
   return data;
 }
 
+// A proposta de redação de uma prova (migração 0019). Função do banco, e não
+// gravação da prova, porque quem a escreve inclui o papel `redacao`, que não
+// pode mexer no resto da linha — série, data, capa, instruções. Ela escreve só
+// a chave `redacao`, e `null` apaga a proposta.
+async function gravarProposta(provaId, proposta) {
+  checar(await sb.rpc('gravar_proposta_de_redacao', { alvo: provaId, proposta }));
+}
+
 // Criação/edição de contas passa pela Edge Function `equipe`, única a
 // conhecer a chave de serviço. O navegador só envia o próprio JWT.
 async function chamarEquipe(corpo) {
@@ -310,5 +318,5 @@ export const nuvem = {
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,
   carregarEquipe, gravarMembro, criarConta, redefinirSenha, removerMembro,
   marcarSenhaTrocada, marcarTutorialVisto, comentarItem,
-  ajustarNaLeituraFinal, confirmarLeituraFinal, anularItem
+  ajustarNaLeituraFinal, confirmarLeituraFinal, anularItem, gravarProposta
 };
