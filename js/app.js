@@ -13,7 +13,7 @@ import { limpar } from './limpar.js';
 import { htmlTabelaPeriodica } from './tabela-periodica.js';
 import {
   guardarImagem, duplicarImagem, arquivoAusente, descartarImagem, prepararImagens, todasAsImagens,
-  htmlImagens, pecasDeImagens, htmlEditorImagens
+  enderecoDaImagem, htmlImagens, pecasDeImagens, htmlEditorImagens
 } from './imagens.js';
 import {
   carregarKatex, rico, simples, vazio as ricoVazio, editorRico, ligarEditoresRicos,
@@ -176,6 +176,14 @@ const PERS = {
   async textoAgora(t) {
     if (!modoNuvem) return null;
     try { await nuvem.gravarLinha('textos', t); return null; }
+    catch (e) { return e?.message || String(e); }
+  },
+  // A proposta de redação não vai com a prova inteira: quem a escreve pode ser
+  // o papel `redacao`, que não grava a prova. Vai pela função do banco
+  // (migração 0019), que escreve só a chave dela — e esperada, como o texto-base.
+  async propostaAgora(provaId, redacao) {
+    if (!modoNuvem) return null;
+    try { await nuvem.gravarProposta(provaId, redacao); return null; }
     catch (e) { return e?.message || String(e); }
   },
   // A mesma gravação em lote, esperada. Um `upsert` só com a lista inteira: se
@@ -2187,6 +2195,10 @@ async function duplicarProva(origem, nova, r) {
       vagas.push({ img, dono: 'itens', onde: `${ondeEsta.get(i.id)}, alternativa ${'ABCD'[o]}`,
                    por: n => { i.imagensOpcoes[o][k] = n; } })));
   }
+  // E as dos textos motivadores, quando a proposta de redação veio junto.
+  (nova.redacao?.motivadores || []).forEach((m, j) => (m.imagens || []).forEach((img, k) =>
+    vagas.push({ img, dono: 'redacao', onde: `texto motivador ${j + 1} da proposta de redação`,
+                 por: n => { m.imagens[k] = n; } })));
   const copiadas = [];
   const apagarCopiadas = () => Promise.allSettled(copiadas.map(c => nuvem.apagarImagem(c)));
   const faltando = [];
@@ -3174,7 +3186,11 @@ function paragrafosDoCorpo(corpo) {
 // se o sistema entendeu a separação do jeito que ela foi digitada. Antes, a
 // linha em branco era a única marca — invisível no meio de um bloco de nove
 // linhas —, e texto de três parágrafos chegava ao caderno como um só.
-function htmlPreviaDoCorpo(corpo, formato = 'prosa') {
+//
+// `paraVerso` são os atributos do botão do convite “manter as quebras de
+// linha”: no texto-base ele troca o formato do texto, no texto motivador da
+// redação troca o daquele motivador (`htmlPreviaDoMotivador`).
+function htmlPreviaDoCorpo(corpo, formato = 'prosa', paraVerso = 'data-acao="tx-formato"') {
   const linhas = linhasDoCorpoRico(corpo, formato);
   if (!linhas.length)
     return '<p class="previa-vazia">O corpo ainda está em branco — o texto-base pode ser só a figura.</p>';
@@ -3198,7 +3214,7 @@ function htmlPreviaDoCorpo(corpo, formato = 'prosa') {
   const convite = pareceVerso(corpo) ? `
     <p class="previa-convite"><span>Estas linhas parecem <b>versos</b> — e em <b>prosa</b> o caderno junta
       todas num parágrafo corrido, como você vê acima.</span>
-      <button class="btn mini" data-acao="tx-formato" data-v="verso">Manter as quebras de linha</button></p>` : '';
+      <button class="btn mini" ${paraVerso} data-v="verso">Manter as quebras de linha</button></p>` : '';
   return `<div class="previa-corpo pas-texto">${marcados}
     <p class="previa-conta">${grupos.length === 1
       ? 'Um parágrafo só. Para abrir outro, tecle <b>Enter</b> — <b>Shift+Enter</b> quebra a linha sem abrir parágrafo.'
@@ -3892,7 +3908,10 @@ MUDS['it-dlinhas'] = (d, el) => { rasc.dLinhas = Math.max(1, Math.min(40, parseI
 // tecla, o mesmo motivo já documentado em `alocacaoMudou()`.
 // Onde as figuras em edição vivem, por campo — o texto-base as tem em
 // `rascTexto`, o item em `rasc`, e cada alternativa do tipo C tem a sua própria
-// lista (`opcao0`…`opcao3`), guardada em `rasc.imagensOpcoes[i]`.
+// lista (`opcao0`…`opcao3`), guardada em `rasc.imagensOpcoes[i]`. Na proposta
+// de redação, cada texto motivador tem a sua (`rdMot0`, `rdMot1`…), em
+// `rascRed.motivadores[i].imagens`.
+const campoDoMotivador = campo => /^rdMot(\d+)$/.exec(campo || '');
 function listaDeImagens(campo) {
   if (campo === 'item') return (rasc.imagens = rasc.imagens || []);
   const op = /^opcao(\d)$/.exec(campo || '');
@@ -3901,19 +3920,28 @@ function listaDeImagens(campo) {
     const i = Number(op[1]);
     return (rasc.imagensOpcoes[i] = rasc.imagensOpcoes[i] || []);
   }
+  const mot = campoDoMotivador(campo);
+  if (mot) {
+    const m = rascRed.motivadores[Number(mot[1])];
+    return (m.imagens = m.imagens || []);
+  }
   return (rascTexto.imagens = rascTexto.imagens || []);
 }
 
 ligarEditoresRicos((campo, i, valor) => {
   if (campo === 'txCorpo') { if (rascTexto) rascTexto.corpo = valor; return; }
+  if (campo === 'rdComando') { if (rascRed) rascRed.comando = valor; return; }
+  if (campo === 'rdMot') { const m = rascRed?.motivadores[Number(i)]; if (m) m.texto = valor; return; }
   if (!rasc) return;
   if (campo === 'opcao') rasc.opcoes[Number(i)] = valor;
   else if (campo === 'enunciado' || campo === 'gabarito') rasc[campo] = valor;
 },
-// A prévia do corpo do texto-base é a divisão em parágrafos, que é regra do
-// caderno; os demais campos seguem com a prévia padrão (a da fórmula).
-(campo, valor) => campo === 'txCorpo'
+// A prévia do corpo do texto-base — e a do texto motivador, que segue a mesma
+// regra — é a divisão em parágrafos, que é regra do caderno; os demais campos
+// seguem com a prévia padrão (a da fórmula).
+(campo, valor, i) => campo === 'txCorpo'
   ? htmlPreviaDoCorpo(valor, rascTexto?.formato || 'prosa')
+  : campo === 'rdMot' ? htmlPreviaDoMotivador(valor, rascRed?.motivadores[Number(i)]?.formato, i)
   : null);
 /* ---------------- figuras: envio, ajuste e remoção ---------------- */
 // Reabre o formulário em que a figura está, para a tira de miniaturas
@@ -3921,6 +3949,7 @@ ligarEditoresRicos((campo, i, valor) => {
 // trabalho: é ela que o desenho seguinte lê.
 function reabrirFormularioDe(campo) {
   if (campo === 'item' || /^opcao\d$/.test(campo || '')) { mexerNoItem(() => {}); return; }
+  if (campoDoMotivador(campo)) { colherProposta(); dlgRedacao(rascRed.provaId); return; }
   recolherCamposDoTexto();
   dlgTexto(null, { preservar: true });
 }
@@ -3930,11 +3959,12 @@ MUDS['img-arquivo'] = async (d, el) => {
   if (!arquivo) return;
   el.value = '';                       // permite escolher o mesmo arquivo de novo
   const lista = listaDeImagens(d.campo);
+  const daRedacao = !!campoDoMotivador(d.campo);
   toast('Enviando a figura…');
   try {
     const img = await guardarImagem(arquivo, {
-      modoNuvem, provaId: idProvaAtual(),
-      dono: d.campo === 'texto' ? 'textos' : 'itens', uid
+      modoNuvem, provaId: daRedacao ? rascRed.provaId : idProvaAtual(),
+      dono: d.campo === 'texto' ? 'textos' : daRedacao ? 'redacao' : 'itens', uid
     });
     // Assina a recém-enviada antes de remontar. Sem isto a miniatura aparecia
     // como “sem prévia” até alguém abrir o caderno — quem acabou de enviar a
@@ -3960,9 +3990,12 @@ MUDS['img-escala']  = (d, el) => {
 };
 
 // Algum registro GRAVADO ainda cita este arquivo? `S` guarda o que foi salvo; a
-// cópia de trabalho do diálogo (`rasc`, `rascTexto`) fica fora da conta.
-const arquivoCitado = caminho => !!caminho && [...S.textos, ...S.itens].some(r =>
-  [r.imagens, ...(r.imagensOpcoes || [])].some(l => todasAsImagens(l).some(i => i.caminho === caminho)));
+// cópia de trabalho do diálogo (`rasc`, `rascTexto`, `rascRed`) fica fora da
+// conta. As propostas de redação também citam arquivo, nos textos motivadores.
+const arquivoCitado = caminho => !!caminho && [
+  ...[...S.textos, ...S.itens].flatMap(r => [r.imagens, ...(r.imagensOpcoes || [])]),
+  ...S.provas.flatMap(p => (p.redacao?.motivadores || []).map(m => m?.imagens))
+].some(l => todasAsImagens(l).some(i => i.caminho === caminho));
 
 ACOES['img-remover'] = async d => {
   const lista = listaDeImagens(d.campo);
@@ -4801,7 +4834,7 @@ function htmlCaderno(provaId, versao, comCapa = true, extras = []) {
   const paginas = blocos.length ? distribuirBlocos(blocos, blocos.some(b => b.exatas)) : [];
   // A proposta vai em coluna única, como no caderno do PAS: medida e paginada
   // na largura cheia, não na coluna do miolo.
-  const pecasRed = comRedacao ? pecasDaProposta(provaId) : [];
+  const pecasRed = comRedacao ? pecasDaProposta(proposta(provaId)) : [];
   const paginasRed = pecasRed.length
     ? distribuirEmUmaColuna(pecasRed, medirPecas(pecasRed, true)) : [];
   const p = provaPorId(provaId);
@@ -4830,7 +4863,9 @@ async function prepararFigurasDaProva(provaId) {
     ...itensDaProva(provaId).map(i => i.imagens),
     // As figuras das alternativas do tipo C são listas à parte, uma por opção:
     // fora daqui elas ficariam sem endereço assinado e sairiam em branco.
-    ...itensDaProva(provaId).flatMap(i => i.imagensOpcoes || [])
+    ...itensDaProva(provaId).flatMap(i => i.imagensOpcoes || []),
+    // E as dos textos motivadores, que fecham o caderno.
+    ...motivadoresDe(proposta(provaId)).map(m => m.imagens)
   ];
   if (!listas.some(l => todasAsImagens(l).length)) return;
   await prepararImagens(listas);
@@ -5433,12 +5468,22 @@ ACOES['cad-capa-salvar'] = d => {
    JSON, na exclusão em cascata e na sincronização linha a linha do PERS. Ela é
    de cada prova, como a capa: o 9º ano não escreve sobre o tema da 3ª série.
 
-   O texto vai à tela e ao papel por `limpar()` (js/limpar.js), como as
-   instruções da capa: a coordenação usa <b> e <i> para citar títulos e marcar
-   ênfases do original, e nada além de ênfase tipográfica passa. */
+   O tema, o título e a fonte vão à tela e ao papel por `limpar()`
+   (js/limpar.js), como as instruções da capa. O comando e o corpo dos textos
+   motivadores são texto rico (js/rico.js), como o texto-base e o enunciado do
+   item — ênfase, tamanho de letra e fórmula —, e cada motivador tem figuras,
+   porque na redação, como no texto-base, o motivador muitas vezes é uma
+   charge, uma tirinha, um infográfico ou uma foto, e nada mais. */
 const PARTE_REDACAO = '-- PROVA DE REDAÇÃO --';
 
 const provaTemRedacao = (provaId = idProvaAtual()) => provaPorId(provaId)?.temRedacao !== false;
+
+// O comando e os motivadores eram escritos num <textarea>, com "\n" para cada
+// quebra; o editor rico guarda <br>. A proposta gravada antes da troca chega
+// aqui com as quebras convertidas — e, como a regra de parágrafo é a mesma
+// (linha em branco separa, quebra simples é só digitação), sai no caderno
+// igual ao que saía.
+const brDasQuebras = t => String(t || '').replace(/\r\n?|\n/g, '<br>');
 
 // Devolve sempre a forma completa, mesmo para prova que nunca teve proposta:
 // quem lê não precisa saber se o campo existe nem em que formato foi gravado.
@@ -5446,15 +5491,24 @@ function proposta(provaId = idProvaAtual()) {
   const r = provaPorId(provaId)?.redacao || {};
   return {
     tema: r.tema || '',
-    comando: r.comando || '',
+    comando: brDasQuebras(r.comando),
     tipoTexto: r.tipoTexto || '',
-    motivadores: (Array.isArray(r.motivadores) ? r.motivadores : [])
-      .map(m => ({ titulo: m?.titulo || '', texto: m?.texto || '', fonte: m?.fonte || '' }))
+    motivadores: (Array.isArray(r.motivadores) ? r.motivadores : []).map(m => ({
+      titulo: m?.titulo || '',
+      texto: brDasQuebras(m?.texto),
+      fonte: m?.fonte || '',
+      // Prosa reflui; verso guarda as quebras do poema. Sem “linhas
+      // numeradas”: na redação nenhum item cita a linha do motivador.
+      formato: m?.formato === 'verso' ? 'verso' : 'prosa',
+      imagens: todasAsImagens(m?.imagens)
+    }))
   };
 }
+const motivadorEmBranco = () => ({ titulo: '', texto: '', fonte: '', formato: 'prosa', imagens: [] });
 
-// Motivador sem texto é linha em branco de formulário, não material de prova.
-const motivadoresDe = p => p.motivadores.filter(m => m.texto.trim());
+// Motivador sem texto e sem figura é linha em branco de formulário, não
+// material de prova. Com figura e sem texto, é motivador: a charge sozinha.
+const motivadoresDe = p => p.motivadores.filter(m => !ricoVazio(m.texto) || m.imagens.length);
 
 // Proposta “escrita” é a que tem ao menos tema, comando ou um motivador — só
 // então há o que imprimir no caderno e o que mostrar a quem corrige. Prova sem
@@ -5463,24 +5517,42 @@ const motivadoresDe = p => p.motivadores.filter(m => m.texto.trim());
 function propostaEscrita(provaId = idProvaAtual()) {
   if (!provaTemRedacao(provaId)) return false;
   const p = proposta(provaId);
-  return !!(p.tema.trim() || p.comando.trim() || motivadoresDe(p).length);
+  return !!(p.tema.trim() || !ricoVazio(p.comando) || motivadoresDe(p).length);
 }
 
-// Parágrafos do motivador, com a mesma convenção do texto-base em prosa: linha
-// em branco separa parágrafos, quebra simples é só quebra de digitação.
-function paragrafosDoMotivador(texto) {
-  return String(texto || '').split(/\n\s*\n/)
-    .map(b => b.split('\n').map(l => l.trim()).filter(Boolean).join(' '))
-    .filter(Boolean);
+// Os parágrafos de um campo rico, já desenhados, pela regra do texto-base
+// (`paragrafosDoCorpo`): linha em branco separa parágrafo, e em prosa a quebra
+// simples é só quebra de digitação. Em verso cada quebra é do poema, e fica.
+const paragrafosRicos = (corpo, formato = 'prosa') => paragrafosDoCorpo(corpo)
+  .map(g => rico(g.join(formato === 'verso' ? '<br>' : ' ')));
+
+// O corpo do motivador em peças para o paginador. Em prosa, uma por parágrafo,
+// para o motivador longo refluir entre folhas em vez de ser cortado no pé da
+// página; em verso, uma por estrofe — a estrofe não se parte, e o poema longo
+// ainda pode virar a folha entre uma e outra.
+function pecasDoCorpoDoMotivador(m) {
+  const grupos = paragrafosDoCorpo(m.texto);
+  if (m.formato === 'verso')
+    return grupos.map((estrofe, i) =>
+      htmlCorpoTexto({ linhas: i ? ['', ...estrofe] : estrofe, formato: 'verso' }));
+  return grupos.map(g => `<div class="pas-texto"><p>${rico(g.join(' '))}</p></div>`);
 }
+
+// Teto da figura na coluna única (`htmlImagem`, js/imagens.js). A folha tem
+// 730pt, e a figura divide a folha com o título do motivador — que vai sempre
+// junto com o que ele anuncia (`ehTitulo`) — e com a própria legenda e o
+// crédito. 600pt deixa folga para os três.
+const ALTURA_FIGURA_REDACAO = 600;
 
 // Peças da proposta para o paginador do caderno, na largura da coluna e na
-// ordem em que o estudante lê: tema, motivadores (cada um com a sua fonte),
-// comando e, por fim, as observações. Cada parágrafo é peça própria, para que
-// um motivador longo reflua entre colunas em vez de ser cortado no pé da
-// página — é o mesmo tratamento que os itens recebem.
-function pecasDaProposta(provaId) {
-  const p = proposta(provaId);
+// ordem em que o estudante lê: tema, motivadores (texto, figuras e fonte de
+// cada um), comando e, por fim, as observações. Cada parágrafo é peça própria,
+// para que um motivador longo reflua entre colunas em vez de ser cortado no pé
+// da página — é o mesmo tratamento que os itens recebem.
+//
+// Recebe a proposta, e não a prova, para servir também à prévia do diálogo,
+// que desenha a cópia de trabalho antes de ela ser gravada.
+function pecasDaProposta(p) {
   // Sem título dentro da coluna: quem anuncia a parte é o rótulo do alto da
   // página (`PARTE_REDACAO`), como “-- PARTE 2 --” anuncia os itens. Repetir
   // seria dizer duas vezes a mesma coisa em dois corpos diferentes.
@@ -5490,12 +5562,16 @@ function pecasDaProposta(provaId) {
   motivadoresDe(p).forEach((m, i) => {
     pecas.push(`<p class="pas-red-mot">TEXTO MOTIVADOR ${i + 1}${
       m.titulo.trim() ? ' — ' + limpar(m.titulo) : ''}</p>`);
-    for (const par of paragrafosDoMotivador(m.texto))
-      pecas.push(`<div class="pas-texto"><p>${limpar(par)}</p></div>`);
+    pecas.push(...pecasDoCorpoDoMotivador(m));
+    // Uma peça por figura, como no texto-base: ela pode virar a folha sozinha.
+    pecas.push(...pecasDeImagens(m.imagens, LARGURA_UMA_COL, { alturaMax: ALTURA_FIGURA_REDACAO }));
     if (m.fonte.trim()) pecas.push(`<p class="pas-fonte">${limpar(m.fonte)}</p>`);
   });
-  if (p.comando.trim())
-    pecas.push(`<p class="pas-comando pas-red-comando">${limpar(p.comando)}</p>`);
+  // O comando é curto e vai inteiro, numa peça só — mas pode ter mais de um
+  // parágrafo, e cada um sai como parágrafo.
+  const comando = paragrafosRicos(p.comando);
+  if (comando.length)
+    pecas.push(`<div class="pas-comando pas-red-comando">${comando.map(c => `<p>${c}</p>`).join('')}</div>`);
   const obs = [];
   if (p.tipoTexto.trim()) obs.push(`Tipo de texto esperado: <b>${limpar(p.tipoTexto)}</b>.`);
   obs.push(`Escreva a versão definitiva na folha de redação, respeitando o limite de
@@ -5518,45 +5594,70 @@ function htmlPropostaTela(provaId) {
         // quarteirão: ali o botão está logo acima, e é ele que se aponta.
         : telaAtual() === 'redacao' ? ' Use o botão <b>“✍ Escrever a proposta”</b>, aqui em cima.'
         : ' Escreva-a na tela <a href="#/redacao">Redação</a>, em “✍ Escrever a proposta”.'}</div>`;
+  const comando = paragrafosRicos(p.comando);
+  // A figura na tela não tem o compromisso do papel: sai num tamanho de
+  // leitura e encolhe para caber na coluna da Correção (ver `.red-mot .pas-fig`).
   return `
-    <div class="red-proposta">
+    <div class="red-proposta" data-prova="${esc(provaId)}">
       ${p.tema.trim() ? `<p class="red-tema"><span>Tema</span>${limpar(p.tema)}</p>` : ''}
-      ${p.comando.trim() ? `<p class="red-comando">${limpar(p.comando)}</p>` : ''}
+      ${comando.length ? `<div class="red-comando">${comando.map(c => `<p>${c}</p>`).join('')}</div>` : ''}
       ${p.tipoTexto.trim() ? `<p class="red-tipo">Tipo de texto esperado: <b>${limpar(p.tipoTexto)}</b></p>` : ''}
       ${mots.map((m, i) => `
         <details class="red-mot" ${i === 0 ? 'open' : ''}>
-          <summary>Texto motivador ${i + 1}${m.titulo.trim() ? ' — ' + limpar(m.titulo) : ''}</summary>
-          ${paragrafosDoMotivador(m.texto).map(par => `<p>${limpar(par)}</p>`).join('')}
+          <summary>Texto motivador ${i + 1}${m.titulo.trim() ? ' — ' + limpar(m.titulo) : ''}${
+            ricoVazio(m.texto) ? ' <span class="red-mot-fig">(figura)</span>' : ''}</summary>
+          ${paragrafosRicos(m.texto, m.formato).map(par => `<p>${par}</p>`).join('')}
+          ${htmlImagens(m.imagens, 300)}
           ${m.fonte.trim() ? `<p class="fonte">${limpar(m.fonte)}</p>` : ''}
         </details>`).join('')}
     </div>`;
 }
 
-/* ---------------- edição da proposta (coordenação) ---------------- */
-// Cópia de trabalho, como no editor de item: o que está no formulário só chega
-// à prova quando alguém salva. Os campos são colhidos do DOM na hora de somar
-// ou remover motivador, para que texto digitado e ainda não “mudado” não se
-// perca ao remontar o diálogo.
+// As figuras da proposta precisam de endereço assinado para aparecer nas telas
+// de Redação e de Correção, e o caderno não passou por elas. Quando chegam, só
+// o quadro da proposta é refeito: a Correção tem os campos de NC, NE e TL, e
+// remontar a tela inteira tiraria o cursor de quem está lançando nota.
+function prepararFigurasDaProposta(provaId) {
+  const imgs = motivadoresDe(proposta(provaId)).flatMap(m => m.imagens);
+  if (!imgs.some(i => !enderecoDaImagem(i))) return;
+  prepararImagens([imgs]).then(() => {
+    const quadro = $(`.red-proposta[data-prova="${CSS.escape(provaId)}"]`);
+    if (quadro) quadro.outerHTML = htmlPropostaTela(provaId);
+  });
+}
+
+/* ---------------- edição da proposta ---------------- */
+// Cópia de trabalho, como no editor de item e no do texto-base: o diálogo
+// desenha `rascRed`, nunca a prova gravada, e o que está no formulário só
+// chega à prova quando alguém salva. Toda remontagem — somar ou tirar
+// motivador, trocar o formato, anexar figura — passa antes por
+// `colherProposta()`, para que texto digitado e ainda não “mudado” não se
+// perca: foi assim que o formulário do texto-base perdia título e corpo ao
+// receber uma figura.
 let rascRed = null;
+
+// Prosa e verso, com as mesmas palavras do texto-base. Um motivador pode ser
+// um poema ou uma letra de canção, e em prosa o caderno emendaria os versos.
+const FORMATOS_DO_MOTIVADOR = FORMATOS.filter(f => f.k !== 'numerado');
 
 function dlgRedacao(provaId) {
   const p = provaPorId(provaId);
   if (!p || !rascRed) return;
-  const mots = rascRed.motivadores.length ? rascRed.motivadores : [{ titulo: '', texto: '', fonte: '' }];
-  rascRed.motivadores = mots;
+  if (!rascRed.motivadores.length) rascRed.motivadores = [motivadorEmBranco()];
+  const mots = rascRed.motivadores;
   abrirDlg(`
     <div class="dlg-cab"><h2>Proposta de redação — ${esc(p.serie)}</h2>
       <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
     <div class="dlg-corpo">
       <p style="font-size:12.5px;color:var(--ink-2);margin:0 0 14px">A proposta é <b>desta prova</b> e sai nas
         últimas páginas do caderno, depois dos itens. Cada série tem a sua.</p>
-      <div class="campo" style="margin-bottom:14px"><label>Tema</label>
+      <div class="campo" style="margin-bottom:14px"><label for="rd-tema">Tema</label>
         <input class="caixa" id="rd-tema" value="${esc(rascRed.tema)}"
           placeholder="ex.: A água do Cerrado como patrimônio de todos"></div>
       <div class="campo" style="margin-bottom:14px"><label>Comando — o que se pede ao estudante</label>
-        <textarea class="caixa" id="rd-comando" rows="3"
-          placeholder="A partir dos textos motivadores e de outras leituras que você tenha feito, redija…">${esc(rascRed.comando)}</textarea></div>
-      <div class="campo" style="margin-bottom:16px"><label>Tipo de texto esperado (opcional)</label>
+        ${editorRico({ campo: 'rdComando', valor: rascRed.comando, linhas: 3, paragrafos: true,
+                       rotulo: 'A partir dos textos motivadores e de outras leituras que você tenha feito, redija…' })}</div>
+      <div class="campo" style="margin-bottom:16px"><label for="rd-tipo">Tipo de texto esperado (opcional)</label>
         <input class="caixa" id="rd-tipo" value="${esc(rascRed.tipoTexto)}"
           placeholder="ex.: texto argumentativo em prosa"></div>
 
@@ -5572,45 +5673,78 @@ function dlgRedacao(provaId) {
             <div class="campo"><label>Título (opcional)</label>
               <input class="caixa rd-mot-titulo" value="${esc(m.titulo)}" placeholder="ex.: Trecho de reportagem"></div>
           </div>
-          <div class="campo" style="margin-bottom:8px"><label>Texto</label>
-            <textarea class="caixa rd-mot-texto" rows="5"
-              placeholder="Cole o texto motivador. Uma linha em branco separa parágrafos.">${esc(m.texto)}</textarea></div>
+          <div class="campo" style="margin-bottom:10px">
+            <div class="campo-cab">
+              <label>Texto <span class="rot-opcional">— opcional, se houver figura</span></label>
+              <div class="seg seg-formato" role="group" aria-label="Formato do texto motivador ${i + 1} no caderno">
+                ${FORMATOS_DO_MOTIVADOR.map(f => `<button class="${m.formato === f.k ? 'sel' : ''}"
+                  data-acao="rd-mot-formato" data-i="${i}" data-v="${f.k}" title="${esc(f.dica)}">${esc(f.rot)}</button>`).join('')}
+              </div>
+            </div>
+            ${editorRico({ campo: 'rdMot', i, valor: m.texto, linhas: 5, rotulo: `Texto motivador ${i + 1}`,
+                           paragrafos: m.formato === 'prosa', previa: htmlPreviaDoMotivador(m.texto, m.formato, i) })}</div>
+          <div class="campo" style="margin-bottom:10px"><label>Figuras do texto motivador</label>
+            ${htmlEditorImagens(m.imagens, { campo: `rdMot${i}`, modoNuvem })}</div>
           <div class="campo"><label>Fonte</label>
             <input class="caixa rd-mot-fonte" value="${esc(m.fonte)}" placeholder="autor / obra / veículo, ano"></div>
         </div>`).join('')}
       <button class="btn fantasma" data-acao="rd-mot-somar">+ Texto motivador</button>
-      <p style="font-size:12px;color:var(--ink-2);margin:12px 0 0">No corpo dos textos, uma <b>linha em branco</b>
-        separa parágrafos; quebras simples são só quebras de digitação, como nos textos-base em prosa.
-        Aceita <code>&lt;b&gt;</code> e <code>&lt;i&gt;</code> para destacar termos.</p>
+      <p class="rico-ajuda" style="margin-top:12px">O comando e os textos motivadores aceitam ênfase, tamanho de letra
+        e notação matemática, como o enunciado do item. Em <b>Prosa</b>, <b>Enter</b> abre um parágrafo novo e
+        <b>Shift+Enter</b> quebra a linha dentro dele; em <b>Verso</b>, cada linha sai como foi escrita — é o formato do
+        poema e da letra de canção. <b>O texto motivador pode ser só a figura</b> — charge, tirinha, infográfico, foto,
+        obra de arte —: deixe o texto em branco e acrescente a imagem, com legenda e crédito.</p>
     </div>
     <div class="dlg-pe">
       ${provaPorId(provaId)?.redacao ? `<button class="btn vermelho fantasma" style="margin-right:auto"
         data-acao="rd-apagar" data-id="${esc(provaId)}">Apagar a proposta</button>` : ''}
+      <button class="btn fantasma" data-acao="rd-previa" title="Ver como a proposta sai no caderno impresso">👁 Como sai na prova</button>
       <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
       <button class="btn" data-acao="rd-salvar" data-id="${esc(provaId)}">Salvar</button></div>`);
 }
 
+// A prévia do corpo do motivador é a do texto-base — parágrafos numerados em
+// prosa, quebras à vista em verso —, e o convite “isto parece verso” troca o
+// formato DESTE motivador, não o de um texto-base.
+const htmlPreviaDoMotivador = (corpo, formato, i) =>
+  htmlPreviaDoCorpo(corpo, formato || 'prosa', `data-acao="rd-mot-formato" data-i="${i}"`);
+
 // Lê o formulário para a cópia de trabalho. Vale para salvar e para remontar o
 // diálogo: sem isto, somar um motivador apagaria o que ainda não teve `change`.
+// Formato e figuras não estão em campo de formulário — vivem só na cópia —, e
+// por isso cada bloco é casado com o seu motivador pelo índice, não refeito.
 function colherProposta() {
   if (!rascRed) return null;
   const val = sel => ($(sel)?.value ?? '');
   rascRed.tema = val('#rd-tema').trim();
-  rascRed.comando = val('#rd-comando').trim();
   rascRed.tipoTexto = val('#rd-tipo').trim();
-  rascRed.motivadores = $$('[data-mot]').map(bloco => ({
-    titulo: $('.rd-mot-titulo', bloco).value.trim(),
-    texto: $('.rd-mot-texto', bloco).value.trim(),
-    fonte: $('.rd-mot-fonte', bloco).value.trim()
-  }));
+  const comando = $('[data-rico-campo="rdComando"]');
+  if (comando) rascRed.comando = valorDoEditorRico(comando);
+  for (const bloco of $$('[data-mot]')) {
+    const m = rascRed.motivadores[Number(bloco.dataset.mot)];
+    if (!m) continue;
+    m.titulo = $('.rd-mot-titulo', bloco).value.trim();
+    m.fonte = $('.rd-mot-fonte', bloco).value.trim();
+    const area = $('[data-rico-campo="rdMot"]', bloco);
+    if (area) m.texto = valorDoEditorRico(area);
+  }
   return rascRed;
 }
 
 ACOES['cad-redacao'] = () => {
   const p = provaAtual();
   if (!p) return;
-  rascRed = { provaId: p.id, ...proposta(p.id) };
+  // Cópia funda: a legenda de uma figura mudada no diálogo não pode alcançar a
+  // prova gravada antes do “Salvar” — e nem depois de um “Cancelar”.
+  rascRed = { provaId: p.id, ...JSON.parse(JSON.stringify(proposta(p.id))) };
   dlgRedacao(p.id);
+  // Mesmo motivo de `editar-texto`: a miniatura precisa de endereço assinado,
+  // e quem abre a proposta pode não ter passado pelo caderno.
+  const imgs = rascRed.motivadores.flatMap(m => m.imagens);
+  if (imgs.some(i => !enderecoDaImagem(i)))
+    prepararImagens([imgs]).then(() => {
+      if ($('#dlg').open && rascRed?.provaId === p.id) { colherProposta(); dlgRedacao(p.id); }
+    });
 };
 
 /* ================= TELA · REDAÇÃO =================
@@ -5712,6 +5846,7 @@ function telaRedacao() {
     redação do cartão-resposta traz o tema no alto. As notas — <strong>NC</strong> (conteúdo), <strong>NE</strong>
     (erros) e <strong>TL</strong> (total de linhas) — são lançadas em <a href="#/correcao">Correção</a>, e a nota
     final sai da planilha oficial: NR = NC − 2·NE/TL.</p>`;
+  if (temRed) prepararFigurasDaProposta(pAtiva.id);
 }
 ACOES['ir-para-redacao'] = d => {
   S.provaAtiva = d.id;
@@ -5722,37 +5857,96 @@ ACOES['ir-para-redacao'] = d => {
 ACOES['rd-mot-somar'] = () => {
   const r = colherProposta();
   if (!r) return;
-  r.motivadores.push({ titulo: '', texto: '', fonte: '' });
+  r.motivadores.push(motivadorEmBranco());
   dlgRedacao(r.provaId);
 };
-ACOES['rd-mot-remover'] = d => {
+ACOES['rd-mot-remover'] = async d => {
   const r = colherProposta();
   if (!r) return;
-  r.motivadores.splice(parseInt(d.i, 10), 1);
+  const [fora] = r.motivadores.splice(parseInt(d.i, 10), 1);
+  dlgRedacao(r.provaId);
+  // Como em `img-remover`: só sai do bucket a figura que nenhum registro
+  // gravado cita — a que foi enviada agora e nunca chegou a ser salva.
+  for (const img of fora?.imagens || [])
+    if (!arquivoCitado(img.caminho)) await descartarImagem(img);
+};
+// Trocar o formato muda como o Enter se comporta e o que a prévia mostra. As
+// linhas em branco que eram marca de parágrafo não viram estrofe — é a mesma
+// conversão do texto-base (`converterCorpo`).
+ACOES['rd-mot-formato'] = d => {
+  const r = colherProposta();
+  const m = r?.motivadores[Number(d.i)];
+  if (!m || m.formato === d.v) return;
+  m.texto = converterCorpo(m.texto, m.formato, d.v);
+  m.formato = d.v;
   dlgRedacao(r.provaId);
 };
-ACOES['rd-salvar'] = d => {
+// A prévia desenha a CÓPIA DE TRABALHO com as peças da impressão, na coluna
+// única das páginas de redação: o que aparece é o que sai no papel, antes de
+// gravar. Voltar reabre o formulário com tudo no lugar.
+ACOES['rd-previa'] = () => {
+  const r = colherProposta();
+  if (!r) return;
+  voltarDaPrevia = () => dlgRedacao(r.provaId);
+  dlgPrevia(`Como sai na prova — proposta de redação, ${provaPorId(r.provaId)?.serie || ''}`,
+    `<div class="pas"><div class="pas-previa-col pas-previa-larga">${pecasDaProposta(r).join('')}</div></div>`,
+    `<p class="previa-nota">É a coluna única das últimas páginas do caderno, na largura e no corpo reais. A folha tem
+      730pt de altura útil: o que não couber passa inteiro para a seguinte, e o título de cada texto motivador vai
+      sempre junto com o começo dele.</p>`);
+};
+
+// A recusa diz o motivo E leva até o campo, como `recusarItem()`: o motivador
+// sem texto pode estar três blocos abaixo de onde a pessoa está olhando, e um
+// aviso de quatro segundos não alcança quem está lá embaixo.
+function recusarProposta(seletor, msg) {
+  toast(msg);
+  const campo = $(seletor)?.closest('.campo');
+  if (!campo) return;
+  campo.classList.add('com-erro');
+  campo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  $('.rico-area, input', campo)?.focus({ preventScroll: true });
+}
+
+// Gravada e ESPERADA, como o texto-base (`salvar-texto`): se o banco recusar,
+// a prova continua como estava e o diálogo fica aberto com o trabalho na tela
+// e o motivo escrito. Antes a gravação saía solta e o diálogo fechava dizendo
+// “salva” — para o papel `redacao`, que o banco recusava, a proposta sumia no
+// carregamento seguinte.
+ACOES['rd-salvar'] = async d => {
   const r = colherProposta();
   const p = provaPorId(d.id);
   if (!r || !p) return;
-  if (!r.tema || !r.comando) { toast('Tema e comando são o mínimo de uma proposta.'); return; }
-  // Motivador com título ou fonte e sem texto é engano de digitação, não uma
-  // decisão: avisa em vez de descartar em silêncio o que a pessoa escreveu.
-  const meio = r.motivadores.findIndex(m => !m.texto && (m.titulo || m.fonte));
-  if (meio >= 0) { toast(`O texto motivador ${meio + 1} está sem texto.`); return; }
-  p.redacao = {
+  $$('#dlg .campo.com-erro').forEach(c => c.classList.remove('com-erro'));
+  if (!r.tema) return recusarProposta('#rd-tema', 'Falta o tema — tema e comando são o mínimo de uma proposta.');
+  if (ricoVazio(r.comando))
+    return recusarProposta('[data-rico-campo="rdComando"]', 'Falta o comando — o que se pede ao estudante.');
+  // Motivador com título ou fonte e sem texto nem figura é engano de digitação,
+  // não uma decisão: avisa em vez de descartar em silêncio o que foi escrito.
+  const meio = r.motivadores.findIndex(m => ricoVazio(m.texto) && !m.imagens.length && (m.titulo || m.fonte));
+  if (meio >= 0)
+    return recusarProposta(`[data-mot="${meio}"] [data-rico-campo="rdMot"]`,
+      `O texto motivador ${meio + 1} está sem texto e sem figura.`);
+  const nova = {
     tema: r.tema, comando: r.comando, tipoTexto: r.tipoTexto,
-    motivadores: r.motivadores.filter(m => m.texto)
+    motivadores: motivadoresDe(r).map(m => ({
+      titulo: m.titulo, texto: ricoVazio(m.texto) ? '' : m.texto, fonte: m.fonte,
+      formato: m.formato, imagens: todasAsImagens(m.imagens)
+    }))
   };
+  const erro = await PERS.propostaAgora(p.id, nova);
+  if (erro) { toast('⚠ O banco recusou a gravação: ' + erro); return; }
+  p.redacao = nova;
   rascRed = null;
-  $('#dlg').close(); commit(); PERS.prova(p); toast('Proposta de redação salva.');
+  $('#dlg').close(); commit(); toast('Proposta de redação salva.');
 };
-ACOES['rd-apagar'] = d => {
+ACOES['rd-apagar'] = async d => {
   const p = provaPorId(d.id);
   if (!p) return;
+  const erro = await PERS.propostaAgora(p.id, null);
+  if (erro) { toast('⚠ O banco recusou: ' + erro); return; }
   delete p.redacao;
   rascRed = null;
-  $('#dlg').close(); commit(); PERS.prova(p);
+  $('#dlg').close(); commit();
   toast('Proposta apagada — o caderno volta a sair sem a página de redação.');
 };
 
@@ -6953,6 +7147,7 @@ function telaCorrecaoRedacao() {
     </div>
   </div></div>
   <p class="nota-tela"><strong>Perfil de redação:</strong> esta tela mostra a proposta desta prova e o lançamento da redação de cada estudante. <strong>NC</strong> = nota de conteúdo, de 0 a 10 · <strong>NE</strong> = número de erros · <strong>TL</strong> = total de linhas escritas. A nota sai da planilha oficial, <strong>NR = NC − 2·NE/TL</strong>: o desconto por erro depende do tamanho do texto, por isso a coluna “como a nota se forma” mostra a conta com os seus números. Sem TL não há NR — a linha fica marcada como não lançada. NR não fica abaixo de zero.</p>`;
+  prepararFigurasDaProposta(pAtiva.id);
 }
 
 // Visão restrita: docente lança notas dos próprios itens discursivos.

@@ -1017,6 +1017,9 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
 /* O comando da proposta ganha respiro do último motivador. Classe própria em
    vez de mexer em `.pas-comando`, que é o comando dos blocos de item. */
 .pas .pas-red-comando{margin:9pt 0 0}
+/* O comando é texto rico e pode ter mais de um parágrafo: sai numa peça só,
+   com um respiro curto entre eles e sem recuo, como o comando dos blocos. */
+.pas .pas-red-comando p+p{margin-top:4pt}
 .pas .pas-red-obs{margin:11pt 0 0;text-indent:0;font-size:8.5pt;line-height:1.35;
   border-top:.7pt solid #999;padding-top:5pt;text-align:left}
 /* A régua que mede as peças antes de paginar também é `.pas` (js/app.js:
@@ -1044,11 +1047,20 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
 .red-proposta .red-tema span{display:block;font-size:11px;font-weight:800;letter-spacing:.07em;
   text-transform:uppercase;color:var(--ink-2)}
 .red-proposta .red-comando{margin:0 0 8px;padding-left:11px;border-left:3px solid var(--rosa)}
+.red-proposta .red-comando p{margin:0}
+.red-proposta .red-comando p+p{margin-top:6px}
 .red-proposta .red-tipo{margin:0 0 10px;font-size:12.5px;color:var(--ink-2)}
 .red-mot{border-top:1px solid var(--borda);padding-top:8px;margin-top:8px}
 .red-mot>summary{font-size:12.5px;font-weight:800;color:var(--rosa);cursor:pointer}
 .red-mot p{margin:6px 0 0}
 .red-mot .fonte{font-size:11.5px;color:var(--ink-2);text-align:right}
+.red-mot-fig{font-weight:600;color:var(--ink-2)}
+/* A figura do motivador na tela: a medida dela é a do papel, em pt, e a coluna
+   da proposta na Correção tem 340px. Encolhe para caber, sem deformar — a
+   altura gravada no estilo cede à proporção. */
+.red-mot .pas-fig{max-width:100%;margin:10px auto 4px}
+.red-mot .pas-fig img,.red-mot .pas-fig-ausente{max-width:100%;height:auto !important}
+.red-mot .pas-fig-ausente{aspect-ratio:3/2}
 
 /* “como a nota se forma”: a conta com os números daquele estudante */
 .red-tab td{vertical-align:middle}
@@ -1205,7 +1217,13 @@ label.capa-arranjo-op.sel{border-color:var(--azul);background:var(--azul-claro)}
    usa para medir — o que se vê aqui é o que a régua mediu. */
 .previa-quadro{background:#e9e4de;border-radius:12px;padding:20px;overflow:auto;display:flex;justify-content:center}
 .pas-previa-col{width:var(--col);background:#fff;padding:16pt 10pt;text-align:justify;
-  box-shadow:0 3px 14px rgba(0,0,0,.25)}
+  box-shadow:0 3px 14px rgba(0,0,0,.25);
+  /* `.pas *` põe border-box em tudo, e com ele o respiro de 10pt de cada lado
+     saía de DENTRO da coluna: o texto quebrava em 246pt, não em 266, e a
+     figura de largura cheia passava da borda. */
+  box-sizing:content-box}
+/* A proposta de redação sai em coluna única (`.pas-col-larga`). */
+.pas-previa-col.pas-previa-larga{width:541.1pt;flex:none}
 .previa-nota{margin:10px 2px 0;font-size:12px;line-height:1.55;color:var(--ink-2)}
 
 /* --- revisão na página ---

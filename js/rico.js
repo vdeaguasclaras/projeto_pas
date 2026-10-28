@@ -773,7 +773,8 @@ function ligarEditoresRicos(aoMudar, previaDe = null) {
   const avisar = area => {
     const valor = valorDoEditor(area);
     area.classList.toggle('vazia', !simples(valor).trim());
-    atualizarPrevia(caixaDe(area), valor, previaDe?.(area.dataset.ricoCampo, valor) ?? null);
+    atualizarPrevia(caixaDe(area), valor,
+      previaDe?.(area.dataset.ricoCampo, valor, area.dataset.ricoI) ?? null);
     aoMudar(area.dataset.ricoCampo, area.dataset.ricoI, valor);
   };
 

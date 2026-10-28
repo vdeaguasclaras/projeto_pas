@@ -181,11 +181,17 @@ function enderecoDaImagem(img) {
 // `larguraColuna` em pt: 266,05 no miolo do caderno, 541,1 na coluna única da
 // redação. A figura nunca passa da coluna, e a altura vem da proporção gravada
 // — é o que faz a régua medir certo antes de a imagem chegar.
-function htmlImagem(img, larguraColuna, { previa = false } = {}) {
+//
+// `alturaMax` (pt) é o teto da coluna única: ali a figura em pé, na largura
+// cheia de 541pt, sai mais alta que a folha (730pt) — um cartaz de 2:3 daria
+// 811pt, e o que passa da folha é cortado no papel. Acima do teto ela encolhe
+// por inteiro, mantendo a proporção.
+function htmlImagem(img, larguraColuna, { previa = false, alturaMax = Infinity } = {}) {
   if (!ehImagem(img)) return '';
   const escala = Math.max(10, Math.min(100, Number(img.escala) || ESCALA_PADRAO));
-  const larg = larguraColuna * escala / 100;
-  const alt = img.largura > 0 ? larg * (img.altura / img.largura) : larg * 0.66;
+  let larg = larguraColuna * escala / 100;
+  let alt = img.largura > 0 ? larg * (img.altura / img.largura) : larg * 0.66;
+  if (alt > alturaMax) { larg *= alturaMax / alt; alt = alturaMax; }
   const src = enderecoDaImagem(img);
   const rotulo = img.legenda?.trim() || '';
   const fonte = img.fonte?.trim() || '';

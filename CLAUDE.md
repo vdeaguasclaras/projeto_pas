@@ -134,6 +134,15 @@ Estas três já falharam uma vez. Valem como regra.
   pedagógica. Política sabe dizer “pode escrever”; não sabe cumprir a segunda
   metade. `ajustar_na_leitura_final` (migração 0017) faz as duas juntas, e a
   marca não depende de o cliente lembrar de pô-la.
+- **A proposta de redação se grava pela função, não com a prova.** Ela mora em
+  `provas.dados.redacao`, a linha da prova só a coordenação geral escreve, e
+  quem escreve a proposta inclui o papel `redacao` — que via o diálogo dizer
+  “salva” enquanto o banco recusava. `gravar_proposta_de_redacao` (migração
+  0019) escreve só aquela chave, para os dois papéis; o gatilho
+  `proposta_so_pela_funcao` (0020) devolve a proposta gravada quando a prova
+  inteira é regravada (capa, “Configurar prova”), senão quem estava com a tela
+  aberta desde antes apagaria a proposta ao salvar a capa. Figura nova dentro
+  da proposta tem de entrar também em `arquivoCitado` e em `duplicarProva`.
 - **O histórico do item (`dados.historico`) é escrito por gatilho, nunca pelo
   cliente** (migração 0017). O gatilho o repõe a partir da linha guardada em
   toda gravação, então mandá-lo do navegador não adianta. Ao acrescentar campo

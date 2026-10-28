@@ -363,8 +363,10 @@ Fórmula já tem a formatação dela.
 
 **5 · Redação** (coordenação e professora de redação) — a **proposta de cada
 prova**: tema, comando, tipo de texto esperado e os textos motivadores que o
-estudante lê. A tela mostra as quatro provas de uma vez, com quais ainda estão
-sem proposta e quantas notas de redação já foram lançadas em cada uma.
+estudante lê — texto, poema ou imagem, com o mesmo editor do texto-base (ver
+“A proposta de redação”, em 6 · Caderno). A tela mostra as quatro provas de uma
+vez, com quais ainda estão sem proposta e quantas notas de redação já foram
+lançadas em cada uma.
 
 - Quem escreve é a **coordenação geral** ou quem tem o papel **professora de
   redação**. As demais pessoas veem a proposta pronta no Caderno.
@@ -516,9 +518,20 @@ sai impressa **nas últimas páginas do caderno**, depois dos itens, em coluna
 
 - **Tema** e **comando** (o que se pede ao estudante) são obrigatórios; o **tipo
   de texto esperado** é opcional.
+- O **comando** e o texto de cada motivador usam o mesmo editor do texto-base e
+  do enunciado do item: negrito, itálico, sublinhado, tamanho de letra e
+  fórmula. Em **Prosa**, **Enter** abre parágrafo e **Shift+Enter** quebra a
+  linha dentro dele.
 - **Textos motivadores**: quantos você quiser, cada um com título (opcional),
-  texto e **fonte**. Uma **linha em branco** separa parágrafos, como nos
-  textos-base em prosa; `<b>` e `<i>` funcionam para destacar termos.
+  texto, **figuras** e **fonte**. Como o texto-base, o motivador pode ser um
+  artigo, um poema ou uma imagem:
+  - para **poema** ou letra de canção, escolha **Verso** ao lado do rótulo
+    “Texto” — em Prosa o caderno emenda os versos num parágrafo;
+  - para **charge, tirinha, infográfico, foto ou obra de arte**, use
+    **+ Figura** (PNG, JPEG, WEBP ou SVG) e preencha legenda e crédito. O texto
+    pode ficar em branco: o motivador sai só com a imagem.
+- O botão **👁 Como sai na prova**, no pé do formulário, mostra a proposta na
+  coluna do caderno antes de salvar.
 - A proposta é **de cada prova**: o 9º ano não escreve sobre o tema da 3ª série.
   Troque de prova no menu à esquerda para escrever a de cada uma.
 - Enquanto a proposta estiver em branco, o **Painel avisa** na “Conferência da
@@ -643,8 +656,9 @@ tamanho.
 
 ## Escrever com ênfase, tamanho e fórmula
 
-O **enunciado, as opções e a resposta esperada** do item, e também o **corpo do
-texto-base**, aceitam negrito, itálico, sobrescrito, subscrito, **tamanho de
+O **enunciado, as opções e a resposta esperada** do item, o **corpo do
+texto-base** e, na proposta de redação, o **comando** e os **textos
+motivadores** aceitam negrito, itálico, sobrescrito, subscrito, **tamanho de
 letra** e **notação matemática**. Para a fórmula, o caminho mais curto é o botão
 **ƒ(x) Fórmula**, que monta e confere antes de inserir; escrever à mão também
 funciona, entre `$…$` na notação do LaTeX — `$\frac{1}{2}$`, `$x^2$`,
@@ -655,7 +669,7 @@ Valor em real não vira fórmula: “R$ 50,00 e R$ 30,00” atravessa intacto.
 
 ## Figuras: infográfico, mapa, gráfico, obra de arte
 
-Há **três lugares** que aceitam figura, cada um com o seu bloco “Figuras” no
+Há **quatro lugares** que aceitam figura, cada um com o seu bloco “Figuras” no
 formulário. Clique em **+ Figura**, escolha o arquivo (PNG, JPEG, WEBP ou SVG) e
 pronto.
 
@@ -664,6 +678,7 @@ pronto.
 | **Figuras do texto** (no texto-base) | depois do texto e antes do comando do bloco |
 | **Figuras do enunciado** (no item) | depois do enunciado, antes das opções |
 | **Figura da opção A/B/C/D** (item tipo C) | dentro da própria alternativa, embaixo do texto dela |
+| **Figuras do texto motivador** (na proposta de redação) | depois do texto do motivador e antes da fonte dele, nas páginas de redação |
 
 Para cada figura você pode informar **legenda** e **fonte**, que saem impressas
 embaixo dela, e escolher o **tamanho** — 100%, 75%, 50% ou 33% da largura da
@@ -675,6 +690,12 @@ mapa: deixe o **corpo do texto em branco**, acrescente a figura, e o caderno tra
 só a imagem, com a legenda e a fonte. Título e fonte continuam obrigatórios — a
 fonte é o crédito da obra. Quem for escrever um item sobre esse texto-base vê a
 figura no painel ao lado do editor, no lugar em que veria as linhas.
+
+**O texto motivador da redação também.** Na proposta, cada motivador tem o seu
+bloco de figuras e o texto dele é opcional quando há figura: a charge ou a
+tirinha sozinha, com legenda e crédito, é um motivador completo. Nas páginas de
+redação a coluna é única e larga, e a figura em pé encolhe sozinha para caber
+inteira na folha.
 
 **A alternativa também pode ser uma figura.** Em item do tipo C de Matemática ou
 de Artes, muitas vezes a resposta É a imagem: quatro gráficos, quatro obras,
