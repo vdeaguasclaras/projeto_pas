@@ -110,6 +110,9 @@ class Leitura:
     motivo: str = ""
     voltas: int = 0            # quartos de volta que foi preciso dar na página
     limiares: "Limiares | None" = None
+    # O canto que não apareceu na digitalização, quando a folha foi alinhada por
+    # só três âncoras — “de baixo à direita”. Vazio na folha alinhada pelas quatro.
+    canto_ausente: str = ""
 
     @property
     def matricula(self) -> str:

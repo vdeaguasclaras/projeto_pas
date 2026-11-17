@@ -257,10 +257,17 @@ papel na pilha. Na pasta `conferencia/` há ainda uma imagem com o nome da pági
 
 | O aviso diz… | O que é | O que fazer |
 |---|---|---|
-| **não achei as quatro âncoras** | um dos quatro quadrados pretos dos cantos não foi reconhecido: folha cortada, dobrada, mal encostada no vidro — ou **rabiscada por cima do quadrado**. Assinatura fina que só encosta nele o programa já resolve sozinho; quadrado coberto de tinta, não. | Passe o lote de novo pelo scanner, com essa folha inteira e bem encostada. Se o quadrado estiver mesmo coberto, lance as respostas à mão no sistema on-line. |
+| **não achei as quatro âncoras** | os quadrados pretos dos cantos não foram reconhecidos: folha muito cortada ou dobrada, mal encostada no vidro — ou **rabiscada por cima dos quadrados**. Assinatura fina que só encosta num deles o programa resolve sozinho, e **um** canto que não apareceu também (ele lê pelos outros três e avisa); quadrado coberto de tinta, ou dois cantos faltando, não. | Passe o lote de novo pelo scanner, com essa folha inteira e bem encostada. Se não houver jeito, lance as respostas à mão no sistema on-line. |
 | **a faixa de blocos do rodapé não pôde ser lida** | a faixa que diz de quem é a folha está rasurada, dobrada ou cortada. | Passe o lote de novo pelo scanner; se a faixa estiver danificada, lance as respostas à mão no sistema on-line. |
 | **cartão extra com a matrícula em branco** (ou ilegível, ou fora do padrão) | o estudante usou o cartão de reserva e não preencheu os alvéolos da matrícula — escrever o nome não basta, o programa não lê letra. As marcações foram lidas e estão esperando dono. | Descubra de quem é (o nome está no cabeçalho), **preencha os nove alvéolos da matrícula no papel** e passe o lote de novo pelo scanner. O estudante precisa estar na lista da prova — veja a linha de baixo. |
 | **a matrícula … não está no elenco desta prova** | o cartão é de **outra prova** (outra série esquecida na pilha — o aviso diz quando parece ser isso), ou o estudante não estava na lista quando o pacote foi exportado. | Cartão de outra prova: leia-o no lote dela, com o pacote dela. Estudante que falta na lista: cadastre-o no sistema, exporte o pacote de novo e mande ler outra vez. |
+
+**“Lida por só três âncoras”** é outro aviso, e não é folha sem nota: um canto
+da folha não apareceu na digitalização (dobrado, rasgado, fora do vidro), o
+programa alinhou pelos outros três e **a folha entrou na nota**. O que ele não
+tem como saber é se havia marcação no pedaço que faltou — ali ele não viu nada,
+e deu como em branco. O aviso diz a página e o canto: olhe o papel uma vez e, se
+houver marcação naquele canto, lance-a na conferência do sistema on-line.
 
 > ⚠️ **Antes de exportar as notas**, toda folha desta lista que for de estudante
 > desta prova precisa estar resolvida. Quem tem cartão na pilha e ficou sem dono

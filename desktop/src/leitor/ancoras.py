@@ -28,6 +28,27 @@ PROPORCAO_MINIMA = 0.86   # área / área da caixa: quadrado ~1, círculo ~0,79
 TRACO_FINO = 0.34
 
 
+# Os quatro cantos, na ordem em que o molde os traz — e como se diz cada um a
+# quem vai procurar o papel na pilha.
+NOME_DO_CANTO = ("do alto à esquerda", "do alto à direita",
+                 "de baixo à esquerda", "de baixo à direita")
+
+# Três âncoras formam um “L”: a do meio (o pivô) e as duas vizinhas dela, uma na
+# largura da folha e outra na altura. Para cada canto que pode faltar, quem são
+# os três que sobram: (pivô, vizinha na largura, vizinha na altura).
+_TRIOS = {3: (0, 1, 2), 0: (3, 2, 1), 1: (2, 3, 0), 2: (1, 0, 3)}
+
+# O “L” tem de ter as medidas do cartão. A folha vem encostada no vidro, então
+# o ângulo é reto e a proporção é a do molde, a menos do erro de achar o centro
+# de um quadrado de 37px: a folga é pequena de propósito, porque aqui não há um
+# quarto ponto para desmentir três manchas que só pareçam cantos.
+_FOLGA_DA_PROPORCAO = 0.04
+_FOLGA_DO_ANGULO = 0.035        # cosseno: ~2 graus fora do esquadro
+# Acima disso a página não é cartão — é uma grade de quadrados —, e testar todo
+# trio custaria caro para não achar nada.
+_MAXIMO_DE_CANDIDATAS = 40
+
+
 class SemAncoras(Exception):
     """Não deu para achar as quatro âncoras nesta página."""
 
@@ -189,6 +210,110 @@ def voltas_para_endireitar(cinza: np.ndarray,
 def girar(cinza: np.ndarray, voltas: int) -> np.ndarray:
     """A imagem em quartos de volta no sentido anti-horário."""
     return cinza if voltas % 4 == 0 else np.ascontiguousarray(np.rot90(cinza, voltas))
+
+
+def _girar_pontos(pontos: np.ndarray, voltas: int, forma: tuple[int, int]) -> np.ndarray:
+    """Onde estes pontos vão parar depois de `girar(imagem, voltas)`.
+
+    Um quarto de volta anti-horário leva o pixel `(x, y)` a `(y, largura-1-x)`,
+    e a imagem troca largura por altura a cada volta.
+    """
+    altura, largura = forma[:2]
+    girados = np.asarray(pontos, dtype=np.float64).copy()
+    for _ in range(voltas % 4):
+        girados = np.stack([girados[:, 1], largura - 1 - girados[:, 0]], axis=1)
+        altura, largura = largura, altura
+    return girados
+
+
+def _eles(pontos: np.ndarray, largura_pt: float, altura_pt: float, escala: float):
+    """Os trios de manchas que formam um “L” com as medidas do cartão.
+
+    Devolve `(pivô, vizinha na largura, vizinha na altura, sentido)`. O sentido
+    é o sinal do produto vetorial dos dois braços: ele não muda quando a folha
+    gira, e é o que diz de que lado do pivô cada braço está — ou seja, quais
+    cantos podem ser estes três.
+    """
+    esperada = largura_pt / altura_pt
+    for i, pivo in enumerate(pontos):
+        for j, na_largura in enumerate(pontos):
+            if j == i:
+                continue
+            braco_l = na_largura - pivo
+            comprimento_l = float(np.hypot(*braco_l))
+            # A escala estimada pode errar bastante (é a mesma folga das
+            # âncoras), mas não dez vezes: isto poda quase todo par de manchas.
+            if not 0.6 <= comprimento_l / (largura_pt * escala) <= 1.7:
+                continue
+            for k, na_altura in enumerate(pontos):
+                if k in (i, j):
+                    continue
+                braco_a = na_altura - pivo
+                comprimento_a = float(np.hypot(*braco_a))
+                if comprimento_a < 1:
+                    continue
+                if abs((comprimento_l / comprimento_a) / esperada - 1) > _FOLGA_DA_PROPORCAO:
+                    continue
+                if abs(float(braco_l @ braco_a)) / (comprimento_l * comprimento_a) > _FOLGA_DO_ANGULO:
+                    continue
+                sentido = float(braco_l[0] * braco_a[1] - braco_l[1] * braco_a[0])
+                yield pivo, na_largura, na_altura, sentido
+
+
+def com_tres_ancoras(cinza: np.ndarray,
+                     referencia: list[tuple[float, float]]) -> list[tuple[int, np.ndarray, int]]:
+    """As hipóteses de alinhamento quando um canto da folha não apareceu.
+
+    **Um cartão com três âncoras é um cartão legível.** Chegou assim: o canto de
+    baixo de uma folha não saiu na digitalização — dobrado, ou fora do vidro —,
+    e com ele foi uma âncora. As outras três estavam perfeitas, a faixa do
+    rodapé intacta, todos os alvéolos preenchidos; o leitor, que só sabia
+    alinhar com quatro, descartou a folha, e a estudante ficou sem nota. Pior é
+    quando há uma mancha qualquer por perto: `_quatro_cantos` a toma pelo canto
+    que falta, o retângulo sai torto e a recusa vem como “faixa ilegível”, que
+    manda procurar o defeito no lugar errado.
+
+    Três pontos dão uma transformação AFIM — giro, escala e deslocamento —, que
+    é o que uma folha encostada no vidro sofre. Não corrige perspectiva, e por
+    isso é a ÚLTIMA tentativa: quem tem as quatro âncoras continua sendo
+    alinhado por elas, exatamente como antes.
+
+    Devolve `(voltas, matriz, canto que falta)`, uma por hipótese, e **nenhuma
+    delas é resposta ainda**: três manchas quadradas quaisquer também formam um
+    “L”, e o mesmo “L” serve a dois cantos opostos (a folha em pé sem o canto de
+    baixo à direita e a folha de cabeça para baixo sem o do alto à esquerda são
+    o mesmo desenho). Quem escolhe é o CRC da faixa do rodapé, lido por quem
+    chama — como já é ele quem diz se a folha está de cabeça para baixo.
+    """
+    ref = np.array(referencia, dtype=np.float32)
+    largura_pt = float(np.linalg.norm(ref[1] - ref[0]))
+    altura_pt = float(np.linalg.norm(ref[2] - ref[0]))
+    hipoteses, vistas = [], set()
+    for sem_tracos in (False, True):
+        for escala in _escalas_a_tentar(cinza, largura_pt + LADO_PT):
+            pontos = _candidatos(cinza, escala, sem_tracos)
+            if not 3 <= len(pontos) <= _MAXIMO_DE_CANDIDATAS:
+                continue
+            for pivo, na_largura, na_altura, sentido in _eles(pontos, largura_pt, altura_pt, escala):
+                trio = np.array([pivo, na_largura, na_altura], dtype=np.float32)
+                # Com a folha sem espelhar, o sentido positivo só acontece
+                # quando falta o canto de baixo à direita ou o do alto à
+                # esquerda; o negativo, quando falta um dos outros dois.
+                for falta in ((3, 0) if sentido > 0 else (1, 2)):
+                    chave = (falta, tuple(np.round(trio).astype(int).ravel()))
+                    if chave in vistas:
+                        continue
+                    vistas.add(chave)
+                    origem = ref[list(_TRIOS[falta])]
+                    # Para que lado aponta, nesta imagem, a largura da folha: é
+                    # o que diz quantos quartos de volta a põem em pé. A cada
+                    # volta anti-horária o vetor (dx, dy) vira (dy, -dx).
+                    dx, dy = cv2.getAffineTransform(origem, trio)[:, 0]
+                    voltas = int(np.argmax([dx, dy, -dx, -dy]))
+                    em_pe = _girar_pontos(trio, voltas, cinza.shape).astype(np.float32)
+                    afim = cv2.getAffineTransform(origem, em_pe)
+                    hipoteses.append((voltas, np.vstack([afim, [0.0, 0.0, 1.0]]), falta))
+    return hipoteses
 
 
 def homografia(cinza: np.ndarray, referencia: list[tuple[float, float]]) -> np.ndarray:

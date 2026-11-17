@@ -15,7 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from .ancoras import SemAncoras, girar, homografia, voltas_para_endireitar
+from .ancoras import (NOME_DO_CANTO, SemAncoras, com_tres_ancoras, girar, homografia,
+                      voltas_para_endireitar)
 from .codigo import FaixaIlegivel
 from .imagem import DPI_PADRAO, Pagina, contar_paginas, paginas
 from .leitura import Leitura, Limiares, calibrar, ler_faixa, ler_folha, limiar_de_tinta
@@ -31,6 +32,14 @@ TOPO_DA_PILHA = 8
 Progresso = Callable[[int, int, str], None]
 
 
+def lugar_da_folha(onde: str) -> str:
+    """“lote.pdf, página 34” — é pelo número da página que se acha o papel."""
+    arquivo, _, numero = onde.rpartition(":")
+    if arquivo.lower().endswith(".pdf"):
+        return f"{arquivo}, página {numero}"
+    return arquivo or onde
+
+
 @dataclass
 class SemNota:
     """Uma folha do lote que não entrou na nota de ninguém, e por quê."""
@@ -40,14 +49,27 @@ class SemNota:
 
     @property
     def lugar(self) -> str:
-        """“lote.pdf, página 34” — é pelo número da página que se acha o papel."""
-        arquivo, _, numero = self.onde.rpartition(":")
-        if arquivo.lower().endswith(".pdf"):
-            return f"{arquivo}, página {numero}"
-        return arquivo or self.onde
+        return lugar_da_folha(self.onde)
 
     def __str__(self) -> str:
         return f"{self.lugar} — {self.motivo}"
+
+
+@dataclass
+class SemCanto:
+    """Uma folha lida por só três âncoras: um canto não apareceu na digitalização.
+
+    A folha ENTROU na nota — a faixa do rodapé conferiu, e os alvéolos foram
+    lidos onde o molde os põe. O que ninguém sabe é o que havia no pedaço que
+    não apareceu: alvéolo que estivesse ali o leitor não viu, e ele o dá como em
+    branco. Por isso a folha é dita a quem opera, com a página e o canto.
+    """
+    onde: str
+    canto: str              # “de baixo à direita”
+    matricula: str = ""
+
+    def __str__(self) -> str:
+        return f"{lugar_da_folha(self.onde)} — faltou o canto {self.canto}"
 
 
 @dataclass
@@ -59,6 +81,7 @@ class Lote:
     avisos: list[str] = field(default_factory=list)
     divergencias: list[str] = field(default_factory=list)
     sem_nota: list[SemNota] = field(default_factory=list)
+    sem_canto: list[SemCanto] = field(default_factory=list)
 
     @property
     def lidas(self) -> int:
@@ -148,25 +171,44 @@ def alinhar(pagina: Pagina, molde: Molde):
       ao contrário devolveria lixo com cara de matrícula, e é o CRC que recusa.
 
     Sem o CRC nada disso seria seguro; com ele, tentar é barato.
+
+    E quando nada disso fecha, a última tentativa é a das TRÊS âncoras
+    (`com_tres_ancoras`): um canto que não apareceu na digitalização não pode
+    custar a folha inteira. Ela só roda aqui embaixo, depois de as quatro terem
+    falhado — a folha que já era lida continua sendo lida do mesmo jeito —, e
+    quem a valida é o mesmo CRC.
+
+    Devolve `(imagem em pé, matriz, identificação, voltas, canto que faltou)`;
+    o último vem vazio na folha alinhada pelas quatro âncoras.
     """
-    voltas = voltas_para_endireitar(pagina.cinza, molde.ancoras)
-    if not voltas:
-        raise SemAncoras("não achei as quatro âncoras do cartão nesta página")
     ultimo = None
-    for n in voltas:
+    for n in voltas_para_endireitar(pagina.cinza, molde.ancoras):
         cinza = girar(pagina.cinza, n)
         try:
             matriz = homografia(cinza, molde.ancoras)
-            return cinza, matriz, ler_faixa(cinza, matriz, molde, limiar_de_tinta(cinza)), n
+            return cinza, matriz, ler_faixa(cinza, matriz, molde, limiar_de_tinta(cinza)), n, ""
         except (SemAncoras, FaixaIlegivel) as erro:
             ultimo = erro
-    raise ultimo if ultimo else SemAncoras("página sem âncoras")
+
+    giradas: dict[int, tuple] = {}
+    for n, matriz, falta in com_tres_ancoras(pagina.cinza, molde.ancoras):
+        if n not in giradas:
+            cinza = girar(pagina.cinza, n)
+            giradas[n] = (cinza, limiar_de_tinta(cinza))
+        cinza, limiar = giradas[n]
+        try:
+            return cinza, matriz, ler_faixa(cinza, matriz, molde, limiar), n, NOME_DO_CANTO[falta]
+        except FaixaIlegivel:
+            continue        # três manchas que formavam um “L” e não eram o cartão
+    # Nada fechou: a recusa é a que as quatro âncoras deram — sem elas, a folha
+    # sai como sempre saiu.
+    raise ultimo if ultimo else SemAncoras("não achei as quatro âncoras do cartão nesta página")
 
 
 def ler_pagina(pagina: Pagina, molde: Molde, limiares: Limiares):
     """Uma página, do começo ao fim. Nunca levanta: recusa é resultado."""
     try:
-        cinza, matriz, ident, voltas = alinhar(pagina, molde)
+        cinza, matriz, ident, voltas, canto_ausente = alinhar(pagina, molde)
     except SemAncoras as erro:
         return (Leitura(onde=pagina.onde, situacao="descartada", motivo=f"sem_ancoras: {erro}"),
                 pagina.cinza, None)
@@ -175,6 +217,7 @@ def ler_pagina(pagina: Pagina, molde: Molde, limiares: Limiares):
                 pagina.cinza, None)
     leitura = ler_folha(cinza, matriz, molde, ident, limiares, pagina.onde)
     leitura.voltas = voltas
+    leitura.canto_ausente = canto_ausente
     return leitura, cinza, matriz
 
 
@@ -195,7 +238,7 @@ def procurar_referencia(arquivos: list[Path], molde: Molde, dpi: int):
         if indice >= TOPO_DA_PILHA:
             break
         try:
-            cinza, matriz, ident, _ = alinhar(pagina, molde)
+            cinza, matriz, ident, _voltas, _canto = alinhar(pagina, molde)
         except (SemAncoras, FaixaIlegivel):
             continue
         if not ident.eh_referencia:
@@ -239,6 +282,8 @@ def ler_lote(pacote: Pacote, arquivos: list[Path], saida_dir: Path,
         sem_nota = motivo_sem_nota(leitura, pacote)
         if sem_nota:
             lote.sem_nota.append(SemNota(pagina.onde, sem_nota, leitura.matricula))
+        if leitura.canto_ausente:
+            lote.sem_canto.append(SemCanto(pagina.onde, leitura.canto_ausente, leitura.matricula))
         if sem_nota or leitura.situacao not in ("lida", "referencia"):
             saida.miniatura(pasta_conferencia, cinza, matriz, molde.campo_matricula,
                             pagina.onde.replace(":", "-p"))

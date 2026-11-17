@@ -5,9 +5,10 @@ O que este teste cobra não é que o código roda — é que o leitor **acerta o
 está no papel e recusa o que não dá para ler**. Por isso ele não desenha cartão
 nenhum: parte do PDF que o sistema web imprimiu (`gerar-amostras.mjs`), sujeita
 esse PDF ao que um scanner de mesa faz com o papel — gira, desloca, borra,
-chuvisca e recomprime —, e ao que o estudante faz com ele: uma folha em cada
-seis sai assinada a caneta por cima de uma âncora. Então cobra do leitor,
-marcação por marcação, o que o navegador registrou ter impresso.
+chuvisca e recomprime —, e ao que acontece com ele até chegar ao vidro: uma
+folha em cada seis sai assinada a caneta por cima de uma âncora, e outra em cada
+seis perde um canto. Então cobra do leitor, marcação por marcação, o que o
+navegador registrou ter impresso.
 
 Um leitor testado contra imagem limpa e reta passa aqui e falha na secretaria.
 A digitalização simulada é o teste; o resto é conferência.
@@ -67,6 +68,27 @@ def assinar(pagina: np.ndarray, ancora: dict, para_a_direita: bool) -> None:
                   thickness=max(2, round(0.55 / 25.4 * DPI)), lineType=cv2.LINE_AA)
 
 
+def sem_canto(i: int) -> bool:
+    """Uma folha em cada seis perde um canto — e não é a mesma que sai assinada."""
+    return i % ASSINADA_A_CADA == 2
+
+
+def apagar_canto(pagina: np.ndarray, ancora: dict) -> None:
+    """Um canto que não saiu na digitalização, e a âncora que foi com ele.
+
+    Canto dobrado, rasgado, tapado pelo grampo: o papel está inteiro em todo o
+    resto e o quadrado preto daquele canto simplesmente não aparece. Foi assim
+    que um cartão de verdade ficou sem nota — três âncoras perfeitas, a faixa do
+    rodapé intacta, todos os alvéolos legíveis, e a folha descartada porque o
+    leitor só sabia alinhar com quatro. Aqui some o quadrado e uma folga em
+    volta dele, sem tocar a faixa do rodapé: se ela fosse junto, a folha não
+    teria como dizer de quem é, e recusá-la seria o certo.
+    """
+    px = DPI / 72
+    x, y, folga = ancora["x"] * px, ancora["y"] * px, 8 * px
+    pagina[int(y - folga):int(y + folga), int(x - folga):int(x + folga)] = 255
+
+
 def digitalizar(pdf: Path, destino: Path, semente: int = 7,
                 ancoras: list[dict] | None = None) -> int:
     """Simula a passagem do lote pelo scanner de mesa da escola.
@@ -103,6 +125,10 @@ def digitalizar(pdf: Path, destino: Path, semente: int = 7,
                 pagina = np.ascontiguousarray(pagina).copy()
                 lado = (i // ASSINADA_A_CADA) % 2
                 assinar(pagina, ancoras[lado], para_a_direita=lado == 0)
+            #    E há folha que perde um canto — cada vez um dos quatro.
+            if ancoras and sem_canto(i):
+                pagina = np.ascontiguousarray(pagina).copy()
+                apagar_canto(pagina, ancoras[(i // ASSINADA_A_CADA) % 4])
             imagem = pagina.astype(np.float32)
 
             # 1. o papel nunca entra reto, nem no mesmo lugar
@@ -249,8 +275,10 @@ def main() -> int:
         ancoras = json.loads((AMOSTRAS / "pacote.json").read_text(encoding="utf-8"))["layout"]["ancoras"]
         n = digitalizar(pdf, entrada, ancoras=ancoras)
         assinadas = {f"folha-{i + 1:03d}.jpg:1" for i in range(n) if assinada(i)}
+        sem_cantos = {f"folha-{i + 1:03d}.jpg:1" for i in range(n) if sem_canto(i)}
         print(f"Digitalização simulada: {n} folha(s) tortas, borradas e em JPEG — "
-              f"{len(assinadas)} delas assinadas a caneta por cima de uma âncora.")
+              f"{len(assinadas)} delas assinadas a caneta por cima de uma âncora e "
+              f"{len(sem_cantos)} sem um dos cantos.")
 
         processo = subprocess.run(
             [sys.executable, "-m", "src.leitor.cli", "ler",
@@ -274,7 +302,9 @@ def main() -> int:
     if descartadas:
         falhas.append(f"{len(descartadas)} folha(s) sem âncoras: "
                       + ", ".join(f["folha"] + (" (assinada por cima da âncora)"
-                                                if f["folha"] in assinadas else "")
+                                                if f["folha"] in assinadas else
+                                                " (sem um dos cantos)"
+                                                if f["folha"] in sem_cantos else "")
                                   for f in descartadas))
     sem_id = [f for f in folhas if not f["tipo"]]
     if sem_id:
@@ -286,6 +316,21 @@ def main() -> int:
     if sem_nota:
         falhas.append(f"{len(sem_nota)} folha(s) avisada(s) como sem nota num lote em que todas "
                       "têm dono: " + ", ".join(f"{f['folha']} ({f['sem_nota']})" for f in sem_nota))
+
+    # E a folha lida por três âncoras tem de ser DITA, com o canto certo: o que
+    # estava no pedaço que não apareceu o leitor não viu, e alguém precisa olhar
+    # o papel. O canto é o da folha em pé, e aqui todas entram deitadas na mesa.
+    NOMES = ("do alto à esquerda", "do alto à direita", "de baixo à esquerda", "de baixo à direita")
+    for i in range(n):
+        if not sem_canto(i):
+            continue
+        frase = f"folha-{i + 1:03d}.jpg — faltou o canto {NOMES[(i // ASSINADA_A_CADA) % 4]}"
+        if frase not in processo.stderr:
+            falhas.append(f"folha-{i + 1:03d}.jpg perdeu o canto {NOMES[(i // ASSINADA_A_CADA) % 4]} "
+                          "e o leitor não avisou (ou avisou de outro canto)")
+    if processo.stderr.count("— faltou o canto ") != len(sem_cantos):
+        falhas.append(f"{len(sem_cantos)} folha(s) sem canto, e o leitor avisou de "
+                      f"{processo.stderr.count('— faltou o canto ')}")
 
     # 2. Cada marcação impressa tem de voltar, e com o mesmo valor.
     for chave, valor in sorted(esperado.items()):
