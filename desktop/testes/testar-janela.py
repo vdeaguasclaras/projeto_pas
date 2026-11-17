@@ -83,6 +83,9 @@ def main() -> int:
             return 1
         if "série" not in janela.prova_atual.text():
             falhas.append("o menu lateral não mostrou a prova carregada")
+        from leitor import __version__ as versao
+        if f"versão {versao}" not in janela.windowTitle():
+            falhas.append("a janela não mostra a versão do programa no título")
         # Um passo só abre quando o anterior deu o que ele precisa: com o pacote
         # carregado dá para ler, e ainda não dá para conferir nem ver resultado.
         aberto = lambda i: bool(janela.passos.item(i).flags() & Qt.ItemIsEnabled)
@@ -203,6 +206,16 @@ def main() -> int:
             if marcada != "C":
                 falhas.append("o que foi decidido na conferência não entrou na correção "
                               f"(item {achado['item']} ficou {marcada!r})")
+            # E ler o lote de novo não pode apagar isso da tela: a fila volta com
+            # o que foi decidido, e “Aplicar” não regrava o palpite por cima.
+            conferencia.mostrar(lote.achados, saida)
+            de_volta = next(campo.text() for a, campo in conferencia.campos
+                            if (a["matricula"], a["item"]) == (achado["matricula"], achado["item"]))
+            if de_volta != "C":
+                falhas.append("a conferência remontada esqueceu o que já tinha sido decidido "
+                              f"(o campo voltou com {de_volta!r} em vez de 'C')")
+            if "já tinha" not in conferencia.aviso.text():
+                falhas.append("a conferência não disse quantas marcações já estavam conferidas")
 
         # 7 · a exportação para o sistema acadêmico
         exportacao = janela.pag_exportacao

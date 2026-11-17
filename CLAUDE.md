@@ -461,6 +461,29 @@ prova já aplicada.**
   Exportação), não caixa que se dispensa. **Na exportação ele é o mais sério do
   aplicativo**: quem tem cartão na pilha e ficou sem dono sairia no TXT do
   sistema acadêmico com nota 0 e `COMPARECEU=N`.
+- **A chave vem do cadastro, e o que foi respondido vem do cartão.** As
+  marcações saem do leitor como `matrícula; item; resposta`, sem a versão da
+  folha, e a correção procura o item pelo número na versão do CADASTRO. Uma
+  estudante cadastrada na A1 fez a A2 num cartão extra: a folha, lida certa,
+  seria corrigida com a chave da outra prova — Nota Marista 0,23 onde eram
+  1,12, sem aviso. `barrar_versao_trocada` (lote.py) deixa a folha DE FORA —
+  nenhuma marcação vai para CSV nem para a conferência — e ela vira folha sem
+  nota, com “acerte a versão no sistema e exporte o pacote de novo”. Não se
+  escolhe a chave pelo cartão: o sistema on-line também lê a versão do
+  cadastro, e as duas correções passariam a discordar. Só apareceu quando o
+  leitor aprendeu a ler aquela folha: **conserto que faz ler mais folha expõe o
+  que vinha depois dela**.
+- **Ler de novo não pode apagar a conferência.** O `conferido.csv` fica na pasta
+  do resultado e continua valendo na correção, mas a tela remontava a fila só
+  com o palpite do leitor — e o primeiro “Aplicar e recorrigir” regravava o
+  arquivo com os palpites, por cima do que tinha sido conferido no papel.
+  `PaginaConferencia._decididas` devolve ao campo o que já foi decidido, marca a
+  linha como “já conferido” e conta quantas faltam. Resposta vazia também é
+  decisão: a chave fica no dicionário mesmo com valor vazio.
+- **A versão do programa fica à vista** (`__version__`, no título e no canto da
+  janela), e é o número da etiqueta `leitor-vN`. Quem reprocessa um lote por
+  causa de um conserto precisa poder ver que abriu o programa consertado. Ao
+  fechar uma versão, mude o número ANTES de a etiqueta ser publicada.
 - **A faixa do rodapé não diz de que PROVA é a folha**, e as âncoras ficam no
   mesmo lugar em todo cartão: um cartão do 9º ano esquecido na pilha da 3ª
   série alinha, fecha o CRC e é lido com o molde errado. Só não virou nota
