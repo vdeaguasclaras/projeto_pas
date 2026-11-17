@@ -8,7 +8,8 @@ Três arquivos, e cada um responde a uma pergunta diferente:
   há, o palpite. Lançamento à mão, na mesma tela.
 - `folhas.csv` — uma linha por página digitalizada. É o rastro: quantas folhas
   entraram, quais foram lidas, quais caíram fora e por quê. Sem ele, “12 folhas
-  para conferência” é um número que não leva ninguém ao papel na pilha.
+  para conferência” é um número que não leva ninguém ao papel na pilha. A coluna
+  `sem_nota` diz, da folha que não entrou na nota de ninguém, o motivo.
 
 E as miniaturas: para toda página que precisa de olho humano, um PNG com o
 cabeçalho recortado — o operador reconhece a folha sem procurar na pilha.
@@ -70,7 +71,14 @@ def percentuais(pasta: Path, leituras: list[Leitura]) -> int:
     return _escrever(pasta / "percentuais.csv", ["matricula", "item", "percentual"], linhas)
 
 
-def folhas(pasta: Path, leituras: list[Leitura]) -> int:
+def folhas(pasta: Path, leituras: list[Leitura], sem_nota: dict[str, str] | None = None) -> int:
+    """O rastro: uma linha por página, e na última coluna a que ficou sem nota.
+
+    `sem_nota` vem de `lote.motivo_sem_nota` — folha → por que não entrou na
+    nota de ninguém. É coluna nova no FIM, e vazia na folha que entrou: quem já
+    lia este arquivo pelo nome das colunas continua lendo.
+    """
+    sem_nota = sem_nota or {}
     linhas = []
     for l in leituras:
         i = l.identificacao
@@ -79,10 +87,11 @@ def folhas(pasta: Path, leituras: list[Leitura]) -> int:
             i.tipo if i else "", i.versao if i else "",
             i.folha if i else "", i.total if i else "",
             l.matricula, len(l.respostas), len(l.conferir), l.motivo,
+            sem_nota.get(l.onde, ""),
         ])
     return _escrever(pasta / "folhas.csv",
                      ["folha", "situacao", "tipo", "versao", "numero", "total",
-                      "matricula", "lidas", "a_conferir", "motivo"], linhas)
+                      "matricula", "lidas", "a_conferir", "motivo", "sem_nota"], linhas)
 
 
 def _recortar(cinza: np.ndarray, matriz, caixa, px_por_pt: float = 5.0) -> np.ndarray | None:

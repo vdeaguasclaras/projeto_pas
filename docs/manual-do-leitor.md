@@ -129,6 +129,13 @@ alguns minutos.
 Ao terminar, o programa diz quantas folhas leu, quantas eram cartão-gabarito e
 quantas marcações ficaram em dúvida.
 
+> ⚠️ **Conte os cartões da pilha e compare com os estudantes do passo 5.** Quando
+> uma folha não entra na nota de ninguém, o programa avisa **em rosa** — aqui, na
+> Conferência, nos Resultados e na Exportação — com a **página** dela no PDF e o
+> motivo. Essa folha **não aparece na lista da Conferência**: ali só há marcação
+> duvidosa, e folha sem dono não chegou a ter marcação de ninguém. O que fazer
+> com cada caso está na [Parte 5](#folhas-que-não-entraram-na-nota-de-ninguém).
+
 ### 4 · Conferência
 
 Aqui aparece **tudo o que o programa não leu com certeza** — nunca um palpite.
@@ -212,7 +219,7 @@ digitalizações**.
 | `respostas.csv` | as marcações lidas — é este que o sistema on-line importa |
 | `respostas_conferir.csv` | o que foi para a conferência, com o motivo |
 | `conferencia.html` e `conferencia/` | a fila de dúvidas com as imagens |
-| `folhas.csv` | uma linha por página digitalizada: o rastro do lote |
+| `folhas.csv` | uma linha por página digitalizada: o rastro do lote. A coluna `sem_nota` diz qual folha ficou de fora, e por quê |
 | `E3_P3-1serie.txt` | as notas para o sistema acadêmico (quando você pede) |
 
 Um arquivo fica **fora** dessa pasta: `pas-anulados-<prova>.json`, ao lado do
@@ -230,11 +237,28 @@ sozinhos quando você abre a mesma prova de novo.
 | **A tela azul do Windows** ao abrir | *Mais informações → Executar assim mesmo*. É por não ter certificado comprado. |
 | **“Não achei digitalização aqui”** | você apontou para uma pasta sem imagens. Aponte para a pasta certa, ou direto para o PDF do lote. |
 | **Muitas folhas na conferência** | quase sempre o cartão-gabarito ficou de fora da digitalização. Digitalize o lote de novo com ele na frente. |
-| **Uma folha veio como “sem âncoras”** | a folha saiu cortada ou dobrada demais. Digitalize aquela folha de novo. |
-| **“Matrícula fora do padrão”** | acontece nos cartões extras, em que o estudante preenche a matrícula à mão. Confira no papel e corrija na conferência. |
+| **Há menos estudantes nos Resultados do que cartões na pilha** | uma folha ficou sem dono. O aviso em rosa diz a página e o motivo — veja logo abaixo o que fazer com cada caso. |
 | **Um item saiu com `*` e ninguém anulou nada** | alguém anulou esse item — no sistema, ou nesta máquina antes. Veja o passo 2: o que veio do sistema aparece travado, com a marca “anulado no sistema”; o resto você desmarca aí mesmo. |
 | **Aviso de que o cartão-gabarito divergiu** | **pare.** Quer dizer que os itens mudaram depois de os cartões serem impressos. Fale com a coordenação antes de lançar o lote. |
 | **A janela abriu e fechou sozinha** | abra o `PAS-Leitor-terminal.exe`, na mesma pasta: é o mesmo programa, com uma janela preta que **mostra o erro**. Mande a mensagem para quem cuida do sistema. |
+
+### Folhas que não entraram na nota de ninguém
+
+O aviso em rosa traz a **página do PDF** de cada uma — é por ela que se acha o
+papel na pilha. Na pasta `conferencia/` há ainda uma imagem com o nome da página
+(`…-p34.png`), para reconhecer a folha sem procurar.
+
+| O aviso diz… | O que é | O que fazer |
+|---|---|---|
+| **não achei as quatro âncoras** | um dos quatro quadrados pretos dos cantos não foi reconhecido: folha cortada, dobrada, mal encostada no vidro — ou **rabiscada por cima do quadrado**. Assinatura fina que só encosta nele o programa já resolve sozinho; quadrado coberto de tinta, não. | Passe o lote de novo pelo scanner, com essa folha inteira e bem encostada. Se o quadrado estiver mesmo coberto, lance as respostas à mão no sistema on-line. |
+| **a faixa de blocos do rodapé não pôde ser lida** | a faixa que diz de quem é a folha está rasurada, dobrada ou cortada. | Passe o lote de novo pelo scanner; se a faixa estiver danificada, lance as respostas à mão no sistema on-line. |
+| **cartão extra com a matrícula em branco** (ou ilegível, ou fora do padrão) | o estudante usou o cartão de reserva e não preencheu os alvéolos da matrícula — escrever o nome não basta, o programa não lê letra. As marcações foram lidas e estão esperando dono. | Descubra de quem é (o nome está no cabeçalho), **preencha os nove alvéolos da matrícula no papel** e passe o lote de novo pelo scanner. O estudante precisa estar na lista da prova — veja a linha de baixo. |
+| **a matrícula … não está no elenco desta prova** | o cartão é de **outra prova** (outra série esquecida na pilha — o aviso diz quando parece ser isso), ou o estudante não estava na lista quando o pacote foi exportado. | Cartão de outra prova: leia-o no lote dela, com o pacote dela. Estudante que falta na lista: cadastre-o no sistema, exporte o pacote de novo e mande ler outra vez. |
+
+> ⚠️ **Antes de exportar as notas**, toda folha desta lista que for de estudante
+> desta prova precisa estar resolvida. Quem tem cartão na pilha e ficou sem dono
+> sai no arquivo do sistema acadêmico com **nota 0 e COMPARECEU=N** — como se
+> tivesse faltado.
 
 ---
 
@@ -244,7 +268,8 @@ sozinhos quando você abre a mesma prova de novo.
 2. Abra o programa e escolha o pacote da prova.
 3. Marque os **itens anulados**, se a coordenação tiver anulado algum.
 4. Mande ler.
-5. **Resolva a conferência inteira.**
+5. **Resolva a conferência inteira** — e confira se nenhuma folha ficou sem
+   dono: o número de estudantes tem de bater com o de cartões.
 6. Imprima os boletins e exporte as notas.
 
 Nada disso usa internet, e nada sai do computador da secretaria.

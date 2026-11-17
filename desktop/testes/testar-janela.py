@@ -57,6 +57,13 @@ def main() -> int:
         base = Path(temporario)
         entrada, saida = base / "digitalizacoes", base / "resultado"
         amostrar.digitalizar(cartoes, entrada)
+        # E uma folha que não é cartão de ninguém, no meio da pilha: o verso em
+        # branco que o scanner salvou junto. Ela não vira nota, e a janela tem
+        # de dizer isso — com o nome da folha — nas telas em que a pessoa conta
+        # os estudantes.
+        import cv2
+        import numpy as np
+        cv2.imwrite(str(entrada / "verso-em-branco.jpg"), np.full((1754, 1240), 245, np.uint8))
         # O pacote é aberto de uma CÓPIA: a anulação fica lembrada num arquivo ao
         # lado dele, e teste não deixa arquivo solto na pasta das amostras.
         copia = base / pacote.name
@@ -139,6 +146,19 @@ def main() -> int:
                       if not (saida / a["imagem"]).exists()]
         if sem_imagem:
             falhas.append(f"{len(sem_imagem)} marcação(ões) sem o recorte da folha")
+
+        # A folha sem dono não tem marcação duvidosa, então não tem linha na
+        # conferência: se o aviso não estiver POR EXTENSO nas telas, ela some.
+        if [f.onde for f in lote.sem_nota] != ["verso-em-branco.jpg:1"]:
+            falhas.append("a folha em branco do meio da pilha não saiu como folha sem nota "
+                          f"({[str(f) for f in lote.sem_nota]})")
+        for nome, rotulo in (("conferência", conferencia.sem_nota),
+                             ("resultados", janela.pag_resultados.sem_nota),
+                             ("exportação", janela.pag_exportacao.pendencia)):
+            if rotulo.isHidden() or "verso-em-branco.jpg" not in rotulo.text():
+                falhas.append(f"a tela de {nome} não avisou da folha que ficou sem nota")
+        if "verso-em-branco.jpg" not in janela.pag_leitura.registro.toPlainText():
+            falhas.append("o registro da leitura não listou a folha que ficou sem nota")
 
         # 5 · os resultados enchem a tabela
         tabela = janela.pag_resultados.tabela

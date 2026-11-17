@@ -173,6 +173,15 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int,
 
     click.echo(f"\n{len(resultado.leituras)} página(s) · {resultado.lidas} lida(s) · "
                f"{resultado.referencia} de referência · {resultado.a_conferir} para conferência")
+    if resultado.sem_nota:
+        # O número acima não leva ninguém ao papel: “11 para conferência” junta
+        # a folha com um item rasurado e a folha que ficou sem dono, e é esta
+        # que faz um estudante sair sem nota.
+        click.echo(f"\nATENÇÃO — {len(resultado.sem_nota)} folha(s) NÃO entraram na nota de "
+                   "ninguém. Quem fez a prova numa delas está sem nota:", err=True)
+        for folha in resultado.sem_nota:
+            click.echo(f"  · {folha}", err=True)
+        click.echo("")
     click.echo(f"Marcações em {saida_dir / 'respostas.csv'}")
     click.echo(f"Rastro folha a folha em {saida_dir / 'folhas.csv'}")
     if (saida_dir / "conferencia.html").exists():
