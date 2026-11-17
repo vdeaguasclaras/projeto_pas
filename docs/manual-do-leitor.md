@@ -149,6 +149,7 @@ No campo à direita, escreva o que está no papel:
 | há uma marcação clara | a letra (ou o número, no tipo B) |
 | **não há marca nenhuma** | deixe o campo **vazio** |
 | há **duas alternativas marcadas** | **`NULO`** — o estudante anulou o item |
+| no **tipo B**, uma coluna está **sem marca** | deixe o **traço** no lugar dela (**`10_`**) — número incompleto vale como erro |
 
 > Marcação dupla já chega proposta como `NULO`: é o que o papel diz, e você só
 > precisa concordar. No PAS, quem marca duas alternativas **anula o item dele**,
@@ -156,6 +157,12 @@ No campo à direita, escreva o que está no papel:
 >
 > Não confunda com o **item anulado** do passo 2, que é a coordenação anulando o
 > item para a prova inteira: esse vale como **acerto para todos** e sai com `*`.
+>
+> No **tipo B**, o traço (`_`) marca a coluna em que o programa não achou
+> algarismo. Se no papel o algarismo está lá, escreva-o no lugar do traço. Se a
+> coluna está em branco, **deixe o traço**: `10_` é “centena 1, dezena 0, unidade
+> em branco”, e apagar o traço transformaria a resposta em `10`, que vale `010`
+> — um número que o estudante não marcou.
 
 Clique em **Aplicar e recorrigir**. Os resultados e os boletins se refazem na
 hora.

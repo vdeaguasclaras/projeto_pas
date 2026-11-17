@@ -227,7 +227,11 @@ def conferencia(pasta: Path, molde_prova: dict, achados: list[dict]) -> Path | N
   <p>{len(achados)} marcação(ões) que o leitor não leu com certeza. Confira no recorte,
      corrija o que estiver errado e apague o campo quando no papel não houver marca nenhuma.
      <b>Duas alternativas marcadas</b> — deixe <b>{NULO}</b> no campo: no PAS o estudante
-     anulou o item, e isso vale como erro. O que ficar sem decisão não entra em nota nenhuma.</p>
+     anulou o item, e isso vale como erro. <b>Tipo B com traço</b> (<b>10_</b>) — o traço é a
+     coluna em que o leitor não achou algarismo: escreva o algarismo se ele estiver no papel,
+     ou deixe o traço se a coluna está mesmo em branco. Número incompleto vale como erro;
+     apagar o traço faria <b>10</b> valer <b>010</b>. O que ficar sem decisão não entra em
+     nota nenhuma.</p>
 </header>
 <main>
 <table><thead><tr><th>Marcação no papel</th><th>Matrícula</th><th>Item</th>

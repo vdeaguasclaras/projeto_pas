@@ -155,6 +155,29 @@ def _chave_esperada(item: dict) -> str:
     return bruta.upper()
 
 
+def _marcada_no_tipo_b(marcada: str) -> str:
+    """A resposta do tipo B na forma em que se compara com a chave.
+
+    **Número pela metade não se completa com zero.** Só algarismos, até três:
+    aí sim `96` e `096` são a mesma resposta, e é assim que alguém digita na
+    conferência. Qualquer outra coisa fica COMO VEIO — e, não sendo número de
+    três algarismos, não é igual a chave nenhuma.
+
+    A outra coisa que chega aqui é o palpite do leitor para o item em que o
+    estudante deixou uma coluna sem marca: `10_` (centena 1, dezena 0, unidade
+    em branco), `_17`. Esta função tirava tudo o que não fosse algarismo e
+    completava com zeros à esquerda: `10_` virava `010`, `37_` virava `037`. Quem
+    confirmava a conferência sem mexer no campo dava ao estudante um número que
+    ele não marcou — e o ponto, sempre que a chave fosse menor que 100. O
+    sistema on-line nunca fez isso (lá `10_` não é `010`), então as duas
+    correções davam notas diferentes para a mesma marcação, justamente o que
+    `testar-correcao.py` existe para impedir.
+    """
+    if marcada.isascii() and marcada.isdigit() and len(marcada) <= 3:
+        return marcada.rjust(3, "0")
+    return marcada
+
+
 def _creditar_anulado(resultado: Resultado, grupo: Acertos, item: dict, escore) -> None:
     """O item anulado, creditado como acerto — para este e para todos.
 
@@ -250,11 +273,13 @@ def corrigir(pacote: Pacote, estudante: Estudante, marcacoes: dict[int, str],
                 Detalhe(item["numero"], item["tipo"], esperada, NULO, False, nulo=True))
             continue
 
-        # A partir daqui é resposta de verdade. O tipo B se compara por
-        # algarismos — e por isso `NULO` tinha de sair antes: aqui ele viraria
-        # texto sem número nenhum, ou seja, um branco.
+        # A partir daqui é resposta de verdade. No tipo B, número incompleto
+        # (`10_`) conta como ERRO, como no sistema on-line: o estudante
+        # respondeu, e o que ele respondeu não é a chave. No tipo B o erro não
+        # desconta, então o escore é o mesmo de um branco — o que muda é o
+        # boletim dizer o que estava no papel.
         if item["tipo"] == "B" and marcada:
-            marcada = "".join(c for c in marcada if c.isdigit()).rjust(3, "0")[-3:]
+            marcada = _marcada_no_tipo_b(marcada)
         certa = bool(marcada) and marcada == esperada
 
         peso = escore.peso(item["tipo"])

@@ -551,7 +551,11 @@ class PaginaConferencia(QWidget):
                    "com o pedaço do papel onde ela está: confira, corrija o que estiver errado "
                    "e apague o campo quando no cartão não houver marca nenhuma. "
                    "<b>Duas alternativas marcadas</b> — deixe <b>NULO</b> no campo: no PAS o "
-                   "estudante anulou o item, e isso vale como erro. Resolva tudo aqui antes de "
+                   "estudante anulou o item, e isso vale como erro. "
+                   "<b>Tipo B com traço</b> (<b>10_</b>) — o traço é a coluna em que o leitor não "
+                   "achou algarismo: escreva o algarismo se ele estiver no papel, ou deixe o "
+                   "traço se a coluna está mesmo em branco. Número incompleto vale como erro; "
+                   "apagar o traço faria <b>10</b> valer <b>010</b>. Resolva tudo aqui antes de "
                    "entregar os boletins: o que ficar pendente não entra em nota nenhuma e sai "
                    "impresso com “?”.", "sub"),
             self.sem_nota, self.aviso, rolagem, linha(None, self.botao_aplicar)))
