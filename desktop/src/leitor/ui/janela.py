@@ -86,6 +86,24 @@ def quadro(*filhos: QWidget, margens: int = 22, espaco: int = 12) -> QFrame:
     return caixa
 
 
+def aviso_sem_nota(lote: Lote | None, consequencia: str) -> str:
+    """As folhas do lote que não viraram nota de ninguém, ditas por extenso.
+
+    Entraram 49 folhas, saíram 46 notas, e a janela não dizia onde estavam as
+    outras três: folha sem dono não tem marcação duvidosa, então não aparecia na
+    Conferência, e na leitura virava um número (“11 para conferência”) sem página
+    nem motivo. Este texto é o mesmo na Conferência, nos Resultados e na
+    Exportação de propósito — é em qualquer uma delas que a pessoa pode estar
+    quando conta os estudantes e a conta não fecha. E é rótulo que fica, não
+    caixa de aviso: o que se dispensa com um clique some levando a lista.
+    """
+    if not lote or not lote.sem_nota:
+        return ""
+    return (f"⚠ {len(lote.sem_nota)} folha(s) deste lote NÃO entraram na nota de ninguém. "
+            f"{consequencia} Ache o papel pela página:\n"
+            + "\n".join(f"  · {folha}" for folha in lote.sem_nota))
+
+
 def linha(*filhos, espaco: int = 10) -> QHBoxLayout:
     faixa = QHBoxLayout()
     faixa.setSpacing(espaco)
@@ -417,6 +435,11 @@ class PaginaLeitura(QWidget):
         self.registro.appendPlainText(
             f"{len(lote.leituras)} página(s) · {lote.lidas} lida(s) · "
             f"{lote.referencia} de referência · {lote.a_conferir} para conferência")
+        if lote.sem_nota:
+            self.registro.appendPlainText("")
+            self.registro.appendPlainText(aviso_sem_nota(
+                lote, "Quem fez a prova numa delas está sem nota."))
+            self.registro.appendPlainText("")
         if lote.deitadas:
             self.registro.appendPlainText(
                 f"{lote.deitadas} folha(s) vieram deitadas e foram endireitadas aqui — "
@@ -510,6 +533,8 @@ class PaginaConferencia(QWidget):
         self.janela = janela
         self.campos: list[tuple[dict, QLineEdit]] = []
         self.aviso = rotulo("", "sub")
+        self.sem_nota = rotulo("", "pendencia")
+        self.sem_nota.setVisible(False)
         self.lista = QWidget()
         self.coluna_lista = QVBoxLayout(self.lista)
         self.coluna_lista.setSpacing(8)
@@ -529,7 +554,7 @@ class PaginaConferencia(QWidget):
                    "estudante anulou o item, e isso vale como erro. Resolva tudo aqui antes de "
                    "entregar os boletins: o que ficar pendente não entra em nota nenhuma e sai "
                    "impresso com “?”.", "sub"),
-            self.aviso, rolagem, linha(None, self.botao_aplicar)))
+            self.sem_nota, self.aviso, rolagem, linha(None, self.botao_aplicar)))
 
     def mostrar(self, achados: list[dict], saida: Path) -> None:
         while self.coluna_lista.count():
@@ -537,6 +562,15 @@ class PaginaConferencia(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self.campos.clear()
+        # A folha sem dono não tem linha aqui embaixo — a lista é de MARCAÇÃO
+        # duvidosa, e ela não chegou a ter marcação de ninguém. Por isso vai dita
+        # em cima, antes da lista: é a pendência mais cara do lote.
+        texto = aviso_sem_nota(
+            self.janela.sessao.lote,
+            "Elas não aparecem na lista abaixo, que é de marcação duvidosa: quem fez a "
+            "prova numa delas está sem nota.")
+        self.sem_nota.setText(texto)
+        self.sem_nota.setVisible(bool(texto))
         if not achados:
             self.aviso.setText("Nada em dúvida neste lote — todas as marcações foram lidas "
                                "com certeza.")
@@ -688,10 +722,12 @@ class PaginaResultados(QWidget):
             if titulo in self.AJUDA:
                 self.tabela.horizontalHeaderItem(j).setToolTip(self.AJUDA[titulo])
         self.resumo = rotulo("", "sub")
+        self.sem_nota = rotulo("", "pendencia")
+        self.sem_nota.setVisible(False)
         coluna = QVBoxLayout(self)
         coluna.setContentsMargins(0, 0, 0, 0)
         coluna.addWidget(quadro(
-            rotulo("Resultados", "titulo"), self.resumo,
+            rotulo("Resultados", "titulo"), self.sem_nota, self.resumo,
             linha(botao("Abrir a pasta do resultado", "fantasma", self.abrir_pasta), None),
             self.tabela))
 
@@ -728,6 +764,14 @@ class PaginaResultados(QWidget):
             f"{len(com_resposta)} estudante(s) com respostas · planilha em resultados.csv. "
             "Duas notas: o escore do PAS, que desconta erro, e a Nota Marista, que é a "
             "proporção de acertos na escala da escola.")
+        # É nesta tela que se conta quantos estudantes saíram — e é aqui que a
+        # conta não fecha com a pilha de papel quando uma folha ficou sem dono.
+        texto = aviso_sem_nota(
+            self.janela.sessao.lote,
+            "Por isso há menos estudantes nesta tabela do que cartões na pilha: quem fez a "
+            "prova numa delas está sem nota.")
+        self.sem_nota.setText(texto)
+        self.sem_nota.setVisible(bool(texto))
         self.tabela.setRowCount(len(com_resposta))
         for i, r in enumerate(com_resposta):
             # A versão sai como o CÓDIGO impresso no cartão (A1/A2), não como a
@@ -921,12 +965,25 @@ class PaginaExportacao(QWidget):
         self.colunas.setRowStretch(linha_atual, 1)
 
         pendentes = sum(r.pendentes for r in resultados)
+        avisos = []
         if pendentes:
-            self.pendencia.setText(
+            avisos.append(
                 f"⚠ {pendentes} marcação(ões) continuam na Conferência, e esta nota vai para o "
                 f"histórico escolar. Resolva o passo 3 antes de exportar — nota provisória "
                 f"lançada no sistema acadêmico ninguém descobre que era provisória.")
-        self.pendencia.setVisible(bool(pendentes))
+        # Folha sem dono aqui é o caso mais grave do aplicativo: o estudante FEZ a
+        # prova, o cartão dele está na pilha, e o arquivo o lançaria com zero e
+        # ausente. Não trava — cartão de outra prova esquecido no lote nunca vai
+        # ter dono aqui, e travar por ele seria não exportar nunca —, mas fica
+        # dito em cima do botão, com a página de cada folha.
+        sem_nota = aviso_sem_nota(
+            self.janela.sessao.lote,
+            "Se alguma for de estudante desta prova, ele sai neste arquivo com nota 0 e "
+            "COMPARECEU=N — e esta nota vai para o histórico escolar. Confira antes de gerar.")
+        if sem_nota:
+            avisos.append(sem_nota)
+        self.pendencia.setText("\n\n".join(avisos))
+        self.pendencia.setVisible(bool(avisos))
         self._recontar()
 
     def _escolhidas(self) -> list[str]:

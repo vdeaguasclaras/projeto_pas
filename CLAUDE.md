@@ -426,6 +426,35 @@ prova já aplicada.**
   diz se está de cabeça para baixo. Ao mexer na detecção, não volte a supor que
   a folha digitalizada tem o tamanho da folha impressa.
 
+- **Caneta que encosta na âncora a faz sumir.** O detector procura mancha
+  quadrada e SOLTA. Um estudante assinou o cartão no branco ao lado da âncora do
+  alto, o traço a ligou à faixa preta do título — uma mancha de 2073×127px onde
+  havia um quadrado de 37 —, sobraram três âncoras e a folha inteira foi
+  descartada: 121 marcações perfeitamente legíveis, nota nenhuma. `_cantos` tem
+  hoje uma segunda tentativa (`sem_tracos`), que apaga o que for mais fino que
+  um terço da âncora antes de procurar. **Ela só roda na página em que a
+  primeira falhou**: a folha que já era lida não pode passar a ser lida de outro
+  jeito por causa de um conserto. O teste assina uma folha em cada seis.
+- **Folha que entra no lote e não vira nota tem de ser DITA, com a página e o
+  motivo** (`lote.motivo_sem_nota`). Entraram 49 folhas, saíram 46 notas, e
+  quem operava soube pelo estudante sem nota: a folha sem dono não tem marcação
+  duvidosa, então não aparecia na Conferência, e na leitura virava um número
+  (“11 para conferência”). São quatro jeitos de ficar de fora — sem âncoras,
+  faixa ilegível, matrícula que não é do elenco e folha recusada inteira (o
+  cartão extra sem matrícula é o de todo dia) —, e aquela função é o lugar
+  único que conhece os quatro; ao criar um quinto, passe por ela. O aviso é rótulo que FICA (Conferência, Resultados,
+  Exportação), não caixa que se dispensa. **Na exportação ele é o mais sério do
+  aplicativo**: quem tem cartão na pilha e ficou sem dono sairia no TXT do
+  sistema acadêmico com nota 0 e `COMPARECEU=N`.
+- **A faixa do rodapé não diz de que PROVA é a folha**, e as âncoras ficam no
+  mesmo lugar em todo cartão: um cartão do 9º ano esquecido na pilha da 3ª
+  série alinha, fecha o CRC e é lido com o molde errado. Só não virou nota
+  porque a matrícula não era do elenco — e é por isso que “fora do elenco” é
+  avisado por folha, e não só contado. O número de folhas que a faixa traz
+  (`total`) entra na frase como INDÍCIO de outra prova, nunca como recusa: ele
+  também muda quando se desliga a folha de redação depois de imprimir, sem que
+  a folha objetiva mude.
+
 E o teste (`desktop/testes/`) **imprime cartões de verdade** pelo sistema web num
 Chromium, depois os digitaliza como a escola digitaliza: mesa A3, cartão
 deitado, torto, borrado, em JPEG e com uma folha virada. Não escreva teste de

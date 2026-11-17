@@ -5,8 +5,9 @@ O que este teste cobra não é que o código roda — é que o leitor **acerta o
 está no papel e recusa o que não dá para ler**. Por isso ele não desenha cartão
 nenhum: parte do PDF que o sistema web imprimiu (`gerar-amostras.mjs`), sujeita
 esse PDF ao que um scanner de mesa faz com o papel — gira, desloca, borra,
-chuvisca e recomprime — e então cobra do leitor, marcação por marcação, o que o
-navegador registrou ter impresso.
+chuvisca e recomprime —, e ao que o estudante faz com ele: uma folha em cada
+seis sai assinada a caneta por cima de uma âncora. Então cobra do leitor,
+marcação por marcação, o que o navegador registrou ter impresso.
 
 Um leitor testado contra imagem limpa e reta passa aqui e falha na secretaria.
 A digitalização simulada é o teste; o resto é conferência.
@@ -34,7 +35,40 @@ sys.path.insert(0, str(RAIZ / "desktop" / "src"))
 DPI = 300
 
 
-def digitalizar(pdf: Path, destino: Path, semente: int = 7) -> int:
+# De quantas em quantas folhas uma sai assinada por cima da âncora. Na prova de
+# exemplo isso cai nas folhas objetivas de três estudantes; na grande, em folhas
+# de todo tipo.
+ASSINADA_A_CADA = 6
+
+
+def assinada(i: int) -> bool:
+    return i % ASSINADA_A_CADA == ASSINADA_A_CADA - 1
+
+
+def assinar(pagina: np.ndarray, ancora: dict, para_a_direita: bool) -> None:
+    """Um traço de esferográfica que passa por cima da âncora do alto.
+
+    Foi o que aconteceu num cartão de verdade: o estudante assinou no branco
+    entre a faixa do título e as orientações, o traço atravessou o quadrado
+    preto e chegou à faixa. Para quem procura mancha quadrada e solta, a âncora
+    deixou de existir — e a folha inteira foi descartada, com 121 marcações
+    perfeitamente legíveis. O risco aqui tem a largura de uma esferográfica
+    (0,55 mm) e faz o mesmo caminho: sai da margem, cruza a âncora e sobe até a
+    faixa do título.
+    """
+    px = DPI / 72
+    sentido = 1 if para_a_direita else -1
+    inicio = np.array([ancora["x"] - sentido * 10, ancora["y"] + 10])
+    guia = np.array([ancora["x"] + sentido * 12, ancora["y"] - 2])
+    fim = np.array([ancora["x"] + sentido * 58, ancora["y"] - 15])
+    t = np.linspace(0, 1, 48)[:, None]
+    curva = ((1 - t) ** 2 * inicio + 2 * t * (1 - t) * guia + t ** 2 * fim) * px
+    cv2.polylines(pagina, [np.round(curva).astype(np.int32)], False, 35,
+                  thickness=max(2, round(0.55 / 25.4 * DPI)), lineType=cv2.LINE_AA)
+
+
+def digitalizar(pdf: Path, destino: Path, semente: int = 7,
+                ancoras: list[dict] | None = None) -> int:
     """Simula a passagem do lote pelo scanner de mesa da escola.
 
     Cada folha entra torta de um jeito diferente — é assim que o alimentador
@@ -63,6 +97,12 @@ def digitalizar(pdf: Path, destino: Path, semente: int = 7) -> int:
             pagina = documento[i].render(scale=DPI / 72, grayscale=True).to_numpy()
             if pagina.ndim == 3:
                 pagina = pagina[:, :, 0]
+            # 0. e há quem assine o cartão — por cima da âncora. Ora a do alto
+            #    à esquerda, ora a da direita.
+            if ancoras and assinada(i):
+                pagina = np.ascontiguousarray(pagina).copy()
+                lado = (i // ASSINADA_A_CADA) % 2
+                assinar(pagina, ancoras[lado], para_a_direita=lado == 0)
             imagem = pagina.astype(np.float32)
 
             # 1. o papel nunca entra reto, nem no mesmo lugar
@@ -140,8 +180,31 @@ def _conferir_extras() -> list[str]:
             cwd=RAIZ / "desktop", capture_output=True, text=True)
         lidas = {(l["matricula"], int(l["item"])): l["resposta"]
                  for l in ler_csv(saida / "respostas.csv")}
+        folhas = ler_csv(saida / "folhas.csv")
+        conferir = ler_csv(saida / "respostas_conferir.csv")
 
     falhas = []
+    # Nenhum destes cartões é de estudante do elenco: um tem matrícula boa de
+    # quem não está na lista, dois têm matrícula fora do padrão. Nenhum vira
+    # nota — e o leitor tem de DIZER isso, folha por folha, com o motivo. Era o
+    # que faltava quando 49 folhas deram 46 notas e ninguém sabia onde estavam
+    # as outras três.
+    sem_nota = [f.get("sem_nota", "") for f in folhas if f.get("sem_nota")]
+    fora_do_elenco = [m for m in sem_nota if "não está no elenco" in m]
+    sem_matricula = [m for m in sem_nota if "cartão extra com a matrícula" in m]
+    if len(fora_do_elenco) != len(validas):
+        falhas.append(f"cartão extra: {len(validas)} matrícula(s) boa(s) de fora do elenco, e o "
+                      f"rastro avisou de {len(fora_do_elenco)} folha(s) fora do elenco")
+    if len(sem_matricula) != len(invalidas):
+        falhas.append(f"cartão extra: {len(invalidas)} folha(s) com matrícula fora do padrão, e "
+                      f"o rastro avisou de {len(sem_matricula)} folha(s) sem dono")
+    # Quadro de matrícula vazio é “em branco”; `com_vao` é um algarismo pulado
+    # no meio. Os dois já saíram com o mesmo nome, e o nome é o que manda quem
+    # confere procurar a coisa certa no papel.
+    for linha in conferir:
+        if linha["motivo"] == "matricula_com_vao":
+            falhas.append(f"cartão extra {linha['folha']}: saiu como `matricula_com_vao`, e "
+                          "nenhuma amostra tem algarismo pulado")
     boas = {v["matricula"] for v in validas}
     lidas_mat = {chave[0] for chave in lidas}
     for matricula in sorted(boas - lidas_mat):
@@ -183,8 +246,11 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as temporario:
         base = Path(temporario)
         entrada, saida = base / "digitalizacoes", base / "resultado"
-        n = digitalizar(pdf, entrada)
-        print(f"Digitalização simulada: {n} folha(s) tortas, borradas e em JPEG.")
+        ancoras = json.loads((AMOSTRAS / "pacote.json").read_text(encoding="utf-8"))["layout"]["ancoras"]
+        n = digitalizar(pdf, entrada, ancoras=ancoras)
+        assinadas = {f"folha-{i + 1:03d}.jpg:1" for i in range(n) if assinada(i)}
+        print(f"Digitalização simulada: {n} folha(s) tortas, borradas e em JPEG — "
+              f"{len(assinadas)} delas assinadas a caneta por cima de uma âncora.")
 
         processo = subprocess.run(
             [sys.executable, "-m", "src.leitor.cli", "ler",
@@ -207,11 +273,19 @@ def main() -> int:
     descartadas = [f for f in folhas if f["situacao"] == "descartada"]
     if descartadas:
         falhas.append(f"{len(descartadas)} folha(s) sem âncoras: "
-                      + ", ".join(f["folha"] for f in descartadas))
+                      + ", ".join(f["folha"] + (" (assinada por cima da âncora)"
+                                                if f["folha"] in assinadas else "")
+                                  for f in descartadas))
     sem_id = [f for f in folhas if not f["tipo"]]
     if sem_id:
         falhas.append(f"{len(sem_id)} folha(s) sem identificação: "
                       + ", ".join(f["folha"] for f in sem_id))
+    # E o aviso de folha sem nota não pode gritar à toa: aqui todo cartão é de
+    # estudante do elenco, e aviso falso ensina a não ler o verdadeiro.
+    sem_nota = [f for f in folhas if f.get("sem_nota")]
+    if sem_nota:
+        falhas.append(f"{len(sem_nota)} folha(s) avisada(s) como sem nota num lote em que todas "
+                      "têm dono: " + ", ".join(f"{f['folha']} ({f['sem_nota']})" for f in sem_nota))
 
     # 2. Cada marcação impressa tem de voltar, e com o mesmo valor.
     for chave, valor in sorted(esperado.items()):

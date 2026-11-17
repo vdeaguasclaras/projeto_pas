@@ -306,9 +306,15 @@ def _ler_matricula(grupos: list[_Grupo], lim: Limiares, formato) -> tuple[str, s
         if motivo:
             duvida = duvida or f"matricula_{motivo}"
         algarismos.append("" if resposta is None else str(resposta))
+    miolo = "".join(algarismos).strip()
+    # Nada marcado em casa nenhuma é matrícula EM BRANCO, e quem chama é quem
+    # diz isso. Sem este desvio a conta do vão, logo abaixo, olhava para nove
+    # casas vazias, achava “vão” em todas e a folha saía como `matricula_com_vao`
+    # — mandando procurar um algarismo pulado num quadro em que ninguém escreveu.
+    if not miolo and not duvida:
+        return "", ""
     # Posição em branco no meio da matrícula é ambiguidade, não abreviação:
     # não dá para saber se o estudante pulou a casa ou deixou de preencher.
-    miolo = "".join(algarismos).strip()
     if not duvida and any(a == "" for a in algarismos[
             next((i for i, a in enumerate(algarismos) if a), 0):
             len(algarismos) - next((i for i, a in enumerate(reversed(algarismos)) if a), 0)]):

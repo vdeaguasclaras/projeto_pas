@@ -21,15 +21,28 @@ LADO_PT = 9.0          # o quadrado impresso
 TOLERANCIA_LADO = (0.65, 1.45)
 PROPORCAO_MINIMA = 0.86   # área / área da caixa: quadrado ~1, círculo ~0,79
 
+# Até que largura um traço é “fino” e some na segunda tentativa, em fração do
+# lado da âncora. Um terço dá ~12px a 300 dpi: esferográfica risca 6 a 8px, e o
+# quadrado de 37px passa inteiro. Mais que isso começaria a comer a âncora de
+# uma digitalização em resolução baixa; menos, deixaria o traço de pé.
+TRACO_FINO = 0.34
+
 
 class SemAncoras(Exception):
     """Não deu para achar as quatro âncoras nesta página."""
 
 
-def _candidatos(cinza: np.ndarray, escala: float) -> np.ndarray:
-    """Manchas sólidas, quadradas e do tamanho da âncora."""
+def _candidatos(cinza: np.ndarray, escala: float, sem_tracos: bool = False) -> np.ndarray:
+    """Manchas sólidas, quadradas e do tamanho da âncora.
+
+    `sem_tracos` apaga antes tudo o que for mais fino que a âncora — ver
+    `_cantos`, que é quem decide quando isso é preciso.
+    """
     borrado = cv2.GaussianBlur(cinza, (3, 3), 0)
     _, preto = cv2.threshold(borrado, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    if sem_tracos:
+        nucleo = max(3, int(round(LADO_PT * escala * TRACO_FINO)))
+        preto = cv2.morphologyEx(preto, cv2.MORPH_OPEN, np.ones((nucleo, nucleo), np.uint8))
     n, _, stats, centroides = cv2.connectedComponentsWithStats(preto, connectivity=8)
 
     lado = LADO_PT * escala
@@ -116,11 +129,28 @@ def _escalas_a_tentar(cinza: np.ndarray, vao_das_ancoras: float) -> list[float]:
     return escalas
 
 
-def _cantos(cinza: np.ndarray, ref: np.ndarray) -> np.ndarray | None:
-    """As quatro âncoras desta imagem, ou None se não formarem o cartão."""
+def _cantos(cinza: np.ndarray, ref: np.ndarray, sem_tracos: bool = False) -> np.ndarray | None:
+    """As quatro âncoras desta imagem, ou None se não formarem o cartão.
+
+    **Caneta que encosta na âncora a faz sumir.** O que se procura é uma mancha
+    quadrada e SOLTA; um risco que passe por cima do quadrado e chegue a outra
+    tinta funde tudo numa mancha só, e ela não tem mais forma de âncora. Foi
+    como chegou: um estudante assinou o cartão no branco ao lado da âncora do
+    alto, o traço a ligou à faixa preta do título — uma mancha de 2073×127px
+    onde havia um quadrado de 37 —, sobraram três âncoras e a folha inteira foi
+    descartada. Cartão perfeitamente legível, 121 marcações, nota nenhuma.
+
+    `sem_tracos` é a segunda tentativa para esse caso: apaga o que for mais fino
+    que um terço da âncora antes de procurar. O traço some, o quadrado fica, e o
+    centro dele sai no mesmo lugar. Quem chama tenta primeiro SEM — a folha que
+    já era lida continua sendo lida exatamente do mesmo jeito —, e só a que
+    falharia ganha esta chance. Não é afrouxar a regra: o que vem depois (a
+    proporção do retângulo, o CRC da faixa) continua recusando o que não for
+    cartão.
+    """
     vao = float(np.linalg.norm(ref[1] - ref[0]) + LADO_PT)
     for escala in _escalas_a_tentar(cinza, vao):
-        pontos = _candidatos(cinza, escala)
+        pontos = _candidatos(cinza, escala, sem_tracos)
         if len(pontos) < 4:
             continue
         cantos = _quatro_cantos(pontos)
@@ -144,11 +174,15 @@ def voltas_para_endireitar(cinza: np.ndarray,
     hipóteses, e quem escolhe entre elas é a leitura.
     """
     ref = np.array(referencia, dtype=np.float32)
-    if _cantos(cinza, ref) is not None:
-        return [0, 2]
     deitada = np.ascontiguousarray(np.rot90(cinza))
-    if _cantos(deitada, ref) is not None:
-        return [1, 3]
+    # As duas posições como sempre, e só então as duas de novo sem os traços
+    # finos (ver `_cantos`). Nesta ordem a folha limpa não paga nada pela
+    # segunda tentativa, em pé ou deitada.
+    for sem_tracos in (False, True):
+        if _cantos(cinza, ref, sem_tracos) is not None:
+            return [0, 2]
+        if _cantos(deitada, ref, sem_tracos) is not None:
+            return [1, 3]
     return []
 
 
@@ -161,6 +195,8 @@ def homografia(cinza: np.ndarray, referencia: list[tuple[float, float]]) -> np.n
     """A matriz que leva PONTOS da folha a PIXELS desta digitalização."""
     ref = np.array(referencia, dtype=np.float32)
     cantos = _cantos(cinza, ref)
+    if cantos is None:
+        cantos = _cantos(cinza, ref, sem_tracos=True)
     if cantos is None:
         raise SemAncoras("não achei as quatro âncoras do cartão nesta página")
     return cv2.getPerspectiveTransform(ref, cantos)

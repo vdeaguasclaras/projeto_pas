@@ -36,7 +36,18 @@ semanas depois.
      formam um quadrilátero; o que faz destas quatro AS âncoras é a proporção
      entre a largura e a altura ser a mesma do cartão impresso.
 
-   Falhou? → a página vai para `folhas.csv` com `sem_ancoras` e uma miniatura.
+   **Caneta que encosta na âncora a faz sumir.** O que se procura é mancha
+   quadrada e SOLTA; um traço que passe por cima do quadrado funde os dois numa
+   mancha só, sem forma de âncora. Chegou assim: um estudante assinou o cartão
+   ao lado da âncora do alto, o traço a ligou à faixa preta do título, sobraram
+   três âncoras e a folha inteira foi descartada. Por isso há uma **segunda
+   tentativa**, só para a página em que a primeira falhou: apaga-se o que for
+   mais fino que um terço da âncora (uma abertura morfológica) e procura-se de
+   novo. O traço some, o quadrado fica. A folha que já era lida não passa por
+   isso, e continua lida exatamente como antes.
+
+   Falhou mesmo assim? → a página vai para `folhas.csv` com `sem_ancoras` e uma
+   miniatura — e para o aviso de **folha sem nota**, que é o que chega à tela.
 
 3. **Homografia** (`ancoras.py`) — os quatro cantos achados são levados às
    coordenadas de referência do cartão. Corrige rotação fina, escala e a
