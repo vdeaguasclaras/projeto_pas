@@ -879,6 +879,23 @@ elenco pela série mesmo com data passada, e **trocar a série** de uma prova em
 “⚙ Configurar prova” refaz o elenco pela série nova. E a **aplicação extra**
 nunca é refeita pela série — ela tem a lista dela.
 
+**Quem fez a prova e entrou no cadastro depois.** Acontece com quem se matricula
+depois de a lista ser importada e faz a prova num **cartão extra**: cadastrado
+depois da aplicação, ele não entra na prova sozinho — e, sem estar nela, o
+cartão dele fica sem nota (o leitor avisa “a matrícula … não está no elenco
+desta prova”, e a importação das respostas o recusa). A coordenação o inclui de
+dois jeitos, e nenhum deles refaz a lista dos outros:
+
+- **ao salvar o estudante**: se a série dele tem prova já aplicada, o sistema
+  pergunta se ele fez alguma. Marque a que ele fez e clique em **Incluir nas
+  marcadas** — ou **Não fez nenhuma**, e ele fica só no cadastro;
+- **na tela de Cartões-resposta** da prova aplicada, em **👥 Incluir quem fez a
+  prova**: aparece quem é da série e não está nela. É por aqui que se inclui
+  quem já estava cadastrado quando se deu pela falta.
+
+Depois de incluir, **exporte de novo o pacote do leitor**: é o pacote que leva o
+elenco para o aplicativo que lê os cartões.
+
 ## Trabalhando em várias pessoas ao mesmo tempo
 
 O simulado é o mesmo para toda a equipe: o que você salva aparece para os
