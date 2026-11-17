@@ -435,6 +435,21 @@ prova já aplicada.**
   um terço da âncora antes de procurar. **Ela só roda na página em que a
   primeira falhou**: a folha que já era lida não pode passar a ser lida de outro
   jeito por causa de um conserto. O teste assina uma folha em cada seis.
+- **Um cartão com três âncoras é um cartão legível.** O canto de baixo de uma
+  folha não saiu na digitalização, a âncora foi com ele, e a folha foi
+  descartada com a faixa do rodapé intacta e todos os alvéolos preenchidos.
+  Pior quando há uma mancha por perto: `_quatro_cantos` a toma pelo canto que
+  falta, e a recusa vem como “faixa ilegível”, que manda procurar o defeito no
+  lugar errado. `com_tres_ancoras` é a terceira tentativa: acha o “L” com as
+  medidas do cartão e tira dele uma transformação AFIM. Três armadilhas ao
+  mexer ali: **quem valida é o CRC** — três manchas quaisquer formam um “L”, e
+  o mesmo “L” serve a dois cantos opostos (em pé sem o de baixo à direita, de
+  cabeça para baixo sem o do alto à esquerda); **afim não corrige
+  perspectiva**, e por isso ela só roda depois de as quatro âncoras falharem;
+  e **a folha lida assim é avisada** (`Lote.sem_canto`, com o canto dito na
+  folha em pé), porque alvéolo que estivesse no pedaço que faltou o leitor dá
+  como em branco sem ter visto. O teste tira um canto de uma folha em cada
+  seis, cada vez um dos quatro.
 - **Folha que entra no lote e não vira nota tem de ser DITA, com a página e o
   motivo** (`lote.motivo_sem_nota`). Entraram 49 folhas, saíram 46 notas, e
   quem operava soube pelo estudante sem nota: a folha sem dono não tem marcação

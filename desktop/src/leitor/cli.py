@@ -182,6 +182,14 @@ def ler(gabarito_path: Path, entrada_dir: Path, saida_dir: Path, dpi: int,
         for folha in resultado.sem_nota:
             click.echo(f"  · {folha}", err=True)
         click.echo("")
+    if resultado.sem_canto:
+        click.echo(f"ATENÇÃO — {len(resultado.sem_canto)} folha(s) lida(s) por só três âncoras: "
+                   "um canto não apareceu na digitalização. A folha entrou na nota; confira no "
+                   "papel se havia marcação no canto que faltou — o que estava ali o leitor "
+                   "não viu:", err=True)
+        for folha in resultado.sem_canto:
+            click.echo(f"  · {folha}", err=True)
+        click.echo("")
     click.echo(f"Marcações em {saida_dir / 'respostas.csv'}")
     click.echo(f"Rastro folha a folha em {saida_dir / 'folhas.csv'}")
     if (saida_dir / "conferencia.html").exists():

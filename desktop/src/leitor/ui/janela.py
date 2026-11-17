@@ -104,6 +104,22 @@ def aviso_sem_nota(lote: Lote | None, consequencia: str) -> str:
             + "\n".join(f"  · {folha}" for folha in lote.sem_nota))
 
 
+def aviso_sem_canto(lote: Lote | None) -> str:
+    """As folhas lidas por só três âncoras — o canto que faltou, dito por extenso.
+
+    Não é pendência como a folha sem nota: esta ENTROU, com a identificação
+    conferida pela faixa do rodapé. Mas alvéolo que estivesse no canto que não
+    apareceu o leitor não viu, e ele o dá como em branco sem ter como saber. É
+    coisa de olhar o papel uma vez — e só se olha se a tela disser qual folha.
+    """
+    if not lote or not lote.sem_canto:
+        return ""
+    return (f"⚠ {len(lote.sem_canto)} folha(s) lida(s) por só três âncoras: um canto não "
+            f"apareceu na digitalização. A folha entrou na nota; confira no papel se havia "
+            f"marcação no canto que faltou — o que estava ali o leitor não viu:\n"
+            + "\n".join(f"  · {folha}" for folha in lote.sem_canto))
+
+
 def linha(*filhos, espaco: int = 10) -> QHBoxLayout:
     faixa = QHBoxLayout()
     faixa.setSpacing(espaco)
@@ -440,6 +456,10 @@ class PaginaLeitura(QWidget):
             self.registro.appendPlainText(aviso_sem_nota(
                 lote, "Quem fez a prova numa delas está sem nota."))
             self.registro.appendPlainText("")
+        if lote.sem_canto:
+            self.registro.appendPlainText("")
+            self.registro.appendPlainText(aviso_sem_canto(lote))
+            self.registro.appendPlainText("")
         if lote.deitadas:
             self.registro.appendPlainText(
                 f"{lote.deitadas} folha(s) vieram deitadas e foram endireitadas aqui — "
@@ -535,6 +555,8 @@ class PaginaConferencia(QWidget):
         self.aviso = rotulo("", "sub")
         self.sem_nota = rotulo("", "pendencia")
         self.sem_nota.setVisible(False)
+        self.sem_canto = rotulo("", "pendencia")
+        self.sem_canto.setVisible(False)
         self.lista = QWidget()
         self.coluna_lista = QVBoxLayout(self.lista)
         self.coluna_lista.setSpacing(8)
@@ -558,7 +580,7 @@ class PaginaConferencia(QWidget):
                    "apagar o traço faria <b>10</b> valer <b>010</b>. Resolva tudo aqui antes de "
                    "entregar os boletins: o que ficar pendente não entra em nota nenhuma e sai "
                    "impresso com “?”.", "sub"),
-            self.sem_nota, self.aviso, rolagem, linha(None, self.botao_aplicar)))
+            self.sem_nota, self.sem_canto, self.aviso, rolagem, linha(None, self.botao_aplicar)))
 
     def mostrar(self, achados: list[dict], saida: Path) -> None:
         while self.coluna_lista.count():
@@ -575,6 +597,11 @@ class PaginaConferencia(QWidget):
             "prova numa delas está sem nota.")
         self.sem_nota.setText(texto)
         self.sem_nota.setVisible(bool(texto))
+        # E a folha lida por três âncoras: também não tem linha na lista — nada
+        # nela ficou em dúvida —, e é aqui que se confere papel.
+        cantos = aviso_sem_canto(self.janela.sessao.lote)
+        self.sem_canto.setText(cantos)
+        self.sem_canto.setVisible(bool(cantos))
         if not achados:
             self.aviso.setText("Nada em dúvida neste lote — todas as marcações foram lidas "
                                "com certeza.")
@@ -728,10 +755,12 @@ class PaginaResultados(QWidget):
         self.resumo = rotulo("", "sub")
         self.sem_nota = rotulo("", "pendencia")
         self.sem_nota.setVisible(False)
+        self.sem_canto = rotulo("", "pendencia")
+        self.sem_canto.setVisible(False)
         coluna = QVBoxLayout(self)
         coluna.setContentsMargins(0, 0, 0, 0)
         coluna.addWidget(quadro(
-            rotulo("Resultados", "titulo"), self.sem_nota, self.resumo,
+            rotulo("Resultados", "titulo"), self.sem_nota, self.sem_canto, self.resumo,
             linha(botao("Abrir a pasta do resultado", "fantasma", self.abrir_pasta), None),
             self.tabela))
 
@@ -776,6 +805,11 @@ class PaginaResultados(QWidget):
             "prova numa delas está sem nota.")
         self.sem_nota.setText(texto)
         self.sem_nota.setVisible(bool(texto))
+        # Sem nada em dúvida a janela vem direto para cá, pulando a Conferência:
+        # a folha lida por três âncoras tem de estar dita aqui também.
+        cantos = aviso_sem_canto(self.janela.sessao.lote)
+        self.sem_canto.setText(cantos)
+        self.sem_canto.setVisible(bool(cantos))
         self.tabela.setRowCount(len(com_resposta))
         for i, r in enumerate(com_resposta):
             # A versão sai como o CÓDIGO impresso no cartão (A1/A2), não como a

@@ -56,7 +56,11 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as temporario:
         base = Path(temporario)
         entrada, saida = base / "digitalizacoes", base / "resultado"
-        amostrar.digitalizar(cartoes, entrada)
+        # Com as âncoras na mão a digitalização assina umas folhas e tira o
+        # canto de outras — a janela tem de dizer quais foram lidas por só três.
+        import json
+        ancoras = json.loads(pacote.read_text(encoding="utf-8"))["layout"]["ancoras"]
+        amostrar.digitalizar(cartoes, entrada, ancoras=ancoras)
         # E uma folha que não é cartão de ninguém, no meio da pilha: o verso em
         # branco que o scanner salvou junto. Ela não vira nota, e a janela tem
         # de dizer isso — com o nome da folha — nas telas em que a pessoa conta
@@ -159,6 +163,17 @@ def main() -> int:
                 falhas.append(f"a tela de {nome} não avisou da folha que ficou sem nota")
         if "verso-em-branco.jpg" not in janela.pag_leitura.registro.toPlainText():
             falhas.append("o registro da leitura não listou a folha que ficou sem nota")
+
+        # A folha lida por três âncoras entrou na nota, e ninguém olha o papel
+        # dela se a tela não disser qual é — na Conferência e nos Resultados.
+        if not lote.sem_canto:
+            falhas.append("a digitalização tirou o canto de umas folhas e o lote não registrou "
+                          "nenhuma lida por três âncoras")
+        for nome, rotulo in (("conferência", conferencia.sem_canto),
+                             ("resultados", janela.pag_resultados.sem_canto)):
+            texto = rotulo.text()
+            if rotulo.isHidden() or any(str(f) not in texto for f in lote.sem_canto):
+                falhas.append(f"a tela de {nome} não avisou das folhas lidas por três âncoras")
 
         # 5 · os resultados enchem a tabela
         tabela = janela.pag_resultados.tabela

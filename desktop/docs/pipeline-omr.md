@@ -46,6 +46,18 @@ semanas depois.
    novo. O traço some, o quadrado fica. A folha que já era lida não passa por
    isso, e continua lida exatamente como antes.
 
+   **E um canto que não aparece não custa a folha.** Canto dobrado, rasgado ou
+   fora do vidro leva uma âncora, e as outras três continuam perfeitas. A
+   **terceira tentativa** (`com_tres_ancoras`) procura três manchas que formem
+   um “L” com as medidas do cartão — ângulo reto e a proporção do molde — e tira
+   delas uma transformação AFIM (giro, escala e deslocamento), que é o que uma
+   folha encostada no vidro sofre. Três manchas quaisquer também formam um “L”,
+   e o mesmo “L” serve a dois cantos opostos; quem escolhe a hipótese é o CRC da
+   faixa do rodapé, no passo seguinte. Afim não corrige perspectiva: por isso
+   esta é a última tentativa, e quem tem as quatro âncoras continua alinhado por
+   elas. A folha lida assim é AVISADA, com o canto que faltou: alvéolo que
+   estivesse naquele pedaço o leitor não viu.
+
    Falhou mesmo assim? → a página vai para `folhas.csv` com `sem_ancoras` e uma
    miniatura — e para o aviso de **folha sem nota**, que é o que chega à tela.
 
