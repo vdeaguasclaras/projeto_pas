@@ -287,13 +287,17 @@ def _decidir_itens(grupos: list[_Grupo], lim: Limiares, leitura: Leitura) -> Non
         preenchidas = [a for a in algarismos if a != ""]
         if not preenchidas and not motivos:
             continue                                    # item em branco
+        # O palpite leva `_` no lugar de TODA coluna sem algarismo decidido, e
+        # não só no item incompleto: `"".join` puro fazia a coluna sumir, e o
+        # que era “centena em dúvida, dezena 2, unidade 0” chegava à conferência
+        # como `20` — que a correção lê, com razão, como 020.
+        palpite = "".join(a or "_" for a in algarismos)
         if motivos:
-            leitura.conferir.append(Marcacao(numero, "".join(algarismos), ";".join(motivos), caixa))
+            leitura.conferir.append(Marcacao(numero, palpite, ";".join(motivos), caixa))
         elif len(preenchidas) < 3:
             # Número pela metade não é resposta: `9__` tanto pode ser 900 quanto
             # 960. Vai inteiro para a conferência, com o que se conseguiu ler.
-            leitura.conferir.append(
-                Marcacao(numero, "".join(a or "_" for a in algarismos), "tipo_b_incompleto", caixa))
+            leitura.conferir.append(Marcacao(numero, palpite, "tipo_b_incompleto", caixa))
         else:
             leitura.respostas.append(Marcacao(numero, "".join(algarismos)))
 

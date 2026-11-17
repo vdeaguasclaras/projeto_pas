@@ -493,6 +493,20 @@ passa e o leitor falha na secretaria.
   estados por item, não três — os quatro daqui mais o item anulado, logo abaixo —
   e que `NULO` tem de sair antes da normalização do tipo B, que o transformaria
   num branco por não ter algarismo nenhum.
+- **Número pela metade não se completa com zero.** O tipo B com uma coluna em
+  branco vai para a conferência como palpite com traço — `10_`, `_17` —, e o
+  campo já chega preenchido com ele. A correção local tirava o que não fosse
+  algarismo e completava à esquerda: `10_` virava `010`, `37_` virava `037`.
+  Quem confirmava sem mexer dava ao estudante um número que ele não marcou, e o
+  ponto sempre que a chave fosse menor que 100; o sistema on-line nunca fez
+  isso, então as duas correções DISCORDAVAM na mesma marcação.
+  `_marcada_no_tipo_b` só completa o que é só algarismo (`96` → `096`, que é
+  como gente digita); o resto fica como veio e vale como erro, com o traço
+  impresso no boletim. E o palpite leva traço em TODA coluna sem algarismo
+  decidido — `"".join` puro fazia a coluna sumir, e “centena em dúvida, 2, 0”
+  chegava como `20`. `testar-correcao.py` tem uma terceira rodada para isso, com
+  a chave trocada para 060 dos dois lados: a prova de exemplo não tem chave
+  menor que 100, e sem ela o teste passaria comparando nada com nada.
 - **“Anulado” são DUAS coisas, e a diferença é quem anulou.** O **item anulado**
   é decisão da coordenação, vale para a prova inteira, conta como **acerto para
   todos** e sai com `*`; a **dupla marcação** é o estudante marcando duas
