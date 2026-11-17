@@ -282,6 +282,17 @@ async function gravarElenco(provaId, estIds) {
       .upsert(estIds.map(est_id => ({ prova_id: provaId, est_id }))));
 }
 
+// Acrescenta estudantes ao elenco de uma prova, sem tocar em quem já está nela.
+// `gravarElenco` apaga a lista e a escreve de novo — serve a quem REFAZ o elenco,
+// e a prova já aplicada é justamente a que não se refaz. Aqui é só INSERT: a
+// política “coordenação cria” (migração 0007) é a que vale, e uma linha repetida
+// é recusada pela chave primária em vez de passar calada.
+async function incluirNoElenco(provaId, estIds) {
+  if (!estIds.length) return;
+  checar(await sb.from('prova_estudantes')
+    .insert(estIds.map(est_id => ({ prova_id: provaId, est_id }))));
+}
+
 // Substituição total (coordenação: zerar, importar backup, carregar exemplo).
 // A ordem importa: respostas e elencos apontam para provas e estudantes por
 // chave estrangeira, então saem primeiro e voltam por último.
@@ -313,6 +324,7 @@ async function substituirTudo(S) {
 export const nuvem = {
   conectado, usuario, iniciar, entrar, sair, trocarSenha,
   carregarTudo, gravarLinha, gravarLinhas, removerLinha, removerLinhas, gravarElenco,
+  incluirNoElenco,
   gravarAlocacao, gravarAlocacoes,
   enviarImagem, assinarImagens, apagarImagem, copiarImagem,
   gravarResposta, gravarRespostas, removerResposta, substituirTudo,

@@ -62,6 +62,21 @@ o menu mostra só as do papel de quem entrou.
   outra porta que mexa no cadastro, passe por `refazerElencosDasSeries` com a
   série nova E a de onde o estudante saiu — só a de destino deixava quem mudou
   de série nas provas da antiga.
+- **Guardar o elenco não é proibir de acrescentar.** Quem se matriculou depois
+  de a lista ser importada e fez a prova num cartão extra não tinha como entrar
+  na prova já aplicada: cadastrá-lo não o punha nela, o pacote do leitor saía
+  sem ele e o cartão ficava sem nota. De onde a coordenação estava — o botão
+  “+ Estudante” da tela de Cartões —, o estudante simplesmente não aparecia na
+  lista, e o toast dizia que a prova “manteve os estudantes”. A saída era
+  apagar a data da prova, salvar e pôr a data de volta. `incluirNaProva()`
+  ACRESCENTA sem refazer (`nuvem.incluirNoElenco`, só INSERT), por duas portas:
+  ao salvar estudante novo numa série com prova aplicada (`dlgProvasDoEstudante`
+  — nenhuma prova vem marcada, e edição comum não pergunta) e em
+  Cartões-resposta (`dlgIncluirNaProva`, quem é da série e não está na prova).
+  É gravação ESPERADA, e só da coordenação geral, na tela e no banco — a
+  política “coordenação cria” da 0007 já era essa; conferido com os cinco
+  papéis. Tirar alguém de prova aplicada é outra decisão, com consequência em
+  resposta e boletim, e continua sem porta de propósito.
 - `redacao` não escreve item: não vê Textos nem Itens, e o painel dele é de
   redação, não de metas. Ao mexer no Painel, lembre que `painelDoDocente()`,
   `painelDaRedacao()` e `painelDasProvas()` são visões diferentes da mesma tela.

@@ -438,8 +438,50 @@ function refazerElencosDasSeries(series) {
 }
 const avisoDasGuardadas = guardadas => guardadas.length
   ? ` · ${guardadas.length === 1 ? 'a prova já aplicada manteve os estudantes que a fizeram'
-      : `as ${guardadas.length} provas já aplicadas mantiveram os estudantes que as fizeram`}`
+      : `as ${guardadas.length} provas já aplicadas mantiveram os estudantes que as fizeram`}` +
+    ' — quem a fez e entrou no cadastro depois se inclui em Cartões-resposta'
   : '';
+
+// Quem é da série da prova e não está nela. Numa prova já aplicada é quem entrou
+// no cadastro depois — e, se fez a prova num cartão extra, é quem precisa ser
+// incluído à mão (`incluirNaProva`).
+function foraDaProva(p) {
+  const dentro = new Set(S.elencos?.[p.id] || []);
+  return S.estudantes.filter(e => e.serie === p.serie && !dentro.has(e.id))
+    .sort((a, b) => String(a.turma || '').localeCompare(String(b.turma || ''), 'pt-BR') ||
+      String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'));
+}
+
+// ACRESCENTA estudantes ao elenco de uma prova, sem refazê-lo.
+//
+// A prova já aplicada guarda quem a fez — e essa regra, que protege as provas
+// antigas da virada de ano, deixava sem porta um caso real: quem se matriculou
+// depois de a lista ser importada e fez a prova num cartão extra. Cadastrá-lo
+// não o punha na prova; o pacote do leitor saía sem ele; o leitor lia o cartão e
+// dizia “matrícula fora do elenco”; e a importação do CSV o recusava pelo mesmo
+// motivo. A saída era apagar a data da prova, salvar o estudante e pôr a data de
+// volta — um truque que refazia o elenco inteiro para acrescentar uma pessoa.
+//
+// Esperada, e não solta: é uma decisão que a pessoa acabou de tomar, e a tela
+// só diz “incluído” depois de o banco aceitar. Devolve `null` ou o motivo da
+// recusa, sem ter mexido no estado. `recemSalvos` são estudantes gravados há um
+// instante por `est-salvar`, que grava solto: a linha deles pode não ter chegado
+// ao banco, e o elenco aponta para ela por chave estrangeira — então ela vai de
+// novo, esperada, antes.
+async function incluirNaProva(provaId, ids, { recemSalvos = [] } = {}) {
+  const dentro = new Set(S.elencos?.[provaId] || []);
+  const novos = [...new Set(ids)].filter(id => !dentro.has(id));
+  if (!novos.length) return null;
+  if (modoNuvem) {
+    try {
+      if (recemSalvos.length) await nuvem.gravarLinhas('estudantes', recemSalvos);
+      await nuvem.incluirNoElenco(provaId, novos);
+    } catch (e) { return e?.message || String(e); }
+  }
+  S.elencos = S.elencos || {};
+  S.elencos[provaId] = [...(S.elencos[provaId] || []), ...novos];
+  return null;
+}
 
 /* ---------------- montagem da prova ---------------- */
 // Numeração contínua: itens aprovados da versão, na ordem dos textos aprovados.
@@ -6511,6 +6553,7 @@ function telaCartoes() {
         ${ehCoord() && pAtiva.aplicacaoExtra ? '<button class="btn" data-acao="elenco-abrir">👥 Estudantes desta aplicação</button>' : ''}
         ${ehCoord() && !pAtiva.aplicacaoExtra ? '<a class="btn fantasma" href="#/administracao" style="text-decoration:none">⬆ Importar lista de estudantes</a>' : ''}
         ${ehCoord() && !pAtiva.aplicacaoExtra ? '<button class="btn" data-acao="est-novo">+ Estudante</button>' : ''}
+        ${ehCoord() && !pAtiva.aplicacaoExtra && provaJaAplicada(pAtiva) ? '<button class="btn fantasma" data-acao="inc-abrir">👥 Incluir quem fez a prova</button>' : ''}
         ${ehCoord() ? `<button class="btn fantasma" data-acao="cart-extras" ${nRegItens + nAdaItens ? '' : 'disabled'}>🖨 Cartões extras</button>` : ''}
         <button class="btn rosa" data-acao="cart-imprimir" ${filtrados.length && (nRegItens + nAdaItens) ? '' : 'disabled'}>🖨 Imprimir cartões (${filtrados.length})</button>
       </div>
@@ -6584,7 +6627,100 @@ ACOES['est-salvar'] = d => {
   const { refeitas, guardadas } = refazerElencosDasSeries(series);
   $('#dlg').close(); commit(); PERS.estudante(alvo);
   refeitas.forEach(PERS.elenco);
+  // Estudante NOVO (ou que acabou de chegar à série) numa série com prova já
+  // aplicada: o toast dizia que a prova “manteve os estudantes”, o que é
+  // verdade e não ajuda — de onde a pessoa está, o botão “+ Estudante” da tela
+  // de Cartões simplesmente não pôs ninguém na lista. A pergunta que importa é
+  // se ele FEZ a prova, e ela se faz aqui, com as provas na frente. Em edição
+  // comum (turma, nome) não se pergunta: quem não fez a prova de março não
+  // precisa ser lembrado disso a cada correção de cadastro.
+  const chegou = !d.id || serieAntes !== dados.serie;
+  const semEle = guardadas.filter(p => p.serie === dados.serie && !(S.elencos?.[p.id] || []).includes(alvo.id));
+  if (chegou && semEle.length && ehCoord()) { dlgProvasDoEstudante(alvo, semEle); return; }
   toast('Estudante salvo.' + avisoDasGuardadas(guardadas));
+};
+
+// “Ele fez alguma destas?” — as provas já aplicadas da série de quem acabou de
+// ser cadastrado. Nenhuma vem marcada: a regra continua sendo a de que prova
+// aplicada guarda quem a fez, e incluir alguém nela é decisão, não padrão.
+function dlgProvasDoEstudante(est, provas) {
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Estudante salvo — ele fez alguma prova já aplicada?</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p class="np-explica" style="margin-top:0"><b>${esc(est.nome)}</b> está no cadastro. Prova já aplicada guarda quem a
+        fez, e por isso ele <b>não entrou</b> ${provas.length === 1 ? 'nesta' : 'em nenhuma destas'}. Se ele fez a prova —
+        num cartão extra, por exemplo —, marque-a: só assim o cartão dele é aceito na correção e ele vai no pacote do
+        leitor.</p>
+      ${provas.map(p => `<label class="np-opcao"><input type="checkbox" data-inc="${esc(p.id)}">
+        <span><b>${esc(rotuloProva(p))}</b> — aplicada em ${dataBR(p.dataAplicacao)}</span></label>`).join('')}
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" data-acao="fechar-dlg">Não fez nenhuma</button>
+      <button class="btn" data-acao="incp-salvar" data-id="${esc(est.id)}">Incluir nas marcadas</button></div>`);
+}
+ACOES['incp-salvar'] = async (d, botao) => {
+  if (!ehCoord()) return;
+  const est = S.estudantes.find(e => e.id === d.id);
+  const marcadas = [...document.querySelectorAll('#dlg input[data-inc]:checked')].map(i => i.dataset.inc);
+  if (!est) return;
+  if (!marcadas.length) { toast('Marque a prova que ele fez — ou feche, se não fez nenhuma.'); return; }
+  botao.disabled = true;
+  const feitas = [];
+  for (const provaId of marcadas) {
+    const erro = await incluirNaProva(provaId, [est.id], { recemSalvos: [est] });
+    if (erro) {
+      // O que entrou, entrou — e fica dito qual não entrou, com o motivo.
+      botao.disabled = false;
+      save(S);
+      toast(`⚠ O banco recusou a inclusão em ${rotuloProva(provaPorId(provaId))}: ${erro}` +
+        (feitas.length ? ` (já incluído em ${feitas.length} prova(s))` : ''));
+      return;
+    }
+    feitas.push(provaId);
+  }
+  $('#dlg').close(); commit();
+  toast(`${est.nome} incluído em ${feitas.length === 1 ? rotuloProva(provaPorId(feitas[0])) : `${feitas.length} provas`}` +
+    ' — exporte de novo o pacote do leitor.');
+};
+
+// A mesma porta, pelo lado da prova: quem é da série e não está nela. Serve a
+// quem já estava cadastrado quando se percebeu a falta — a lista importada
+// depois da aplicação, o estudante salvo antes de esta porta existir.
+function dlgIncluirNaProva(provaId) {
+  const p = provaPorId(provaId);
+  if (!p || !ehCoord()) return;
+  const fora = foraDaProva(p);
+  abrirDlg(`
+    <div class="dlg-cab"><h2>Incluir estudante — ${esc(rotuloProva(p))}</h2>
+      <button class="fechar-x" data-acao="fechar-dlg">✕</button></div>
+    <div class="dlg-corpo">
+      <p class="np-explica" style="margin-top:0">Esta prova foi aplicada em ${dataBR(p.dataAplicacao)} e guarda quem a
+        fez: quem entrou no cadastro depois não está nela. Marque <b>quem fez a prova</b> — só assim o cartão é aceito
+        na correção e o estudante vai no pacote do leitor. Os outros continuam como estão.</p>
+      ${fora.length ? `<div class="el-atual"><table><thead><tr><th></th><th>Nome</th><th>Matrícula</th><th>Turma</th><th>Versão</th></tr></thead>
+        <tbody>${fora.map(e => `<tr><td><input type="checkbox" data-inc="${esc(e.id)}" aria-label="incluir ${esc(e.nome)}"></td>
+          <td>${esc(e.nome)}</td><td style="font-family:var(--mono)">${esc(e.matricula)}</td>
+          <td>${esc(e.turma)}</td><td style="text-transform:capitalize">${esc(e.versao)}</td></tr>`).join('')}</tbody></table></div>`
+        : `<div class="vazio">Todo estudante de ${esc(p.serie)} que está no cadastro já está nesta prova. Se falta
+            alguém, cadastre-o primeiro, em “+ Estudante”.</div>`}
+    </div>
+    <div class="dlg-pe">
+      <button class="btn fantasma" data-acao="fechar-dlg">Cancelar</button>
+      ${fora.length ? `<button class="btn" data-acao="inc-salvar" data-id="${esc(p.id)}">Incluir nesta prova</button>` : ''}</div>`);
+}
+ACOES['inc-abrir'] = () => dlgIncluirNaProva(idProvaAtual());
+ACOES['inc-salvar'] = async (d, botao) => {
+  const p = provaPorId(d.id);
+  if (!p || !ehCoord()) return;
+  const marcados = [...document.querySelectorAll('#dlg input[data-inc]:checked')].map(i => i.dataset.inc);
+  if (!marcados.length) { toast('Marque quem fez a prova — ou feche, se ninguém falta.'); return; }
+  botao.disabled = true;
+  const erro = await incluirNaProva(p.id, marcados);
+  if (erro) { botao.disabled = false; toast('⚠ O banco recusou a inclusão: ' + erro); return; }
+  $('#dlg').close(); commit();
+  toast(`${marcados.length} ${marcados.length === 1 ? 'estudante incluído' : 'estudantes incluídos'} em ${rotuloProva(p)}` +
+    ' — exporte de novo o pacote do leitor.');
 };
 ACOES['est-remover'] = d => {
   const alvo = S.estudantes.find(e => e.id === d.id);
