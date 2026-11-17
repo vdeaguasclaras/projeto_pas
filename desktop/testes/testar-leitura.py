@@ -255,6 +255,52 @@ def _conferir_extras() -> list[str]:
     return falhas
 
 
+def _versao_trocada(base: Path, entrada: Path, com_resposta: set[str]) -> list[str]:
+    """O cartão é de uma versão e o cadastro diz a outra: a folha não se corrige.
+
+    As marcações saem do leitor sem dizer de que versão era a folha, e a
+    correção procura o item pelo número na versão do CADASTRO — que numera os
+    seus de 1 a N, como a outra. Um cartão A2 de estudante cadastrada na A1 foi
+    lido certo e seria corrigido com a chave errada: 0,23 onde eram 1,12, com
+    cara de nota. Aqui o mesmo lote é lido de novo com UM estudante de versão
+    trocada no pacote, e o que se cobra é que ele fique sem nota e avisado — e
+    que nenhuma marcação dele vá para arquivo nenhum.
+    """
+    pacote = json.loads((AMOSTRAS / "pacote.json").read_text(encoding="utf-8"))
+    alvo = next((e for e in pacote["elenco"]
+                 if somente_digitos(e["matricula"]) in com_resposta), None)
+    if alvo is None:
+        return ["versão trocada: nenhum estudante com resposta para fazer o teste"]
+    alvo["versao"] = "regular" if alvo.get("versao") == "adaptada" else "adaptada"
+    matricula = somente_digitos(alvo["matricula"])
+    trocado, saida = base / "pacote-versao-trocada.json", base / "resultado-versao-trocada"
+    trocado.write_text(json.dumps(pacote, ensure_ascii=False), encoding="utf-8")
+    subprocess.run(
+        [sys.executable, "-m", "src.leitor.cli", "ler", "--gabarito", str(trocado),
+         "--entrada", str(entrada), "--saida", str(saida)],
+        cwd=RAIZ / "desktop", capture_output=True, text=True)
+
+    falhas = []
+    dele = lambda linhas: [l for l in linhas if somente_digitos(l["matricula"]) == matricula]
+    if dele(ler_csv(saida / "respostas.csv")):
+        falhas.append(f"versão trocada: as marcações de {matricula} foram para respostas.csv, "
+                      "onde seriam corrigidas com a chave da outra versão")
+    if [l for l in dele(ler_csv(saida / "respostas_conferir.csv")) if l["item"]]:
+        falhas.append(f"versão trocada: marcações de {matricula} foram para a conferência — "
+                      "decididas, entrariam na nota com a chave errada")
+    if dele(ler_csv(saida / "resultados.csv")):
+        falhas.append(f"versão trocada: {matricula} saiu com nota em resultados.csv")
+    avisadas = [f for f in dele(ler_csv(saida / "folhas.csv")) if "versão" in f.get("sem_nota", "")]
+    if not avisadas:
+        falhas.append(f"versão trocada: a folha de {matricula} não foi avisada como sem nota")
+    outros = {somente_digitos(l["matricula"]) for l in ler_csv(saida / "resultados.csv")}
+    if not outros:
+        falhas.append("versão trocada: barrar um estudante derrubou as notas de todos")
+    if not falhas:
+        print(f"versão trocada: {matricula} ficou sem nota e avisado · {len(outros)} com nota")
+    return falhas
+
+
 def main() -> int:
     pdf = AMOSTRAS / "cartoes-preenchidos.pdf"
     verdade_json = AMOSTRAS / "verdade-preenchidos.json"
@@ -294,6 +340,7 @@ def main() -> int:
         conferir = {(somente_digitos(l["matricula"]), int(l["item"])): l["motivo"]
                     for l in ler_csv(saida / "respostas_conferir.csv") if l["item"]}
         folhas = ler_csv(saida / "folhas.csv")
+        trocada = _versao_trocada(base, entrada, {m for m, _ in lidas})
 
     falhas: list[str] = []
 
@@ -360,6 +407,7 @@ def main() -> int:
             falhas.append(f"matrícula {chave[0]} item {chave[1]}: era {caso} no papel e não "
                           "apareceu nem em respostas.csv nem na conferência")
 
+    falhas.extend(trocada)
     falhas.extend(_conferir_extras())
 
     print(f"{len(esperado)} marcação(ões) esperada(s) · {len(lidas)} lida(s) · "

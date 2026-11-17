@@ -115,8 +115,10 @@ def motivo_sem_nota(leitura: Leitura, pacote: Pacote) -> str:
     São quatro jeitos de uma folha ficar de fora, e este é o lugar único que
     conhece os quatro: sem âncoras, faixa ilegível, matrícula que não é do
     elenco e folha recusada inteira (o cartão extra sem matrícula é o caso de
-    todo dia). O do elenco só existe quando o arquivo é o pacote da prova; com
-    o gabarito sozinho não há elenco a cobrar.
+    todo dia; o cartão de uma versão para estudante cadastrado na outra, o
+    mais traiçoeiro — ver `barrar_versao_trocada`). O do elenco só existe
+    quando o arquivo é o pacote da prova; com o gabarito sozinho não há elenco
+    a cobrar.
     """
     ident = leitura.identificacao
     if ident is None:
@@ -148,6 +150,8 @@ def motivo_sem_nota(leitura: Leitura, pacote: Pacote) -> str:
     # a de redação do cartão extra, que não tem matrícula nem alvéolo.
     if not leitura.motivo:
         return ""
+    if leitura.motivo.startswith(VERSAO_TROCADA):
+        return leitura.motivo[len(VERSAO_TROCADA):].lstrip(": ")
     lidas = sum(1 for m in leitura.conferir if m.motivo == "folha_sem_matricula")
     resto = (f" — {lidas} marcação(ões) lida(s), esperando saber de quem são"
              if lidas else "")
@@ -157,6 +161,56 @@ def motivo_sem_nota(leitura: Leitura, pacote: Pacote) -> str:
         return (f"cartão extra com a matrícula ilegível ou fora do padrão "
                 f"({leitura.motivo})" + resto)
     return leitura.motivo
+
+
+# Como a versão se diz a quem opera: é o código que está impresso no cartão que
+# a pessoa tem na mão. “Adaptada” é palavra de bastidor — ver o CLAUDE.md.
+CODIGO_DA_VERSAO = {"regular": "A1", "adaptada": "A2"}
+VERSAO_TROCADA = "versao_trocada"
+
+
+def barrar_versao_trocada(leitura: Leitura, pacote: Pacote) -> None:
+    """Cartão de uma versão, estudante cadastrado na outra: a folha não se corrige.
+
+    **A chave vem do cadastro, e o que foi respondido vem do cartão.** As
+    marcações saem daqui como `matrícula; item; resposta`, sem dizer de que
+    versão era a folha, e a correção procura o item pelo número na versão em que
+    o estudante está cadastrado. Cada versão numera os seus de 1 a N: o nº 7 da
+    A2 não é o nº 7 da A1. Uma estudante cadastrada na A1 fez a prova A2 num
+    cartão extra, e a folha dela — lida certa, alvéolo por alvéolo — seria
+    corrigida com a chave da outra prova: Nota Marista 0,23 onde eram 1,12, sem
+    aviso nenhum e com cara de nota. Só não aconteceu antes porque aquela folha
+    era descartada por outro motivo.
+
+    Aqui nada é adivinhado: escolher a chave pelo cartão faria o aplicativo e o
+    sistema on-line darem notas diferentes ao mesmo estudante, porque lá a
+    versão também vem do cadastro. A folha fica DE FORA — nenhuma marcação dela
+    vai para os CSVs, nem para a conferência — e vira folha sem nota, com o que
+    fazer dito por extenso. Acertado o cadastro e exportado o pacote de novo,
+    ler outra vez leva segundos.
+    """
+    ident = leitura.identificacao
+    if ident is None or ident.eh_referencia or not ident.matricula or not pacote.elenco:
+        return
+    estudante = pacote.casar(ident.matricula)
+    if estudante is None or estudante.versao == ident.versao:
+        return
+    # Folha sem marcação nenhuma (a de redação, ou a objetiva em branco) não tem
+    # o que corrigir com chave nenhuma — e não é ela que vai avisar do cadastro.
+    lidas = len(leitura.respostas) + len(leitura.conferir) + len(leitura.percentuais)
+    if not lidas:
+        return
+    leitura.respostas.clear()
+    leitura.conferir.clear()
+    leitura.percentuais.clear()
+    do_cartao = CODIGO_DA_VERSAO.get(ident.versao, ident.versao)
+    do_cadastro = CODIGO_DA_VERSAO.get(estudante.versao, estudante.versao)
+    leitura.situacao = "conferir"
+    leitura.motivo = (
+        f"{VERSAO_TROCADA}: o cartão da matrícula {ident.matricula} é da versão {do_cartao} e o "
+        f"cadastro diz {do_cadastro} — com a chave da outra versão a nota sairia errada, e por "
+        f"isso a folha ficou de fora ({lidas} marcação(ões) lida(s)). Acerte a versão do "
+        f"estudante no sistema, exporte o pacote de novo e mande ler outra vez")
 
 
 def alinhar(pagina: Pagina, molde: Molde):
@@ -274,6 +328,8 @@ def ler_lote(pacote: Pacote, arquivos: list[Path], saida_dir: Path,
             leitura.respostas.clear()
             leitura.conferir.clear()
             leitura.situacao = "referencia"
+        # Antes de qualquer recorte ou CSV: desta folha não sai marcação nenhuma.
+        barrar_versao_trocada(leitura, pacote)
         lote.leituras.append(leitura)
         if matriz is not None:
             lote.achados.extend(saida.recortes(pasta_conferencia, cinza, matriz, leitura))

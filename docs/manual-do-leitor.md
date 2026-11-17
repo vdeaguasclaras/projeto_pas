@@ -44,6 +44,10 @@ Com o programa funcionando, feche-o, clique com o botão direito no
 `PAS-Leitor.exe` → **Enviar para** → **Área de trabalho (criar atalho)**. Daí em
 diante é só o ícone.
 
+> **Qual versão eu tenho?** Está escrita no canto de cima da janela, logo abaixo
+> de “Leitor de Cartões”, e no título dela: **versão 3**, por exemplo. Antes de
+> reprocessar um lote por causa de um conserto, confira que abriu a pasta nova.
+
 ### Atualizar depois
 
 Quando sair uma versão nova: baixe o `.zip` de novo, extraia, e **substitua a
@@ -167,6 +171,12 @@ No campo à direita, escreva o que está no papel:
 Clique em **Aplicar e recorrigir**. Os resultados e os boletins se refazem na
 hora.
 
+> **Ler o mesmo lote de novo não apaga a conferência.** O que você decidiu fica
+> guardado na pasta do resultado (`conferido.csv`): se precisar ler outra vez —
+> chegou um cartão atrasado, saiu uma versão nova do programa —, a fila volta
+> com as suas respostas nos campos e a marca **“já conferido”** em verde. Só o
+> que aparecer sem essa marca ainda precisa de olho.
+
 > ⚠️ **Resolva a conferência inteira antes de emitir boletins ou exportar
 > notas.** O que ficar pendente não entra em nota nenhuma, sai impresso com
 > **?** e leva um aviso no alto do boletim. O programa avisa em rosa quantas
@@ -260,6 +270,7 @@ papel na pilha. Na pasta `conferencia/` há ainda uma imagem com o nome da pági
 | **não achei as quatro âncoras** | os quadrados pretos dos cantos não foram reconhecidos: folha muito cortada ou dobrada, mal encostada no vidro — ou **rabiscada por cima dos quadrados**. Assinatura fina que só encosta num deles o programa resolve sozinho, e **um** canto que não apareceu também (ele lê pelos outros três e avisa); quadrado coberto de tinta, ou dois cantos faltando, não. | Passe o lote de novo pelo scanner, com essa folha inteira e bem encostada. Se não houver jeito, lance as respostas à mão no sistema on-line. |
 | **a faixa de blocos do rodapé não pôde ser lida** | a faixa que diz de quem é a folha está rasurada, dobrada ou cortada. | Passe o lote de novo pelo scanner; se a faixa estiver danificada, lance as respostas à mão no sistema on-line. |
 | **cartão extra com a matrícula em branco** (ou ilegível, ou fora do padrão) | o estudante usou o cartão de reserva e não preencheu os alvéolos da matrícula — escrever o nome não basta, o programa não lê letra. As marcações foram lidas e estão esperando dono. | Descubra de quem é (o nome está no cabeçalho), **preencha os nove alvéolos da matrícula no papel** e passe o lote de novo pelo scanner. O estudante precisa estar na lista da prova — veja a linha de baixo. |
+| **o cartão é da versão A2 e o cadastro diz A1** (ou o contrário) | o estudante fez a prova de uma versão e está cadastrado na outra — acontece com o cartão extra. Cada versão numera os seus itens de 1 a N, então corrigir esse cartão com a chave do cadastro daria uma nota errada com cara de certa. O programa **não corrige** a folha. | Acerte a versão do estudante no sistema, exporte o pacote de novo e mande ler outra vez. |
 | **a matrícula … não está no elenco desta prova** | o cartão é de **outra prova** (outra série esquecida na pilha — o aviso diz quando parece ser isso), ou o estudante não estava na lista quando o pacote foi exportado. | Cartão de outra prova: leia-o no lote dela, com o pacote dela. Estudante que falta na lista: cadastre-o no sistema, exporte o pacote de novo e mande ler outra vez. |
 
 **“Lida por só três âncoras”** é outro aviso, e não é folha sem nota: um canto

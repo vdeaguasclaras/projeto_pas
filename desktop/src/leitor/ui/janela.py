@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .. import academico, anulacao
+from .. import __version__, academico, anulacao
 from ..apuracao import apurar, marcacoes_de
 from ..correcao import NULO, Resultado
 from ..imagem import digitalizacoes
@@ -552,6 +552,7 @@ class PaginaConferencia(QWidget):
         super().__init__()
         self.janela = janela
         self.campos: list[tuple[dict, QLineEdit]] = []
+        self.decididas: dict[tuple[str, str], str] = {}
         self.aviso = rotulo("", "sub")
         self.sem_nota = rotulo("", "pendencia")
         self.sem_nota.setVisible(False)
@@ -582,12 +583,34 @@ class PaginaConferencia(QWidget):
                    "impresso com “?”.", "sub"),
             self.sem_nota, self.sem_canto, self.aviso, rolagem, linha(None, self.botao_aplicar)))
 
+    @staticmethod
+    def _decididas(saida: Path | None) -> dict[tuple[str, str], str]:
+        """O que já foi decidido nesta pasta de resultado: `(matrícula, item)` → resposta.
+
+        **Ler de novo não pode apagar a conferência.** O `conferido.csv` continua
+        na pasta e continua valendo na correção, mas a tela remontava a fila só
+        com o palpite do leitor: quem relia o lote — por um cartão que chegou
+        depois, por um conserto do programa — via tudo “por decidir” outra vez,
+        e o primeiro “Aplicar e recorrigir” regravava o arquivo com os palpites,
+        por cima do que tinha sido conferido no papel. Resposta vazia também é
+        decisão (“no cartão não há marca”), e por isso o dicionário guarda a
+        chave mesmo quando o valor é vazio.
+        """
+        caminho = (saida / "conferido.csv") if saida else None
+        if not (caminho and caminho.exists()):
+            return {}
+        with caminho.open(encoding="utf-8-sig", newline="") as arquivo:
+            return {((linha.get("matricula") or "").strip(), (linha.get("item") or "").strip()):
+                    (linha.get("resposta") or "").strip().upper()
+                    for linha in csv.DictReader(arquivo, delimiter=";")}
+
     def mostrar(self, achados: list[dict], saida: Path) -> None:
         while self.coluna_lista.count():
             item = self.coluna_lista.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self.campos.clear()
+        self.decididas = self._decididas(saida)
         # A folha sem dono não tem linha aqui embaixo — a lista é de MARCAÇÃO
         # duvidosa, e ela não chegou a ter marcação de ninguém. Por isso vai dita
         # em cima, antes da lista: é a pendência mais cara do lote.
@@ -607,11 +630,16 @@ class PaginaConferencia(QWidget):
                                "com certeza.")
             self.botao_aplicar.setEnabled(False)
             return
-        self.aviso.setText(f"{len(achados)} marcação(ões) para conferir.")
         self.botao_aplicar.setEnabled(True)
         for achado in achados:
             self.coluna_lista.addWidget(self._fila(achado, saida))
         self.coluna_lista.addStretch(1)
+        ja = sum(1 for achado in achados
+                 if achado["matricula"] and (str(achado["matricula"]), str(achado["item"])) in self.decididas)
+        self.aviso.setText(
+            f"{len(achados)} marcação(ões) para conferir."
+            + (f" {ja} já tinha(m) sido conferida(s) nesta pasta, e voltaram com o que você "
+               f"decidiu; falta(m) {len(achados) - ja}." if ja else ""))
 
     def _fila(self, achado: dict, saida: Path) -> QWidget:
         fila = QFrame()
@@ -645,6 +673,15 @@ class PaginaConferencia(QWidget):
         # caso — o campo viria vazio, que aqui significa “em branco no cartão”, o
         # oposto do que aconteceu.
         campo = QLineEdit(NULO if "dupla_marcacao" in achado["motivo"] else achado["resposta"])
+        # O que já foi decidido nesta pasta volta ao campo — é a decisão de quem
+        # olhou o papel, e vale mais que o palpite. A linha diz que é coisa
+        # decidida, para a pessoa saber o que ainda falta olhar.
+        chave = (str(achado["matricula"] or ""), str(achado["item"]))
+        if achado["matricula"] and chave in self.decididas:
+            campo.setText(self.decididas[chave])
+            texto.setText(texto.text() + "<br><span style='color:#12b76a'>já conferido — "
+                          + (f"ficou {_esc_html(self.decididas[chave])}" if self.decididas[chave]
+                             else "ficou em branco") + "</span>")
         campo.setFixedWidth(110)
         campo.setAlignment(Qt.AlignCenter)
         faixa.addWidget(campo)
@@ -1086,7 +1123,7 @@ class Janela(QMainWindow):
     def __init__(self):
         super().__init__()
         self.sessao = Sessao()
-        self.setWindowTitle("PAS Marista — Leitor de Cartões")
+        self.setWindowTitle(f"PAS Marista — Leitor de Cartões · versão {__version__}")
         self.resize(1280, 800)
 
         # Cada tela tem nome, e a lista vem dos nomes. Com `paginas[3]` espalhado
@@ -1134,7 +1171,11 @@ class Janela(QMainWindow):
         marca = QVBoxLayout()
         marca.setSpacing(0)
         marca.addWidget(rotulo("Leitor de Cartões", "marca", quebra=False))
-        marca.addWidget(rotulo("Marista Águas Claras", "marcaSub", quebra=False))
+        # A versão fica à vista, e não num “Sobre”: quem reprocessa um lote por
+        # causa de um conserto precisa ver que abriu o programa consertado, e não
+        # a pasta antiga que ficou na Área de Trabalho.
+        marca.addWidget(rotulo(f"Marista Águas Claras · versão {__version__}", "marcaSub",
+                               quebra=False))
         coluna.addLayout(linha(logo, marca, None))
 
         self.caixa_prova = QFrame()
